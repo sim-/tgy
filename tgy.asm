@@ -50,17 +50,18 @@
 
 .equ RC_PULS 	  = 1
 
-.equ	MIN_RC_PULS	= 1040	; 탎 (or lower) = NO_POWER
+; 1040 here seems to low for output from multikopter board -sim
+.equ	MIN_RC_PULS	= 1100	; 탎 (or lower) = NO_POWER
 
 .include "tgy.inc"
 
-.equ	CHANGE_TIMEOUT	= 1
-.equ	CHANGE_TOT_LOW	= 1
+;.equ	CHANGE_TIMEOUT	= 1
+;.equ	CHANGE_TOT_LOW	= 2
 
-.equ	POWER_RANGE	= 100			; full range of tcnt0 setting
+.equ	POWER_RANGE	= 250			; full range of tcnt0 setting
 ; The following is Javierete's mod to ensure smoother start up with heavier motors.
 ; Note that in the I2C version original value is 8, changed to 2 !
-.equ	MIN_DUTY	= 2			; no power
+.equ	MIN_DUTY	= 1			; no power
 .equ	NO_POWER	= 256-MIN_DUTY		; (POWER_OFF)
 .equ	MAX_POWER	= 256-POWER_RANGE	; (FULL_POWER)
 
@@ -83,6 +84,7 @@
 .equ	OCT1_RANGE1	= 16	; ( ~2400 RPM )
 .equ	OCT1_RANGE2	= 8	; ( ~4800 RPM )
 
+.equ	PWR_RANGE_RUN	= 0x88	; omg it makes it start -Simon
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
 
@@ -102,7 +104,7 @@
 ;.def		 	 = r9
 ;.def			 = r10
 .def	rcpuls_timeout	 = r11
-.equ	RCP_TOT		 = 100
+.equ	RCP_TOT		 = 32	; Also affects time spent trying to start -Simon
 
 .def	current_err	 = r12	; counts consecutive current errors
 .equ	CURRENT_ERR_MAX  = 3	; performs a reset after MAX errors
@@ -240,12 +242,14 @@ uart_data:	.byte	100		; only for debug requirements
 
 		nop	; ext_int1
 		nop	; t2oc_int
-		nop	; t2ovfl_int
+		;nop	; t2ovfl_int
+		rjmp	t0ovfl_int
 		nop	; icp1
 		rjmp	t1oca_int
 		nop	; t1ocb_int
 		rjmp	t1ovfl_int
-		rjmp	t0ovfl_int
+		;rjmp	t0ovfl_int
+		nop	; t0ovfl_int
 		nop	; spi_int
 		nop	; urxc
 		nop	; udre
@@ -259,7 +263,7 @@ uart_data:	.byte	100		; only for debug requirements
 
 
 version:	.db	0x0d, 0x0a
-		.db	"TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal"
+		.db	"TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal."
 version_end:	.db	0x0d, 0x0a
 
 
@@ -298,8 +302,8 @@ reset:		ldi	temp1, high(RAMEND)	; stack = RAMEND
 		out	DDRD, temp1
 
 	; timer0: PWM + beep control = 0x02 	; start timer0 with CK/8 (1탎/count)
-		ldi	temp1, 0x02
-		out	TCCR0, temp1
+		ldi	temp1, 0x01
+		out	TCCR2, temp1
 
 	; timer1: commutation control = 0x02	; start timer1 with CK/8 (1탎/count)
 		ldi	temp1, T1CK8
@@ -326,7 +330,7 @@ clear_ram:	st	X+, temp1
 		mov	rcpuls_timeout, temp1
 		
 		rcall	wait260ms	; wait a while
-		rcall	wait260ms
+;		rcall	wait260ms
 
 		rcall	beep_f1
 		rcall	wait30ms
@@ -336,8 +340,8 @@ clear_ram:	st	X+, temp1
 		rcall	wait30ms
 
 control_start:	; init variables
-		ldi	temp1, CHANGE_TIMEOUT
-		mov	tcnt0_change_tot, temp1
+;		ldi	temp1, CHANGE_TIMEOUT
+;		mov	tcnt0_change_tot, temp1
 		ldi	temp1, NO_POWER
 		mov	tcnt0_power_on, temp1
 
@@ -346,7 +350,7 @@ control_start:	; init variables
 		mov	sys_control, temp1
 
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0)
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & TOIE0
 		out	TIMSK, temp1		; enable TOIE1,OCIE1A & TOIE0 interrupts
 
@@ -384,6 +388,10 @@ i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 		
 ;-----bko-----------------------------------------------------------------
 ; external interrupt0 = rc pulse input
+; NOTE: This interrupt uses the 16-bit atomic timer read/write register
+; by reading TCNT1L and TCNT1H, so this interrupt must be disabled before
+; any other 16-bit timer options happen that might use the same register
+; (see "Accessing 16-bit registers" in the Atmel documentation)
 ext_int0:	in	i_sreg, SREG
 		clr	i_temp1			; disable extint edge may be changed
 		out	GIMSK, i_temp1
@@ -416,8 +424,8 @@ ext_int0:	in	i_sreg, SREG
 		ldi	i_temp3, high(25000)	; test range high
 		cpc	i_temp2, i_temp3
 		brsh	extint1_fail		; through away
-		cpi	i_temp1, low (200)
-		ldi	i_temp3, high(200)	; test range low
+		cpi	i_temp1, low (5)	; 200 ok for 417Hz, 5 for 495Hz
+		ldi	i_temp3, high(5)	; test range low
 		cpc	i_temp2, i_temp3
 		brlo	extint1_fail		; through away
 		sbr	flags2, (1<<RC_INTERVAL_OK) ; set to rc impuls value is ok !
@@ -506,23 +514,25 @@ t0_off_cycle:	sbr	flags2, (1<<COMP_SAVE)
 		cbr	flags2, (1<<COMP_SAVE)
 
 	; changes in PWM ?
-		mov	i_temp1, tcnt0_power_on
-		mov	i_temp2, tcnt0_pwron_next
-		cp	i_temp2, i_temp1
-		brsh	lower_pwm		; next power-on-time is lower or same
-higher_pwm:	dec	tcnt0_change_tot	; change-timeout passed ?
-		brne	nFET_off		; .. no
-		ldi	i_temp2, CHANGE_TIMEOUT	; .. yes - change-timeout for more power
-		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and decrement
-		dec	i_temp1			; <dec> increases power-on-time
-		rjmp	set_next_pwm
 
-lower_pwm:	breq	nFET_off		; pwm is unchanged
-		dec	tcnt0_change_tot	; change-timeout passed ?
-		brne	nFET_off		; .. no
-		ldi	i_temp2, CHANGE_TOT_LOW ; .. yes - change-timeout for lower power
-		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and increment
-		inc	i_temp1			; <inc> decreases power-on-time
+		mov     i_temp1, tcnt0_pwron_next ; Just set it -Simon
+;		mov	i_temp1, tcnt0_power_on
+;		mov	i_temp2, tcnt0_pwron_next
+;		cp	i_temp2, i_temp1
+;		brsh	lower_pwm		; next power-on-time is lower or same
+;higher_pwm:	dec	tcnt0_change_tot	; change-timeout passed ?
+;		brne	nFET_off		; .. no
+;		ldi	i_temp2, CHANGE_TIMEOUT	; .. yes - change-timeout for more power
+;		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and decrement
+;		dec	i_temp1			; <dec> increases power-on-time
+;		rjmp	set_next_pwm
+;
+;lower_pwm:	breq	nFET_off		; pwm is unchanged
+;		dec	tcnt0_change_tot	; change-timeout passed ?
+;		brne	nFET_off		; .. no
+;		ldi	i_temp2, CHANGE_TOT_LOW ; .. yes - change-timeout for lower power
+;		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and increment
+;		inc	i_temp1			; <inc> decreases power-on-time
 
 set_next_pwm:	mov	tcnt0_power_on, i_temp1
 
@@ -551,16 +561,16 @@ switch_BnFET:	sbrs	flags1, FULL_POWER
 
 	; reload timer0 with the appropriate value
 reload_t0_off_cycle:
-		mov	i_temp1, tcnt0_power_on
-		subi	i_temp1, -POWER_RANGE	; adi i_temp1, POWER_RANGE
+		ldi	i_temp1, POWER_RANGE
+		add	i_temp1, tcnt0_power_on
 		com	i_temp1			; timer0 increments
-		out	TCNT0, i_temp1
+		out	TCNT2, i_temp1
 
 		rjmp	t0_int_exit
 
 ; reload timer90 + switch appropriate nFET on
 t0_on_cycle:	mov	i_temp1, tcnt0_power_on
-		out	TCNT0, i_temp1		; reload t0
+		out	TCNT2, i_temp1		; reload t0
 		cbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = on cycle (no off cycle)
 
 ; switch appropriate nFET on
@@ -613,25 +623,25 @@ beep_f3:	ldi	temp4, 160
 		ldi	temp2, 120
 		rjmp	beep
 
-beep_f4:	ldi	temp4, 100
-		ldi	temp2, 200
+beep_f4:	ldi	temp4, 140
+		ldi	temp2, 140
 		rjmp	beep
 
 beep:		clr	temp1
-		out	TCNT0, temp1
+		out	TCNT2, temp1
 		BpFET_on		; BpFET on
 		AnFET_on		; CnFET on
-beep_BpCn10:	in	temp1, TCNT0
-		cpi	temp1, 32		; 32탎 on
-		brne	beep_BpCn10
+beep_BpCn10:	in	temp1, TCNT2
+		cpi	temp1, 127		; 32탎 on (was 32)
+		brlo	beep_BpCn10
 		BpFET_off		; BpFET off
 		AnFET_off		; CnFET off
-		ldi	temp3, 8		; 2040탎 off
+		ldi	temp3, 64		; 2040탎 off (was 8)
 beep_BpCn12:	clr	temp1
-		out	TCNT0, temp1
-beep_BpCn13:	in	temp1, TCNT0
+		out	TCNT2, temp1
+beep_BpCn13:	in	temp1, TCNT2
 		cp	temp1, temp4
-		brne	beep_BpCn13
+		brlo	beep_BpCn13
 		dec	temp3
 		brne	beep_BpCn12
 		dec	temp2
@@ -639,12 +649,13 @@ beep_BpCn13:	in	temp1, TCNT0
 		ret
 
 wait30ms:	ldi	temp2, 15
-beep_BpCn20:	ldi	temp3, 8
+beep_BpCn20:	ldi	temp3, 64	; was 8
 beep_BpCn21:	clr	temp1
-		out	TCNT0, temp1
-beep_BpCn22:	in	temp1, TCNT0
-		cpi	temp1, 255
-		brne	beep_BpCn22
+		out	TCNT2, temp1
+		out	TIFR, temp1
+beep_BpCn22:	in	temp1, TIFR
+		sbrs	temp1, TOV2
+		rjmp	beep_BpCn22
 		dec	temp3
 		brne	beep_BpCn21
 		dec	temp2
@@ -653,12 +664,12 @@ beep_BpCn22:	in	temp1, TCNT0
 
 	; 128 periods = 261ms silence
 wait260ms:	ldi	temp2, 128
-beep2_BpCn20:	ldi	temp3, 8
+beep2_BpCn20:	ldi	temp3, 64	; was 8
 beep2_BpCn21:	clr	temp1
-		out	TCNT0, temp1
-beep2_BpCn22:	in	temp1, TCNT0
-		cpi	temp1, 255
-		brne	beep2_BpCn22
+		out	TCNT2, temp1
+beep2_BpCn22:	in	temp1, TCNT2
+		cpi	temp1, 200
+		brlo	beep2_BpCn22
 		dec	temp3
 		brne	beep2_BpCn21
 		dec	temp2
@@ -675,8 +686,10 @@ tcnt1_to_temp:	ldi	temp4, EXT0_DIS		; disable ext0int
 		out	TCCR1B, temp4
 		ret				; !!! ext0int stays disabled - must be enabled again by caller
 	; there seems to be only one TEMP register in the AVR
+	; that is used for atomic 16-bit read/write timer operations
 	; if the ext0int interrupt falls between readad LOW value while HIGH value is captured in TEMP and
-	; read HIGH value, TEMP register is changed in ext0int routine
+	; read HIGH value, TEMP register is changed in ext_int0 routine,
+	; so it must be disabled here (cli is also fine)
 ;-----bko-----------------------------------------------------------------
 evaluate_rc_puls:
 		cbr	flags1, (1<<EVAL_RC_PULS)
@@ -690,7 +703,30 @@ evaluate_rc_puls:
 		brcc	eval_rc_p00
 		clr	temp1
 		clr	temp2
-eval_rc_p00:	lsr	temp2
+eval_rc_p00:
+	; Limit the maximum PPM (800) here since it may wrap
+	; when scaled to POWER_RANGE below
+		cpi	temp2, high  (800)
+		brlo	eval_rc_p05
+		cpi	temp1, low   (800)
+		brlo	eval_rc_p05
+		rjmp	eval_rc_p09
+eval_rc_p05:
+
+	; This used to shift 0-800 -> 0-200,
+	; but instead we now *5/16, which gives us 0-250.
+		mov	temp3, temp1
+		mov	temp4, temp2
+		lsl	temp1
+		rol	temp2
+		lsl	temp1
+		rol	temp2
+		add	temp1, temp3
+		adc	temp2, temp4
+
+		lsr	temp2
+		ror	temp1
+		lsr	temp2
 		ror	temp1
 		lsr	temp2
 		ror	temp1
@@ -702,7 +738,7 @@ eval_rc_p00:	lsr	temp2
 		mov	temp3, temp1		
 		subi	temp1, POWER_RANGE
 		brcs	eval_rc_p10
-		ldi	temp3, POWER_RANGE
+eval_rc_p09:	ldi	temp3, POWER_RANGE
 eval_rc_p10:	mov	ZH, temp3
 eval_rc_p90:	ret
 ;-----bko-----------------------------------------------------------------
@@ -819,12 +855,12 @@ update_timing:	rcall	tcnt1_to_temp
 		sts	tcnt1_sav_h, temp2
 		add	temp1, YL
 		adc	temp2, YH
-		ldi	temp4, (1<<TOIE1)+(1<<TOIE0)
+		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
 		out	TIMSK, temp4
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
 		sbr	flags0, (1<<OCT1_PENDING)
-		ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0) ; enable interrupt again
+		ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2) ; enable interrupt again
 		out	TIMSK, temp4
 		ldi	temp4, EXT0_EN		; ext0int enable
 		out	GIMSK, temp4		; enable ext0int
@@ -948,12 +984,12 @@ set_OCT1_tot:
 		rcall	tcnt1_to_temp
 		add	temp1, YL
 		adc	temp2, YH
-		ldi	temp4, (1<<TOIE1)+(1<<TOIE0)
+		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
 		out	TIMSK, temp4
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
 		sbr	flags0, (1<<OCT1_PENDING)
-		ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0)
+		ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
 		out	TIMSK, temp4
 		ldi	temp4, EXT0_EN		; ext0int enable
 		out	GIMSK, temp4		; enable ext0int
@@ -966,12 +1002,12 @@ wait_OCT1_before_switch:
 		lds	YH, com_timing_h
 		add	temp1, YL
 		adc	temp2, YH
-		ldi	temp3, (1<<TOIE1)+(1<<TOIE0)
+		ldi	temp3, (1<<TOIE1)+(1<<TOIE2)
 		out	TIMSK, temp3
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
 		sbr	flags0, (1<<OCT1_PENDING)
-		ldi	temp3, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0)
+		ldi	temp3, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
 		out	TIMSK, temp3
 		ldi	temp4, EXT0_EN		; ext0int enable
 		out	GIMSK, temp4		; enable ext0int
@@ -1056,8 +1092,8 @@ switch_power_off:
 		out	PORTB, temp1
 		ldi	temp1, INIT_PD		; all off
 		out	PORTD, temp1
-		ldi	temp1, CHANGE_TIMEOUT	; reset change-timeout
-		mov	tcnt0_change_tot, temp1
+;		ldi	temp1, CHANGE_TIMEOUT	; reset change-timeout
+;		mov	tcnt0_change_tot, temp1
 		sbr	flags1, (1<<POWER_OFF)	; disable power on
 		cbr	flags2, (1<<POFF_CYCLE)
 		sbr	flags2, (1<<STARTUP)
@@ -1334,7 +1370,8 @@ start6_9:
 		brne	s6_power_ok
 		rjmp	init_startup
 
-s6_power_ok:	tst	rcpuls_timeout
+s6_power_ok:
+		tst	rcpuls_timeout
 		brne	s6_rcp_ok
 		rjmp	restart_control
 
@@ -1346,8 +1383,9 @@ s6_test_rpm:	lds	temp1, timing_x
 		tst	temp1
 		brne	s6_goodies
 		lds	temp1, timing_h		; get actual RPM reference high
+		cpi	temp1, PWR_RANGE_RUN
 ;		cpi	temp1, PWR_RANGE1
-		cpi	temp1, PWR_RANGE2
+;		cpi	temp1, PWR_RANGE2
 		brcs	s6_run1
 
 s6_goodies:	lds	temp1, goodies
@@ -1378,9 +1416,9 @@ s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 ; run 1 = B(p-on) + C(n-choppered) - comparator A evaluated
 ; out_cA changes from low to high
 
-run1: 		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run1:	;	rcall	wait_for_low
+	;	sbrs	flags0, OCT1_PENDING
+	;	rjmp	run_to_start
 		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1394,9 +1432,9 @@ run1: 		rcall	wait_for_low
 ; run 2 = A(p-on) + C(n-choppered) - comparator B evaluated
 ; out_cB changes from high to low
 
-run2:		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run2:	;	rcall	wait_for_high
+	;	sbrs	flags0, OCT1_PENDING
+	;	rjmp	run_to_start
 		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1410,9 +1448,9 @@ run2:		rcall	wait_for_high
 ; run 3 = A(p-on) + B(n-choppered) - comparator C evaluated
 ; out_cC changes from low to high
 
-run3:		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run3:	;	rcall	wait_for_low
+	;	sbrs	flags0, OCT1_PENDING
+	;	rjmp	run_to_start
 		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1425,9 +1463,9 @@ run3:		rcall	wait_for_low
 
 ; run 4 = C(p-on) + B(n-choppered) - comparator A evaluated
 ; out_cA changes from high to low
-run4:		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run4:	;	rcall	wait_for_high
+	;	sbrs	flags0, OCT1_PENDING
+	;	rjmp	run_to_start
 		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1440,9 +1478,9 @@ run4:		rcall	wait_for_high
 ; run 5 = C(p-on) + A(n-choppered) - comparator B evaluated
 ; out_cB changes from low to high
 
-run5:		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run5:	;	rcall	wait_for_low
+	;	sbrs	flags0, OCT1_PENDING
+	;	rjmp	run_to_start
 		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1456,9 +1494,9 @@ run5:		rcall	wait_for_low
 ; run 6 = B(p-on) + A(n-choppered) - comparator C evaluated
 ; out_cC changes from high to low
 
-run6:		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run6:	;	rcall	wait_for_high
+	;	sbrs	flags0, OCT1_PENDING
+	;	rjmp	run_to_start
 		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1498,8 +1536,16 @@ run6_9:
 restart_control:
 		cli				; disable all interrupts
 		rcall	switch_power_off
-		rjmp	reset
-
+		; reset rc puls timeout
+		ldi	temp1, RCP_TOT
+		mov	rcpuls_timeout, temp1
+		rcall	beep_f3
+		rcall	beep_f2
+		rcall	wait30ms
+		sei
+		rcall	set_all_timings
+		rjmp	init_startup
+		; Used to be: rjmp	reset
 
 ;-----bko-----------------------------------------------------------------
 ; *** scan comparator utilities ***
@@ -1546,7 +1592,7 @@ com2com3:	ldi	temp1, (1<<OCIE1A)+(1<<TOIE1) ; stop timer0 interrupt
 c2_switch:	CnFET_off		; Cn off
 		sbrs	flags1, POWER_OFF
 		BnFET_on		; Bn on
-c2_done:	ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0) ; let timer0 do his work again
+c2_done:	ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2) ; let timer0 do his work again
 		out	TIMSK, temp1
 		in	temp1, SFIOR
 		cbr	temp1, (1<<ACME)	; set to AN1
@@ -1577,7 +1623,7 @@ com4com5:	ldi	temp1, (1<<OCIE1A)+(1<<TOIE1) ; stop timer0 interrupt
 c4_switch:	BnFET_off		; Bn off
 		sbrs	flags1, POWER_OFF
 		AnFET_on		; An on
-c4_done:	ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0) ; let timer0 do his work again
+c4_done:	ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2) ; let timer0 do his work again
 		out	TIMSK, temp1
 		ldi	temp1, mux_b		; set comparator multiplexer to phase B
 		out	ADMUX, temp1
@@ -1608,7 +1654,7 @@ com6com1:	ldi	temp1, (1<<OCIE1A)+(1<<TOIE1) ; stop timer0 interrupt
 c6_switch:	AnFET_off		; An off
 		sbrs	flags1, POWER_OFF
 		CnFET_on		; Cn on
-c6_done:	ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE0) ; let timer0 do his work again
+c6_done:	ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2) ; let timer0 do his work again
 		out	TIMSK, temp1
 		ldi	temp1, mux_a		; set comparator multiplexer to phase A
 		out	ADMUX, temp1
