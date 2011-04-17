@@ -46,19 +46,20 @@
 ;**** **** **** **** ****
 ;**** **** **** **** ****
 
-.equ MOT_BRAKE    = 0
+.equ MOT_BRAKE    = 1
 
 .equ RC_PULS 	  = 1
 
 ; 1040 here seems to low for output from multikopter board -sim
-.equ	MIN_RC_PULS	= 1100	; µs (or lower) = NO_POWER
+; 1110 here is right, but cold weather just trips it -sim
+.equ	MIN_RC_PULS	= 1101	; µs (or lower) = NO_POWER
 
 .include "tgy.inc"
 
 ;.equ	CHANGE_TIMEOUT	= 1
 ;.equ	CHANGE_TOT_LOW	= 2
 
-.equ	POWER_RANGE	= 250			; full range of tcnt0 setting
+.equ	POWER_RANGE	= 255			; full range of tcnt0 setting
 ; The following is Javierete's mod to ensure smoother start up with heavier motors.
 ; Note that in the I2C version original value is 8, changed to 2 !
 .equ	MIN_DUTY	= 1			; no power
@@ -68,8 +69,8 @@
 .equ	PWR_MAX_RPM1	= POWER_RANGE/4
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
 
-.equ	PWR_STARTUP	= MIN_DUTY
-.equ	PWR_MAX_STARTUP	= MIN_DUTY+5
+.equ	PWR_STARTUP	= 2 ;MIN_DUTY
+.equ	PWR_MAX_STARTUP	= 35 ;MIN_DUTY+5
 
 .equ	timeoutSTART	= 48000
 .equ	timeoutMIN	= 36000
@@ -84,7 +85,7 @@
 .equ	OCT1_RANGE1	= 16	; ( ~2400 RPM )
 .equ	OCT1_RANGE2	= 8	; ( ~4800 RPM )
 
-.equ	PWR_RANGE_RUN	= 0x88	; omg it makes it start -Simon
+.equ	PWR_RANGE_RUN	= 0xe8	; omg it makes it start -Simon
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
 
@@ -118,6 +119,9 @@
 .def	temp2	= r17			; main temporary
 .def	temp3	= r18			; main temporary
 .def	temp4	= r19			; main temporary
+.def	temp5	= r9
+.def	temp6	= r10
+.def	temp7	= r4
 
 .def	i_temp1	= r20			; interrupt temporary
 .def	i_temp2	= r21			; interrupt temporary
@@ -706,15 +710,49 @@ evaluate_rc_puls:
 eval_rc_p00:
 	; Limit the maximum PPM (800) here since it may wrap
 	; when scaled to POWER_RANGE below
-		cpi	temp2, high  (800)
+		cpi	temp2, high  (816)	; Should be 800
 		brlo	eval_rc_p05
-		cpi	temp1, low   (800)
-		brlo	eval_rc_p05
-		rjmp	eval_rc_p09
+		brne	eval_rc_p09
+		cpi	temp1, low   (816)	; but see below
+		brsh	eval_rc_p09
 eval_rc_p05:
+;	; This used to shift 0-800 -> 0-200,
+;	; but instead we now *8/25, which gives us 0-256.
+;	; divide stolen from gcc.
+;
+;		lsl	temp1
+;		rol	temp2
+;		lsl	temp1
+;		rol	temp2
+;		lsl	temp1		; value low (0-6400)
+;		rol	temp2		; value high
+;		ldi	temp3, 17
+;		mov	temp7, temp3	; divide iteration counter
+;		ldi	temp3, 25	; r24	divisor low
+;		clr	temp4		; r25	divisor high
+;		sub	temp5, temp5	; r26
+;		sub	temp6, temp6	; r27
+;		; carry is cleared now
+;		rjmp	__udivmodhi4_ep
+;__udivmodhi4_loop:
+;		adc	temp5, temp5	; r26
+;		adc	temp6, temp6	; r27
+;		cp	temp5, temp3	; r26, r22
+;		cpc	temp6, temp4	; r27, r23
+;		brcs	__udivmodhi4_ep
+;		sub	temp5, temp3	; r26, r22
+;		sbc	temp6, temp4	; r27, r23
+;__udivmodhi4_ep:
+;		adc	temp1, temp1	; r24
+;		adc	temp2, temp2	; r25
+;		dec	temp7
+;		brne	__udivmodhi4_loop
+;		com	temp1		; r24
+;		com	temp2		; r25
+;		movw	temp3, temp1	; r22, r24
 
-	; This used to shift 0-800 -> 0-200,
-	; but instead we now *5/16, which gives us 0-250.
+	; Meh, scale 0-816 -> 0-255 with *5/16, since it seems to be
+	; usable anyway, and this is much faster than dividing by 25
 		mov	temp3, temp1
 		mov	temp4, temp2
 		lsl	temp1
@@ -730,12 +768,10 @@ eval_rc_p05:
 		ror	temp1
 		lsr	temp2
 		ror	temp1
-
-	; actual (0-800) -> (0-200)
-		lsr	temp2		; (0-200) -> (0-100)
+		lsr	temp2
 		ror	temp1
 
-		mov	temp3, temp1		
+		mov	temp3, temp1
 		subi	temp1, POWER_RANGE
 		brcs	eval_rc_p10
 eval_rc_p09:	ldi	temp3, POWER_RANGE
@@ -1115,34 +1151,27 @@ wait_for_poweroff:
 ;-----bko-----------------------------------------------------------------
 motor_brake:
 .if MOT_BRAKE == 1
-		ldi	temp2, 40		; 40 * 0.065ms = 2.6 sec
+mot_brk10:
+		ldi	temp1, INIT_PB		; all off
+		in	temp1, tcnt1l
+		sbrs	temp1, 6
 		ldi	temp1, BRAKE_PB		; all N-FETs on
 		out	PORTB, temp1
-mot_brk10:	sbrs	flags0, T1OVFL_FLAG
-		rjmp	mot_brk10
-		cbr	flags0, (1<<T1OVFL_FLAG)
-		push	temp2
 		rcall	evaluate_rc_puls
-		pop	temp2
 		cpi	ZH, MIN_DUTY+3		; avoid jitter detect
-		brcs	mot_brk20
-		rjmp	mot_brk90
-mot_brk20:
-		dec	temp2
-		brne	mot_brk10
-mot_brk90:
+		brcs	mot_brk10
 		ldi	temp1, INIT_PB		; all off
 		out	PORTB, temp1
 		ldi	temp1, INIT_PD		; all off
 		out	PORTD, temp1
 .endif	; MOT_BRAKE == 1
 		ret
+		
 ;-----bko-----------------------------------------------------------------
 ; **** startup loop ****
 init_startup:	rcall	switch_power_off
-		rcall	motor_brake
 wait_for_power_on:
-
+		rcall	motor_brake
 		rcall	evaluate_rc_puls
 
 		cpi	ZH, MIN_DUTY
