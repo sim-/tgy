@@ -59,12 +59,14 @@
 ;.equ	CHANGE_TIMEOUT	= 1
 ;.equ	CHANGE_TOT_LOW	= 2
 
-.equ	POWER_RANGE	= 255			; full range of tcnt0 setting
+.equ	POWER_RANGE	= 256			; full range of tcnt0 setting
 ; The following is Javierete's mod to ensure smoother start up with heavier motors.
 ; Note that in the I2C version original value is 8, changed to 2 !
 .equ	MIN_DUTY	= 1			; no power
-.equ	NO_POWER	= 256-MIN_DUTY		; (POWER_OFF)
-.equ	MAX_POWER	= 256-POWER_RANGE	; (FULL_POWER)
+;.equ	NO_POWER	= 256-MIN_DUTY		; (POWER_OFF)
+;.equ	MAX_POWER	= 256-POWER_RANGE	; (FULL_POWER)
+.equ	NO_POWER	= 255
+.equ	MAX_POWER	= 0
 
 .equ	PWR_MAX_RPM1	= POWER_RANGE/4
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
@@ -519,7 +521,8 @@ t0_off_cycle:	sbr	flags2, (1<<COMP_SAVE)
 
 	; changes in PWM ?
 
-		mov     i_temp1, tcnt0_pwron_next ; Just set it -Simon
+		mov     tcnt0_power_on, tcnt0_pwron_next ; Just set it -Simon
+
 ;		mov	i_temp1, tcnt0_power_on
 ;		mov	i_temp2, tcnt0_pwron_next
 ;		cp	i_temp2, i_temp1
@@ -537,8 +540,7 @@ t0_off_cycle:	sbr	flags2, (1<<COMP_SAVE)
 ;		ldi	i_temp2, CHANGE_TOT_LOW ; .. yes - change-timeout for lower power
 ;		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and increment
 ;		inc	i_temp1			; <inc> decreases power-on-time
-
-set_next_pwm:	mov	tcnt0_power_on, i_temp1
+;set_next_pwm:	mov	tcnt0_power_on, i_temp1
 
 nFET_off:	sbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = off cycle
 
@@ -565,17 +567,16 @@ switch_BnFET:	sbrs	flags1, FULL_POWER
 
 	; reload timer0 with the appropriate value
 reload_t0_off_cycle:
-		ldi	i_temp1, POWER_RANGE
-		add	i_temp1, tcnt0_power_on
+;		ldi	i_temp1, POWER_RANGE
+;		add	i_temp1, tcnt0_power_on
+		mov	i_temp1, tcnt0_power_on
 		com	i_temp1			; timer0 increments
-		out	TCNT2, i_temp1
-
 		rjmp	t0_int_exit
 
 ; reload timer90 + switch appropriate nFET on
-t0_on_cycle:	mov	i_temp1, tcnt0_power_on
-		out	TCNT2, i_temp1		; reload t0
+t0_on_cycle:
 		cbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = on cycle (no off cycle)
+		mov	i_temp1, tcnt0_power_on
 
 ; switch appropriate nFET on
 nFET_on:	sbrs	flags0, C_FET		; is Cn choppered ?
@@ -593,8 +594,10 @@ sw_BnFET_on:	sbrs	flags1, POWER_OFF
 
 	; evaluate power state
 eval_power_state:
-		cpi	i_temp1, MAX_POWER+1
-		brsh	not_full_power
+;		cpi	i_temp1, MAX_POWER+1
+;		brsh	not_full_power
+		tst	i_temp1
+		brne	not_full_power
 	; FULL POWER
 		sbr	flags1, (1<<FULL_POWER)	; tcnt0_power_on = MAX_POWER means FULL_POWER
 		cbr	flags1, (1<<POWER_OFF)
@@ -611,6 +614,7 @@ neither_full_nor_off:
 
 t0_int_exit:	sbrc	flags2, POFF_CYCLE
 		sbr	flags1, (1<<POWER_OFF)
+		out	TCNT2, i_temp1		; reload t0
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
@@ -772,9 +776,10 @@ eval_rc_p05:
 		ror	temp1
 
 		mov	temp3, temp1
-		subi	temp1, POWER_RANGE
-		brcs	eval_rc_p10
-eval_rc_p09:	ldi	temp3, POWER_RANGE
+;		subi	temp1, POWER_RANGE
+;		brcs	eval_rc_p10
+		rjmp	eval_rc_p10
+eval_rc_p09:	ldi	temp3, POWER_RANGE - 1 ; - 1 to allow full 0-255
 eval_rc_p10:	mov	ZH, temp3
 eval_rc_p90:	ret
 ;-----bko-----------------------------------------------------------------
@@ -808,7 +813,7 @@ eval_sys_ub:	sbrs	flags0, UB_LOW
 		rjmp	eval_sys_ub_ok
 		cbr	flags0, (1<<UB_LOW)
 		mov	i_temp1, sys_control
-		cpi	i_temp1, POWER_RANGE
+		cpi	i_temp1, NO_POWER ; POWER_RANGE
 		brcc	eval_sys_s99
 		inc	sys_control
 		rjmp	eval_sys_s99
