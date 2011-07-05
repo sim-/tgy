@@ -52,7 +52,7 @@
 
 ; 1040 here seems to low for output from multikopter board -sim
 ; 1110 here is right, but cold weather just trips it -sim
-.equ	MIN_RC_PULS	= 1101	; µs (or lower) = NO_POWER
+.equ	MIN_RC_PULS	= 1104	; µs (or lower) = NO_POWER
 
 .include "tgy.inc"
 
