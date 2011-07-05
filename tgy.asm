@@ -46,7 +46,7 @@
 ;**** **** **** **** ****
 ;**** **** **** **** ****
 
-.equ MOT_BRAKE    = 1
+.equ MOT_BRAKE    = 0
 
 .equ RC_PULS 	  = 1
 
