@@ -31,6 +31,20 @@
 ; to 2 for larger range. Decreased RC Pulse Interval from ~58Hz to ~416Hz. No calibration
 ; code as didn't work
 ;
+; Modified to not reboot if motor does not start, for full 8-bit PWM, and
+; for better but not perfect starting with 2213N motors.
+; -Simon, 2011-04-17
+;
+; WARNING: I have blown a FET on two Turnigy Plush 18A ESCs in
+; upside-down crashes with this code. This didn't seem to happen with
+; the original Plush code, but if I try to reproduce it, this code
+; usually seems to behave better than the Plush code which seems to
+; scream instead of stop in such cases. I'm not sure what the issue is.
+; -Simon, 2011-07-04
+;
+; WARNING: Unlike the original Turnigy Plush code, this does not check
+; the AVR temperature ADC or the battery voltage!
+;
 ;**** **** **** **** ****
 ; Device
 ;
