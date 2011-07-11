@@ -66,7 +66,10 @@
 
 ; 1040 here seems to low for output from multikopter board -sim
 ; 1110 here is right, but cold weather just trips it -sim
-.equ	MIN_RC_PULS	= 1104	; µs (or lower) = NO_POWER
+.equ	MIN_RC_PULS	= 960	; Less than this is illegal pulse length
+
+.equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
+.equ	START_HYST	= 40	; Start motor at STOP_RC_PULS + START_HYST
 
 .include "tgy.inc"
 
@@ -387,8 +390,11 @@ i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 		lds	temp1, new_rcpuls_l
 		lds	temp2, new_rcpuls_h
 		cbr	flags1, (1<<RC_PULS_UPDATED) ; rc impuls value is read out
-		subi	temp1, low  (MIN_RC_PULS)	; power off received ?
+		subi	temp1, low  (MIN_RC_PULS) ; valid RC pulse?
 		sbci	temp2, high (MIN_RC_PULS)
+		brcs	i_rc_puls1		; no - reset counter
+		subi	temp1, low  (STOP_RC_PULS - MIN_RC_PULS) ; power off received?
+		sbci	temp2, high (STOP_RC_PULS - MIN_RC_PULS)
 		brcc	i_rc_puls1		; no - reset counter
 		dec	temp3			; yes - decrement counter
 		brne	i_rc_puls2		; repeat until zero
@@ -720,13 +726,22 @@ evaluate_rc_puls:
 		lds	temp1, new_rcpuls_l
 		lds	temp2, new_rcpuls_h
 		cbr	flags1, (1<<RC_PULS_UPDATED) ; rc impuls value is read out
-		subi	temp1, low  (MIN_RC_PULS)
-		sbci	temp2, high (MIN_RC_PULS)
-		brcc	eval_rc_p00
-		clr	temp1
-		clr	temp2
+		subi	temp1, low  (STOP_RC_PULS)
+		sbci	temp2, high (STOP_RC_PULS)
+		brcs	eval_rc_stop
+		tst	ZH
+		brne	eval_rc_p00
+	; Previously zero throttle, so check the start hysteresis.
+		cpi	temp2, high (START_HYST)
+		brlo	eval_rc_stop
+		brne	eval_rc_p00
+		cpi	temp1, low  (START_HYST)
+		brsh	eval_rc_p00
+eval_rc_stop:
+		clr	ZH
+		ret
 eval_rc_p00:
-	; Limit the maximum PPM (800) here since it may wrap
+	; Limit the maximum PPM here since it will wrap
 	; when scaled to POWER_RANGE below
 		cpi	temp2, high  (816)	; Should be 800
 		brlo	eval_rc_p05
@@ -793,7 +808,7 @@ eval_rc_p05:
 ;		subi	temp1, POWER_RANGE
 ;		brcs	eval_rc_p10
 		rjmp	eval_rc_p10
-eval_rc_p09:	ldi	temp3, POWER_RANGE - 1 ; - 1 to allow full 0-255
+eval_rc_p09:	ldi	temp3, POWER_RANGE - 1 ; Maximum speed
 eval_rc_p10:	mov	ZH, temp3
 eval_rc_p90:	ret
 ;-----bko-----------------------------------------------------------------
