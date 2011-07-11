@@ -25,7 +25,7 @@
 ;
 ; TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal
 ; For Turnigy Plush 30A or similar ESCs.
-; Applying various small code changes documented in the RC Groups thread on 
+; Applying various small code changes documented in the RC Groups thread on
 ; converting TowerPro 25A ESCs. PPM - mod only - no code for TWI/I2C based implementation
 ; Corrected the minimum PPM pulse to 1040usec and decreased the min throttle value
 ; to 2 for larger range. Decreased RC Pulse Interval from ~58Hz to ~416Hz. No calibration
@@ -171,8 +171,8 @@
 	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
 	.equ	COMP_SAVE	= 4	; if set ACO was high
 	.equ	STARTUP		= 5	; if set startup-phase is active
-	.equ	RC_INTERVAL_OK	= 6	; 
-	.equ	GP_FLAG		= 7	; 
+	.equ	RC_INTERVAL_OK	= 6	;
+	.equ	GP_FLAG		= 7	;
 
 ; here the XYZ registers are placed ( r26-r31)
 
@@ -188,22 +188,22 @@ tcnt1_sav_l:	.byte	1	; actual timer1 value
 tcnt1_sav_h:	.byte	1
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
-timing_l:	.byte	1	; holds time of 4 commutations 
+timing_l:	.byte	1	; holds time of 4 commutations
 timing_h:	.byte	1
 timing_x:	.byte	1
 
-timing_acc_l:	.byte	1	; holds the average time of 4 commutations 
+timing_acc_l:	.byte	1	; holds the average time of 4 commutations
 timing_acc_h:	.byte	1
 timing_acc_x:	.byte	1
 
-rpm_l:		.byte	1	; holds the average time of 4 commutations 
+rpm_l:		.byte	1	; holds the average time of 4 commutations
 rpm_h:		.byte	1
 rpm_x:		.byte	1
 
 
 
 wt_comp_scan_l:	.byte	1	; time from switch to comparator scan
-wt_comp_scan_h:	.byte	1       
+wt_comp_scan_h:	.byte	1
 com_timing_l:	.byte	1	; time from zero-crossing to switch of the appropriate FET
 com_timing_h:	.byte	1
 wt_OCT1_tot_l:	.byte	1	; OCT1 waiting time
@@ -348,7 +348,7 @@ clear_ram:	st	X+, temp1
 	; reset rc puls timeout
 		ldi	temp1, RCP_TOT
 		mov	rcpuls_timeout, temp1
-		
+
 		rcall	wait260ms	; wait a while
 ;		rcall	wait260ms
 
@@ -405,7 +405,7 @@ i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 		rcall	set_all_timings
 
 		rjmp	init_startup
-		
+
 ;-----bko-----------------------------------------------------------------
 ; external interrupt0 = rc pulse input
 ; NOTE: This interrupt uses the 16-bit atomic timer read/write register
@@ -835,7 +835,7 @@ eval_sys_ub:	sbrs	flags0, UB_LOW
 eval_sys_ub_ok:	tst	sys_control
 		breq	eval_sys_s99
 		dec	sys_control
-		
+
 eval_sys_s99:	rcall	set_new_duty
 		ret
 
@@ -975,7 +975,7 @@ update_t00:
 	; set RPM to 120.000
 update_t10:	ldi	temp4, 0x01
 		ldi	temp3, 0x4c
-		tst	run_control 
+		tst	run_control
 		brne	update_t90		; just active
 		ldi	temp1, 0xff		; not active - reactivate
 		mov	run_control, temp1
@@ -1090,7 +1090,7 @@ start_timeout:	lds	YL, wt_OCT1_tot_l
 		sub	YH, temp1
 		cpi	YH, high (timeoutMIN)
 		brcc	set_tot2
-		ldi	YH, high (timeoutSTART)		
+		ldi	YH, high (timeoutSTART)
 set_tot2:
 		sts	wt_OCT1_tot_h, YH
 
@@ -1184,7 +1184,7 @@ mot_brk10:
 		out	PORTD, temp1
 .endif	; MOT_BRAKE == 1
 		ret
-		
+
 ;-----bko-----------------------------------------------------------------
 ; **** startup loop ****
 init_startup:	rcall	switch_power_off
@@ -1258,7 +1258,7 @@ start1_1:	rcall	sync_with_poweron
 		rcall	evaluate_uart
 		rcall	start_timeout
 		rjmp	start4
-	
+
 start1_2:	sbrc	flags0, OCT1_PENDING
 		rjmp	start1_3
 		sbr	flags2, (1<<SCAN_TIMEOUT)
@@ -1425,7 +1425,7 @@ s6_power_ok:
 s6_rcp_ok:	tst	t1_timeout
 		brne	s6_test_rpm
 		rjmp	init_startup
-		
+
 s6_test_rpm:	lds	temp1, timing_x
 		tst	temp1
 		brne	s6_goodies
@@ -1442,7 +1442,7 @@ s6_goodies:	lds	temp1, goodies
 		sts	goodies,  temp1
 		cbr	flags2, (1<<SCAN_TIMEOUT)
 		cpi	temp1, ENOUGH_GOODIES
-		brcs	s6_start1	
+		brcs	s6_start1
 
 s6_run1:	ldi	temp1, 0xff
 		mov	run_control, temp1
@@ -1475,7 +1475,7 @@ run1:	;	rcall	wait_for_low
 		rcall	com1com2
 		rcall	calc_next_timing
 		rcall	wait_OCT1_tot
-		
+
 ; run 2 = A(p-on) + C(n-choppered) - comparator B evaluated
 ; out_cB changes from high to low
 
@@ -1596,7 +1596,7 @@ restart_control:
 
 ;-----bko-----------------------------------------------------------------
 ; *** scan comparator utilities ***
-; 
+;
 wait_for_low:	sbrs	flags0, OCT1_PENDING
 		ret
 		sbis	ACSR, ACO		; low ?
