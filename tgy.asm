@@ -86,7 +86,7 @@
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
 
 .equ	PWR_STARTUP	= 2 ;MIN_DUTY
-.equ	PWR_MAX_STARTUP	= 35 ;MIN_DUTY+5
+.equ	PWR_MAX_STARTUP	= 8 ;MIN_DUTY+5
 
 .equ	timeoutSTART	= 48000
 .equ	timeoutMIN	= 36000
@@ -98,10 +98,10 @@
 
 .equ	EXT0_EN		= 0x40	; enable ext0int
 
-.equ	OCT1_RANGE1	= 16	; ( ~2400 RPM )
-.equ	OCT1_RANGE2	= 8	; ( ~4800 RPM )
+;.equ	OCT1_RANGE1	= 16	; ( ~2400 RPM )
+;.equ	OCT1_RANGE2	= 8	; ( ~4800 RPM )
 
-.equ	PWR_RANGE_RUN	= 0xe8	; omg it makes it start -Simon
+.equ	PWR_RANGE_RUN	= 0x60	; ( ~1600 RPM )
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
 
@@ -1108,20 +1108,13 @@ set_new_duty10:	lds	temp2, timing_x
 		brne	set_new_duty12
 		lds	temp2, timing_h	; get actual RPM reference high
 		cpi	temp2, PWR_RANGE1	; lower range1 ?
-		brcs	set_new_duty20		; on carry - test next range
+		brcs	set_new_duty25		; on carry - test next range
 set_new_duty12:	sbr	flags2, (1<<RPM_RANGE1)
 		sbr	flags2, (1<<RPM_RANGE2)
 		ldi	temp2, PWR_MAX_RPM1	; higher than range1 power max ?
 		cp	temp1, temp2
 		brcs	set_new_duty31		; on carry - not higher, no restriction
 		mov	temp1, temp2		; low (range1) RPM - set PWR_MAX_RPM1
-		rjmp	set_new_duty31
-set_new_duty20:	sbrs	flags2, STARTUP
-		rjmp	set_new_duty25
-		ldi	temp3, PWR_MAX_STARTUP	; limit power in startup phase
-		cp	temp1, temp3
-		brcs	set_new_duty25		; on carry - not higher, test range 2
-		mov	temp1, temp3		; set PWR_MAX_STARTUP limit
 		rjmp	set_new_duty31
 set_new_duty25:	cpi	temp2, PWR_RANGE2	; lower range2 ?
 		brcs	set_new_duty30		; on carry - not lower, no restriction
@@ -1133,7 +1126,13 @@ set_new_duty25:	cpi	temp2, PWR_RANGE2	; lower range2 ?
 		mov	temp1, temp2		; low (range2) RPM - set PWR_MAX_RPM2
 		rjmp	set_new_duty31
 set_new_duty30:	cbr	flags2, (1<<RPM_RANGE1)+(1<<RPM_RANGE2)
-set_new_duty31:	com	temp1			; down-count to up-count (T0)
+set_new_duty31: sbrs	flags2, STARTUP		; Check for STARTUP phase
+		rjmp	set_new_duty32
+		ldi	temp3, PWR_MAX_STARTUP	; limit power in startup phase
+		cp	temp1, temp3
+		brcs	set_new_duty32		; on carry - not higher, test range 2
+		mov	temp1, temp3		; set PWR_MAX_STARTUP limit
+set_new_duty32: com	temp1			; down-count to up-count (T0)
 		mov	tcnt0_pwron_next, temp1	; save in next
 	; tcnt0_power_on is updated to tcnt0_pwron_next in acceptable steps
 		ret
