@@ -88,8 +88,8 @@
 .equ	PWR_MAX_RPM1	= POWER_RANGE/4
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
 
-.equ	PWR_STARTUP	= 2 ;MIN_DUTY
-.equ	PWR_MAX_STARTUP	= 8 ;MIN_DUTY+5
+.equ	PWR_STARTUP	= 15
+.equ	PWR_MAX_STARTUP	= 30
 
 .equ	timeoutSTART	= 48000
 .equ	timeoutMIN	= 36000
@@ -104,7 +104,7 @@
 ;.equ	OCT1_RANGE1	= 16	; ( ~2400 RPM )
 ;.equ	OCT1_RANGE2	= 8	; ( ~4800 RPM )
 
-.equ	PWR_RANGE_RUN	= 0x60	; ( ~1600 RPM )
+.equ	PWR_RANGE_RUN	= 0x20	; ( ~4800 RPM )
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
 
