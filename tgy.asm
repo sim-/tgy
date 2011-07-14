@@ -532,16 +532,53 @@ t1ovfl_99:	out	SREG, i_sreg
 ;-----bko-----------------------------------------------------------------
 ; timer0 overflow interrupt
 t0ovfl_int:	in	i_sreg, SREG
-		sbrc	flags0, I_OFF_CYCLE
-		rjmp	t0_on_cycle
+		sbrs	flags0, I_OFF_CYCLE
+		rjmp	t0_off_cycle
 
-t0_off_cycle:	sbr	flags2, (1<<COMP_SAVE)
+t0_on_cycle:
+; switch appropriate nFET on as soon as possible
+		sbrs	flags0, C_FET		; is Cn choppered ?
+		rjmp	test_AnFET_on			; .. no - test An
+		sbrs	flags1, POWER_OFF
+		CnFET_on		; Cn on
+		rjmp	eval_power_state
+test_AnFET_on:	sbrs	flags0, A_FET		; is An choppered ?
+		rjmp	sw_BnFET_on			; .. no - Bn has to be choppered
+		sbrs	flags1, POWER_OFF
+		AnFET_on		; An on
+		rjmp	eval_power_state
+sw_BnFET_on:	sbrs	flags1, POWER_OFF
+		BnFET_on		; Bn on
+
+	; evaluate power state
+eval_power_state:
+		cbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = on cycle
+		cbr	flags1, (1<<FULL_POWER)
+		sbr	flags1, (1<<POWER_OFF)
+		mov	i_temp1, tcnt0_power_on
+		cpi	i_temp1, NO_POWER
+		breq	t0_int_exit
+;		sbrs	flags2, POFF_CYCLE
+		cbr	flags1, (1<<POWER_OFF)
+		cpi	i_temp1, MAX_POWER
+		breq	t0_int_full
+t0_int_exit:
+		out	SREG, i_sreg
+		out	TCNT2, i_temp1	; reload t0
+		reti
+t0_int_full:
+		sbr	flags1, (1<<FULL_POWER)
+		rjmp	t0_int_exit
+
+t0_off_cycle:
+		sbr	flags2, (1<<COMP_SAVE)
 		sbic	ACSR, ACO		; mirror inverted ACO to bit-var
 		cbr	flags2, (1<<COMP_SAVE)
 
-	; changes in PWM ?
+		sbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = off cycle
 
-		mov     tcnt0_power_on, tcnt0_pwron_next ; Just set it -Simon
+	; changes in PWM ?
+		mov	tcnt0_power_on, tcnt0_pwron_next ; Just set it -Simon
 
 ;		mov	i_temp1, tcnt0_power_on
 ;		mov	i_temp2, tcnt0_pwron_next
@@ -562,81 +599,28 @@ t0_off_cycle:	sbr	flags2, (1<<COMP_SAVE)
 ;		inc	i_temp1			; <inc> decreases power-on-time
 ;set_next_pwm:	mov	tcnt0_power_on, i_temp1
 
-nFET_off:	sbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = off cycle
+		sbrc	flags2, POFF_CYCLE
+		sbr	flags1, (1<<POWER_OFF)
 
-	; switch appropriate nFET off
-		sbrs	flags0, C_FET
-		rjmp	test_AnFET
-
-; C_FET is active
-		sbrs	flags1, FULL_POWER
-		CnFET_off		; Cn off
-		rjmp	reload_t0_off_cycle
-
-test_AnFET:	sbrs	flags0, A_FET
-		rjmp	switch_BnFET
-
-; A_FET is active
-switch_AnFET:	sbrs	flags1, FULL_POWER
-		AnFET_off		; An off
-		rjmp	reload_t0_off_cycle
-
-; B_FET is active
-switch_BnFET:	sbrs	flags1, FULL_POWER
-		BnFET_off		; Bn off
-
-	; reload timer0 with the appropriate value
-reload_t0_off_cycle:
 ;		ldi	i_temp1, POWER_RANGE
 ;		add	i_temp1, tcnt0_power_on
 		mov	i_temp1, tcnt0_power_on
 		com	i_temp1			; timer0 increments
-		rjmp	t0_int_exit
 
-; reload timer90 + switch appropriate nFET on
-t0_on_cycle:
-		cbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = on cycle (no off cycle)
-		mov	i_temp1, tcnt0_power_on
+		sbrc	flags1, FULL_POWER
+		rjmp	reload_t0_off_cycle
+	; We can just turn them all off as we only have one nFET on at a
+	; time, and interrupts are disabled during beeps.
+		CnFET_off
+		AnFET_off
+		BnFET_off
 
-; switch appropriate nFET on
-nFET_on:	sbrs	flags0, C_FET		; is Cn choppered ?
-		rjmp	test_AnFET_on			; .. no - test An
-		sbrs	flags1, POWER_OFF
-		CnFET_on		; Cn on
-		rjmp	eval_power_state
-test_AnFET_on:	sbrs	flags0, A_FET		; is An choppered ?
-		rjmp	sw_BnFET_on			; .. no - Bn has to be choppered
-		sbrs	flags1, POWER_OFF
-		AnFET_on		; An on
-		rjmp	eval_power_state
-sw_BnFET_on:	sbrs	flags1, POWER_OFF
-		BnFET_on		; Bn on
-
-	; evaluate power state
-eval_power_state:
-;		cpi	i_temp1, MAX_POWER+1
-;		brsh	not_full_power
-		tst	i_temp1
-		brne	not_full_power
-	; FULL POWER
-		sbr	flags1, (1<<FULL_POWER)	; tcnt0_power_on = MAX_POWER means FULL_POWER
-		cbr	flags1, (1<<POWER_OFF)
-		rjmp	t0_int_exit
-not_full_power:	cpi	i_temp1, NO_POWER
-		brlo	neither_full_nor_off
-	; POWER OFF
-		cbr	flags1, (1<<FULL_POWER)	; tcnt0_power_on = NO_POWER means power off
-		sbr	flags1, (1<<POWER_OFF)
-		rjmp	t0_int_exit
-neither_full_nor_off:
-		cbr	flags1, (1<<FULL_POWER)	; tcnt0_power_on = MAX_POWER means FULL_POWER
-		cbr	flags1, (1<<POWER_OFF)
-
-t0_int_exit:	sbrc	flags2, POFF_CYCLE
-		sbr	flags1, (1<<POWER_OFF)
-		out	TCNT2, i_temp1		; reload t0
+	; reload timer0 with the appropriate value
+reload_t0_off_cycle:
 		out	SREG, i_sreg
+		out	TCNT2, i_temp1		; reload t0
 		reti
+
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp4, 200
