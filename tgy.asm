@@ -82,8 +82,8 @@
 .equ	MIN_DUTY	= 1			; no power
 ;.equ	NO_POWER	= 256-MIN_DUTY		; (POWER_OFF)
 ;.equ	MAX_POWER	= 256-POWER_RANGE	; (FULL_POWER)
-.equ	NO_POWER	= 255
-.equ	MAX_POWER	= 0
+.equ	NO_POWER	= 0
+.equ	MAX_POWER	= 255
 
 .equ	PWR_MAX_RPM1	= POWER_RANGE/4
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
@@ -101,9 +101,6 @@
 
 .equ	EXT0_EN		= 0x40	; enable ext0int
 
-;.equ	OCT1_RANGE1	= 16	; ( ~2400 RPM )
-;.equ	OCT1_RANGE2	= 8	; ( ~4800 RPM )
-
 .equ	PWR_RANGE_RUN	= 0x20	; ( ~4800 RPM )
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
@@ -114,7 +111,7 @@
 ; Register Definitions
 .def	i_sreg		 = r1	; status register save in interrupts
 .def	tcnt0_power_on	 = r2	; timer0 counts nFETs are switched on
-.def	tcnt0_change_tot = r3	; when zero, tcnt0_power_on is changed by one (inc or dec)
+;.def	tcnt0_change_tot = r3	; when zero, tcnt0_power_on is changed by one (inc or dec)
 ;.def	...	 	 = r4	; upper 8bit timer1 (software-) register
 .def	uart_cnt	 = r5
 .def	tcnt0_pwron_next = r6
@@ -563,6 +560,7 @@ eval_power_state:
 		cpi	i_temp1, MAX_POWER
 		breq	t0_int_full
 t0_int_exit:
+		com	i_temp1			; timer0 increments
 		out	SREG, i_sreg
 		out	TCNT2, i_temp1	; reload t0
 		reti
@@ -579,33 +577,7 @@ t0_off_cycle:
 
 	; changes in PWM ?
 		mov	tcnt0_power_on, tcnt0_pwron_next ; Just set it -Simon
-
-;		mov	i_temp1, tcnt0_power_on
-;		mov	i_temp2, tcnt0_pwron_next
-;		cp	i_temp2, i_temp1
-;		brsh	lower_pwm		; next power-on-time is lower or same
-;higher_pwm:	dec	tcnt0_change_tot	; change-timeout passed ?
-;		brne	nFET_off		; .. no
-;		ldi	i_temp2, CHANGE_TIMEOUT	; .. yes - change-timeout for more power
-;		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and decrement
-;		dec	i_temp1			; <dec> increases power-on-time
-;		rjmp	set_next_pwm
-;
-;lower_pwm:	breq	nFET_off		; pwm is unchanged
-;		dec	tcnt0_change_tot	; change-timeout passed ?
-;		brne	nFET_off		; .. no
-;		ldi	i_temp2, CHANGE_TOT_LOW ; .. yes - change-timeout for lower power
-;		mov	tcnt0_change_tot, i_temp2 ; reset change-timeout and increment
-;		inc	i_temp1			; <inc> decreases power-on-time
-;set_next_pwm:	mov	tcnt0_power_on, i_temp1
-
-		sbrc	flags2, POFF_CYCLE
-		sbr	flags1, (1<<POWER_OFF)
-
-;		ldi	i_temp1, POWER_RANGE
-;		add	i_temp1, tcnt0_power_on
 		mov	i_temp1, tcnt0_power_on
-		com	i_temp1			; timer0 increments
 
 		sbrc	flags1, FULL_POWER
 		rjmp	reload_t0_off_cycle
@@ -1131,8 +1103,7 @@ set_new_duty31: sbrs	flags2, STARTUP		; Check for STARTUP phase
 		cp	temp1, temp3
 		brcs	set_new_duty32		; on carry - not higher, test range 2
 		mov	temp1, temp3		; set PWR_MAX_STARTUP limit
-set_new_duty32: com	temp1			; down-count to up-count (T0)
-		mov	tcnt0_pwron_next, temp1	; save in next
+set_new_duty32: mov	tcnt0_pwron_next, temp1	; save in next
 	; tcnt0_power_on is updated to tcnt0_pwron_next in acceptable steps
 		ret
 ;-----bko-----------------------------------------------------------------
@@ -1195,7 +1166,6 @@ wait_for_power_on:
 		brcs	wait_for_power_on
 
 		ldi	temp1, PWR_STARTUP	; begin startup with low power
-		com	temp1
 		mov	tcnt0_pwron_next, temp1
 
 		cbi	ADCSRA, ADEN		; switch to comparator multiplexed
