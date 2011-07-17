@@ -88,8 +88,8 @@
 .equ	PWR_MAX_RPM1	= POWER_RANGE/4
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
 
-.equ	PWR_STARTUP	= 15
-.equ	PWR_MAX_STARTUP	= 30
+.equ	PWR_STARTUP	= 6
+.equ	PWR_MAX_STARTUP	= 96
 
 .equ	timeoutSTART	= 48000
 .equ	timeoutMIN	= 36000
