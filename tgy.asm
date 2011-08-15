@@ -500,6 +500,9 @@ sw_BnFET_on:	sbrs	flags1, POWER_OFF
 
 	; evaluate power state
 eval_power_state:
+	; changes in PWM ?
+		mov	tcnt0_power_on, tcnt0_pwron_next ; Just set it -Simon
+
 		cbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = on cycle
 		cbr	flags1, (1<<FULL_POWER)
 		sbr	flags1, (1<<POWER_OFF)
@@ -526,10 +529,6 @@ t0_off_cycle:
 
 		sbr	flags0, (1<<I_OFF_CYCLE) ; PWM state = off cycle
 
-	; changes in PWM ?
-		mov	tcnt0_power_on, tcnt0_pwron_next ; Just set it -Simon
-		mov	i_temp1, tcnt0_power_on
-
 		sbrc	flags1, FULL_POWER
 		rjmp	reload_t0_off_cycle
 	; We can just turn them all off as we only have one nFET on at a
@@ -541,7 +540,7 @@ t0_off_cycle:
 	; reload timer0 with the appropriate value
 reload_t0_off_cycle:
 		out	SREG, i_sreg
-		out	TCNT2, i_temp1		; reload t0
+		out	TCNT2, tcnt0_power_on		; reload t0
 		reti
 
 ;-----bko-----------------------------------------------------------------
