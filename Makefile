@@ -14,3 +14,6 @@ read:
 
 readeeprom:
 	avrdude -c dragon_isp -p m8 -P usb -U eeprom:r:orig.hex:i
+
+program_dapa: tgy.hex
+	uisp -dprog=dapa --erase --upload --verify -v if=tgy.hex

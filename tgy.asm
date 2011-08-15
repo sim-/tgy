@@ -66,8 +66,8 @@
 
 ; 1040 here seems to low for output from multikopter board -sim
 ; 1110 here is right, but cold weather just trips it -sim
-.equ	MIN_RC_PULS	= 960	; Less than this is illegal pulse length
-
+.equ	MIN_RC_PULS	= 800	; Less than this is illegal pulse length
+.equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	START_HYST	= 40	; Start motor at STOP_RC_PULS + START_HYST
 
@@ -88,8 +88,7 @@
 .equ	PWR_MAX_RPM1	= POWER_RANGE/4
 .equ	PWR_MAX_RPM2	= POWER_RANGE/2
 
-.equ	PWR_STARTUP	= 6
-.equ	PWR_MAX_STARTUP	= 96
+.equ	PWR_MAX_STARTUP	= 48
 
 .equ	timeoutSTART	= 48000
 .equ	timeoutMIN	= 36000
@@ -123,12 +122,8 @@
 .def	rcpuls_timeout	 = r11
 .equ	RCP_TOT		 = 32	; Also affects time spent trying to start -Simon
 
-.def	current_err	 = r12	; counts consecutive current errors
-.equ	CURRENT_ERR_MAX  = 3	; performs a reset after MAX errors
-
 .def	sys_control	 = r13
 .def	t1_timeout	 = r14
-.def	run_control	 = r15
 
 
 .def	temp1	= r16			; main temporary
@@ -146,7 +141,7 @@
 .def	flags0	= r23	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrunpt is pending
 	.equ	UB_LOW 		= 1	; set if accu voltage low
-	.equ	I_pFET_HIGH	= 2	; set if over-current detect
+;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 	.equ	GET_STATE	= 3	; set if state is to be send
 	.equ	C_FET		= 4	; if set, C-FET state is to be changed
 	.equ	A_FET		= 5	; if set, A-FET state is to be changed
@@ -159,16 +154,16 @@
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 	.equ	CALC_NEXT_OCT1	= 2	; calculate OCT1 offset, when wait_OCT1_before_switch is called
 	.equ	RC_PULS_UPDATED	= 3	; new rc-puls value available
-	.equ	EVAL_RC_PULS	= 4	; if set, new rc puls is evaluated, while waiting for OCT1
-	.equ	EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
-	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
-	.equ	EVAL_UART	= 7	; if set, next PWM on should look for uart
+;	.equ	EVAL_RC_PULS	= 4	; if set, new rc puls is evaluated, while waiting for OCT1
+;	.equ	EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
+;	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
+;	.equ	EVAL_UART	= 7	; if set, next PWM on should look for uart
 
 .def	flags2	= r25
-	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
-	.equ	RPM_RANGE2	= 1	; if set RPM is between 1831 RPM and 3662 RPM
+;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
+;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
 	.equ	SCAN_TIMEOUT	= 2	; if set a startup timeout occurred
-	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
+;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
 	.equ	COMP_SAVE	= 4	; if set ACO was high
 	.equ	STARTUP		= 5	; if set startup-phase is active
 	.equ	RC_INTERVAL_OK	= 6	;
@@ -192,10 +187,6 @@ timing_l:	.byte	1	; holds time of 4 commutations
 timing_h:	.byte	1
 timing_x:	.byte	1
 
-timing_acc_l:	.byte	1	; holds the average time of 4 commutations
-timing_acc_h:	.byte	1
-timing_acc_x:	.byte	1
-
 rpm_l:		.byte	1	; holds the average time of 4 commutations
 rpm_h:		.byte	1
 rpm_x:		.byte	1
@@ -218,7 +209,7 @@ stop_rcpuls_h:	.byte	1
 new_rcpuls_l:	.byte	1
 new_rcpuls_h:	.byte	1
 
-duty_offset:	.byte	1
+;duty_offset:	.byte	1
 goodies:	.byte	1
 comp_state:	.byte	1
 gp_cnt:		.byte	1
@@ -281,12 +272,6 @@ uart_data:	.byte	100		; only for debug requirements
 ; not used	nop	; wire2_int
 ; not used	nop	; spmc_int
 
-
-version:	.db	0x0d, 0x0a
-		.db	"TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal."
-version_end:	.db	0x0d, 0x0a
-
-
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
@@ -345,12 +330,7 @@ clear_ram:	st	X+, temp1
 	; power off
 		rcall	switch_power_off
 
-	; reset rc puls timeout
-		ldi	temp1, RCP_TOT
-		mov	rcpuls_timeout, temp1
-
 		rcall	wait260ms	; wait a while
-;		rcall	wait260ms
 
 		rcall	beep_f1
 		rcall	wait30ms
@@ -364,10 +344,6 @@ control_start:	; init variables
 ;		mov	tcnt0_change_tot, temp1
 		ldi	temp1, NO_POWER
 		mov	tcnt0_power_on, temp1
-
-		ldi	temp1, 0		; reset error counters
-		mov	current_err,temp1
-		mov	sys_control, temp1
 
 	; init registers and interrupts
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
@@ -401,12 +377,6 @@ i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 		rcall	beep_f4
 		sei				; enable all interrupts
 
-
-		ldi	temp1, 30
-		sts	duty_offset, temp1
-
-		rcall	set_all_timings
-
 		rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
@@ -437,7 +407,7 @@ ext_int0:	in	i_sreg, SREG
 		in	i_temp2, TCNT1H
 		mov	start_rcpuls_l, i_temp1
 		mov	start_rcpuls_h, i_temp2
-; test rcpulse interval
+; test rcpulse low interval
 		cbr	flags2, (1<<RC_INTERVAL_OK) ; preset to not ok
 		lds	i_temp3, stop_rcpuls_l
 		sub	i_temp1, i_temp3
@@ -484,12 +454,12 @@ falling_edge:	sbic	PIND, rcp_in		; test level of rc impuls
 	; save impuls length
 		sts	new_rcpuls_l, i_temp1
 		sts	new_rcpuls_h, i_temp2
-		cpi	i_temp1, low (2200)
-		ldi	i_temp3, high(2200)	; test range high
+		cpi	i_temp1, low (MAX_RC_PULS)
+		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
 		cpc	i_temp2, i_temp3
 		brsh	extint1_fail		; through away
-		cpi	i_temp1, low (800)
-		ldi	i_temp3, high(800)	; test range low
+		cpi	i_temp1, low (MIN_RC_PULS)
+		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
 		cpc	i_temp2, i_temp3
 		brlo	extint1_fail		; through away
 		sbr	flags1, (1<<RC_PULS_UPDATED) ; set to rc impuls value is ok !
@@ -519,7 +489,6 @@ t1ovfl_int:	in	i_sreg, SREG
 		breq	t1ovfl_10
 		dec	t1_timeout
 t1ovfl_10:
-
 		tst	rcpuls_timeout
 		breq	t1ovfl_99
 		dec	rcpuls_timeout
@@ -676,9 +645,8 @@ tcnt1_to_temp:	ldi	temp4, EXT0_DIS		; disable ext0int
 	; so it must be disabled here (cli is also fine)
 ;-----bko-----------------------------------------------------------------
 evaluate_rc_puls:
-		cbr	flags1, (1<<EVAL_RC_PULS)
 		sbrs	flags1, RC_PULS_UPDATED
-		rjmp	eval_rc_p90
+		ret
 		lds	temp1, new_rcpuls_l
 		lds	temp2, new_rcpuls_h
 		cbr	flags1, (1<<RC_PULS_UPDATED) ; rc impuls value is read out
@@ -695,7 +663,7 @@ evaluate_rc_puls:
 		brsh	eval_rc_p00
 eval_rc_stop:
 		clr	ZH
-		ret
+		rjmp	set_new_duty
 eval_rc_p00:
 	; Limit the maximum PPM here since it will wrap
 	; when scaled to POWER_RANGE below
@@ -704,6 +672,8 @@ eval_rc_p00:
 		brne	eval_rc_p09
 		cpi	temp1, low   (816)	; but see below
 		brsh	eval_rc_p09
+eval_rc_full:
+		
 eval_rc_p05:
 ;	; This used to shift 0-800 -> 0-200,
 ;	; but instead we now *8/25, which gives us 0-256.
@@ -760,100 +730,13 @@ eval_rc_p05:
 		lsr	temp2
 		ror	temp1
 
-		mov	temp3, temp1
-;		subi	temp1, POWER_RANGE
-;		brcs	eval_rc_p10
-		rjmp	eval_rc_p10
-eval_rc_p09:	ldi	temp3, POWER_RANGE - 1 ; Maximum speed
-eval_rc_p10:	mov	ZH, temp3
-eval_rc_p90:	ret
+		mov	ZH, temp1
+		rjmp	set_new_duty
+eval_rc_p09:	ldi	ZH, MAX_POWER
+		rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
-evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
-		ret
-;-----bko-----------------------------------------------------------------
-evaluate_sys_state:
-		cbr	flags1, (1<<EVAL_SYS_STATE)
-		sbrs	flags0, T1OVFL_FLAG
-		rjmp	eval_sys_s99
-
-	; do it not more often as every 65µs
-		cbr	flags0, (1<<T1OVFL_FLAG)
-
-	; control current
-eval_sys_i:	sbrs	flags0, I_pFET_HIGH
-		rjmp	eval_sys_i_ok
-		cbr	flags0, (1<<I_pFET_HIGH)
-		mov	i_temp1, current_err
-		cpi	i_temp1, CURRENT_ERR_MAX
-		brcc	panic_exit
-		inc	current_err
-		rjmp	eval_sys_ub
-
-eval_sys_i_ok:	tst	current_err
-		breq	eval_sys_ub
-		dec	current_err
-
-	; control voltage
-eval_sys_ub:	sbrs	flags0, UB_LOW
-		rjmp	eval_sys_ub_ok
-		cbr	flags0, (1<<UB_LOW)
-		mov	i_temp1, sys_control
-		cpi	i_temp1, NO_POWER ; POWER_RANGE
-		brcc	eval_sys_s99
-		inc	sys_control
-		rjmp	eval_sys_s99
-
-eval_sys_ub_ok:	tst	sys_control
-		breq	eval_sys_s99
-		dec	sys_control
-
-eval_sys_s99:	rcall	set_new_duty
-		ret
-
-panic_exit:	; !!!!!! OVERCURRENT !!!!!!!!
-		cli
-		rjmp	reset
-;-----bko-----------------------------------------------------------------
-evaluate_rpm:	cbr	flags1, (1<<EVAL_RPM)
-		lds	temp3, rpm_x
-		lds	temp2, rpm_h
-
-		lds	temp1, rpm_l	; subtract 1/256
-		sub	temp1, temp2
-		sts	rpm_l, temp1
-		lds	temp1, rpm_h
-		sbc	temp1, temp3
-		sts	rpm_h, temp1
-		lds	temp1, rpm_x
-		sbci	temp1, 0
-		sts	rpm_x, temp1
-
-		lds	temp3, timing_acc_x
-		lds	temp2, timing_acc_h
-		lds	temp1, timing_acc_l
-		lsr	temp3		; make one complete commutation cycle
-		ror	temp2
-		ror	temp1
-		lsr	temp3
-		ror	temp2
-		ror	temp1
-	; temp3 is zero now - for sure !!
-		sts	timing_acc_x, temp3
-		sts	timing_acc_h, temp3
-		sts	timing_acc_l, temp3
-	; and add the result as 1/256
-		lds	temp3, rpm_l
-		add	temp3, temp1
-		sts	rpm_l, temp3
-		lds	temp3, rpm_h
-		adc	temp3, temp2
-		sts	rpm_h, temp3
-		ldi	temp1, 0
-		lds	temp3, rpm_x
-		adc	temp3, temp1
-		sts	rpm_x, temp3
-
-		ret
+;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
+;		ret
 ;-----bko-----------------------------------------------------------------
 set_all_timings:
 		ldi	YL, low  (timeoutSTART)
@@ -937,19 +820,16 @@ update_t00:
 	; limit RPM to 120.000
 		tst	ZL
 		brne	update_t90
-		tst	temp4
-		breq	update_t10
-		cpi	temp4, 1
+		cpi	temp4, 0x01
+		brcs	update_t10
 		brne	update_t90
 		cpi	temp3, 0x4c		; 0x14c = 120.000 RPM
 		brcc	update_t90
-	; set RPM to 120.000
-update_t10:	ldi	temp4, 0x01
-		ldi	temp3, 0x4c
-		tst	run_control
-		brne	update_t90		; just active
-		ldi	temp1, 0xff		; not active - reactivate
-		mov	run_control, temp1
+update_t10:
+		mov	temp1, sys_control
+		cpi	temp1, 2
+		brcs	update_t90
+		lsr	sys_control
 
 update_t90:	sts	timing_l, temp3
 		sts	timing_h, temp4
@@ -958,16 +838,7 @@ update_t90:	sts	timing_l, temp3
 		brcs	update_t99
 		rcall	set_timing_v
 
-update_t99:	lds	temp1, timing_acc_l
-		add	temp1, temp3
-		sts	timing_acc_l, temp1
-		lds	temp1, timing_acc_h
-		adc	temp1, temp4
-		sts	timing_acc_h, temp1
-		lds	temp1, timing_acc_x
-		adc	temp1, ZL
-		sts	timing_acc_x, temp1
-
+update_t99:
 		lsr	ZL			; a 16th is the next wait before scan
 		ror	temp4
 		ror	temp3
@@ -1000,11 +871,6 @@ wait_OCT1_tot:	sbrc	flags0, OCT1_PENDING
 		rjmp	wait_OCT1_tot
 
 set_OCT1_tot:
-;		cbi	ADCSRA, ADEN		; switch to comparator multiplexed
-;		in	temp1, SFIOR
-;		ori	temp1, (1<<ACME)
-;		out	SFIOR, temp1
-
 		lds	YH, zero_wt_h
 		lds	YL, zero_wt_l
 		rcall	tcnt1_to_temp
@@ -1040,13 +906,7 @@ wait_OCT1_before_switch:
 
 	; don't waste time while waiting - do some controls, if indicated
 
-		sbrc	flags1, EVAL_RC_PULS
 		rcall	evaluate_rc_puls
-		sbrc	flags1, EVAL_SYS_STATE
-		rcall	evaluate_sys_state
-
-		sbrc	flags1, EVAL_RPM
-		rcall	evaluate_rpm
 
 OCT1_wait:	sbrc	flags0, OCT1_PENDING
 		rjmp	OCT1_wait
@@ -1070,48 +930,53 @@ set_tot2:
 
 		ret
 ;-----bko-----------------------------------------------------------------
-set_new_duty:	mov	temp1, ZH
-		sub	temp1, sys_control
-		brcc	set_new_duty10
-		ldi	temp1, MIN_DUTY-1
+set_new_duty:	tst	sys_control
+		breq	switch_power_off
+		mov	temp1, ZH
+		mov	temp2, sys_control	; Limit PWM to sys_control
+		cp	temp1, temp2
+		brcs	set_new_duty10
+		mov	temp1, temp2
+		cpi	temp2, MAX_POWER
+		breq	set_new_duty10
+		inc	sys_control		; Build up sys_control to MAX_POWER
 set_new_duty10:	lds	temp2, timing_x
 		tst	temp2
 		brne	set_new_duty12
-		lds	temp2, timing_h	; get actual RPM reference high
+		lds	temp2, timing_h		; get actual RPM reference high
 		cpi	temp2, PWR_RANGE1	; lower range1 ?
 		brcs	set_new_duty25		; on carry - test next range
-set_new_duty12:	sbr	flags2, (1<<RPM_RANGE1)
-		sbr	flags2, (1<<RPM_RANGE2)
-		ldi	temp2, PWR_MAX_RPM1	; higher than range1 power max ?
-		cp	temp1, temp2
+set_new_duty12:	;sbr	flags2, (1<<RPM_RANGE1)
+		;sbr	flags2, (1<<RPM_RANGE2)
+		cpi	temp1, PWR_MAX_RPM1	; higher than range1 power max ?
 		brcs	set_new_duty31		; on carry - not higher, no restriction
-		mov	temp1, temp2		; low (range1) RPM - set PWR_MAX_RPM1
+		ldi	temp1, PWR_MAX_RPM1	; low (range1) RPM - set PWR_MAX_RPM1
 		rjmp	set_new_duty31
 set_new_duty25:	cpi	temp2, PWR_RANGE2	; lower range2 ?
 		brcs	set_new_duty30		; on carry - not lower, no restriction
-		cbr	flags2, (1<<RPM_RANGE1)
-		sbr	flags2, (1<<RPM_RANGE2)
-		ldi	temp2, PWR_MAX_RPM2	; higher than range2 power max ?
-		cp	temp1, temp2
+		;cbr	flags2, (1<<RPM_RANGE1)
+		;sbr	flags2, (1<<RPM_RANGE2)
+		cpi	temp1, PWR_MAX_RPM2	; higher than range2 power max ?
 		brcs	set_new_duty31		; on carry - not higher, no restriction
-		mov	temp1, temp2		; low (range2) RPM - set PWR_MAX_RPM2
+		ldi	temp1, PWR_MAX_RPM2	; low (range2) RPM - set PWR_MAX_RPM2
 		rjmp	set_new_duty31
-set_new_duty30:	cbr	flags2, (1<<RPM_RANGE1)+(1<<RPM_RANGE2)
+set_new_duty30:	;cbr	flags2, (1<<RPM_RANGE1)+(1<<RPM_RANGE2)
 set_new_duty31: sbrs	flags2, STARTUP		; Check for STARTUP phase
 		rjmp	set_new_duty32
-		ldi	temp3, PWR_MAX_STARTUP	; limit power in startup phase
-		cp	temp1, temp3
+		cpi	temp1, PWR_MAX_STARTUP	; limit power in startup phase
 		brcs	set_new_duty32		; on carry - not higher, test range 2
-		mov	temp1, temp3		; set PWR_MAX_STARTUP limit
+		ldi	temp1, PWR_MAX_STARTUP	; set PWR_MAX_STARTUP limit
 set_new_duty32: mov	tcnt0_pwron_next, temp1	; save in next
-	; tcnt0_power_on is updated to tcnt0_pwron_next in acceptable steps
+	; tcnt0_power_on is updated to tcnt0_pwron_next in interrupt
 		ret
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
-		ldi	ZH, MIN_DUTY-1		; ZH is new_duty
+		ldi	ZH, NO_POWER		; ZH is new_duty
 		ldi	temp1, NO_POWER		; lowest tcnt0_power_on value
 		mov	tcnt0_power_on, temp1
 		mov	tcnt0_pwron_next, temp1
+		ldi	temp1, 0
+		mov	sys_control, temp1
 		ldi	temp1, INIT_PB		; all off
 		out	PORTB, temp1
 		ldi	temp1, INIT_PD		; all off
@@ -1119,7 +984,7 @@ switch_power_off:
 ;		ldi	temp1, CHANGE_TIMEOUT	; reset change-timeout
 ;		mov	tcnt0_change_tot, temp1
 		sbr	flags1, (1<<POWER_OFF)	; disable power on
-		cbr	flags2, (1<<POFF_CYCLE)
+;		cbr	flags2, (1<<POFF_CYCLE)
 		sbr	flags2, (1<<STARTUP)
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
@@ -1158,15 +1023,16 @@ mot_brk10:
 ;-----bko-----------------------------------------------------------------
 ; **** startup loop ****
 init_startup:	rcall	switch_power_off
+		; reset rc puls timeout
+		ldi	temp1, RCP_TOT
+		mov	rcpuls_timeout, temp1
+		ldi	temp1, MAX_POWER
+		mov	sys_control, temp1
 wait_for_power_on:
 		rcall	motor_brake
 		rcall	evaluate_rc_puls
-
 		cpi	ZH, MIN_DUTY
 		brcs	wait_for_power_on
-
-		ldi	temp1, PWR_STARTUP	; begin startup with low power
-		mov	tcnt0_pwron_next, temp1
 
 		cbi	ADCSRA, ADEN		; switch to comparator multiplexed
 		in	temp1, SFIOR
@@ -1223,8 +1089,7 @@ start1_1:	rcall	sync_with_poweron
 		rcall	com3com4
 
 		rcall	evaluate_rc_puls
-
-		rcall	evaluate_uart
+;		rcall	evaluate_uart
 		rcall	start_timeout
 		rjmp	start4
 
@@ -1265,9 +1130,9 @@ start2_3:	rcall	sync_with_poweron
 
 start2_9:
 		rcall	com2com3
-
 		rcall	evaluate_rc_puls
-
+		sbrc	flags1, POWER_OFF
+		rjmp	init_startup
 		rcall	start_timeout
 
 ; state 3 = A(p-on) + B(n-choppered) - comparator C evaluated
@@ -1295,7 +1160,7 @@ start3_3:	rcall	sync_with_poweron
 
 start3_9:
 		rcall	com3com4
-		rcall	evaluate_uart
+;		rcall	evaluate_uart
 		rcall	start_timeout
 
 ; state 4 = C(p-on) + B(n-choppered) - comparator A evaluated
@@ -1352,7 +1217,8 @@ start5_3:	rcall	sync_with_poweron
 
 start5_9:
 		rcall	com5com6
-		rcall	evaluate_sys_state
+;		rcall	evaluate_sys_state
+;		rcall	set_new_duty
 		rcall	start_timeout
 
 ; state 6 = B(p-on) + A(n-choppered) - comparator C evaluated
@@ -1381,17 +1247,14 @@ start6_3:	rcall	sync_with_poweron
 start6_9:
 		rcall	com6com1
 
-		mov	temp1, tcnt0_power_on
-		cpi	temp1, NO_POWER
-		brne	s6_power_ok
+		sbrc	flags1, POWER_OFF	; Check if power turned off
 		rjmp	init_startup
 
-s6_power_ok:
-		tst	rcpuls_timeout
+		tst	rcpuls_timeout		; Check for RC timeout
 		brne	s6_rcp_ok
 		rjmp	restart_control
 
-s6_rcp_ok:	tst	t1_timeout
+s6_rcp_ok:	tst	t1_timeout		; Check for start attempt timeout
 		brne	s6_test_rpm
 		rjmp	init_startup
 
@@ -1413,10 +1276,7 @@ s6_goodies:	lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
 		brcs	s6_start1
 
-s6_run1:	ldi	temp1, 0xff
-		mov	run_control, temp1
-
-		rcall	calc_next_timing
+s6_run1:	rcall	calc_next_timing
 		rcall	set_OCT1_tot
 
 		cbr	flags2, (1<<STARTUP)
@@ -1439,7 +1299,6 @@ run1:		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
 
-		sbr	flags1, (1<<EVAL_RPM)
 		rcall	wait_OCT1_before_switch
 		rcall	com1com2
 		rcall	calc_next_timing
@@ -1455,7 +1314,6 @@ run2:		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
 
-		sbr	flags1, (1<<EVAL_RC_PULS)
 		rcall	wait_OCT1_before_switch
 		rcall	com2com3
 		rcall	calc_next_timing
@@ -1471,7 +1329,6 @@ run3:		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
 
-		sbr	flags1, (1<<EVAL_UART)
 		rcall	wait_OCT1_before_switch
 		rcall	com3com4
 		rcall	calc_next_timing
@@ -1501,7 +1358,6 @@ run5:		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
 
-		sbr	flags1, (1<<EVAL_SYS_STATE)
 		rcall	wait_OCT1_before_switch
 		rcall	com5com6
 		rcall	calc_next_timing
@@ -1530,38 +1386,19 @@ run6:		rcall	wait_for_high
 		breq	run6_2			; higher than 610 RPM if zero
 		sbr	flags2, (1<<GP_FLAG)	; mark low RPM
 run_to_start:	sbr	flags2, (1<<STARTUP)
-		cbr	flags2, (1<<POFF_CYCLE)
 		rjmp	wait_for_power_on
 
-run6_2:		cbr	flags2, (1<<POFF_CYCLE)
-		tst	run_control		; only once !
-		breq	run6_9
-		dec	run_control
-		breq	run6_3			; poweroff if 0
-		mov	temp1, run_control
-		cpi	temp1, 1		; poweroff if 1
-		breq	run6_3
-		cpi	temp1, 2		; poweroff if 2
-		brne	run6_9
-run6_3:		sbr	flags2, (1<<POFF_CYCLE)
-
-run6_9:
-
-		rjmp	run1			; go back to run 1
+run6_2:		rjmp	run1			; go back to run 1
 
 restart_control:
 		cli				; disable all interrupts
 		rcall	switch_power_off
-		; reset rc puls timeout
-		ldi	temp1, RCP_TOT
-		mov	rcpuls_timeout, temp1
+		rcall	wait30ms
 		rcall	beep_f3
 		rcall	beep_f2
 		rcall	wait30ms
 		sei
-		rcall	set_all_timings
 		rjmp	init_startup
-		; Used to be: rjmp	reset
 
 ;-----bko-----------------------------------------------------------------
 ; *** scan comparator utilities ***
