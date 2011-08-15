@@ -386,17 +386,10 @@ i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 ; any other 16-bit timer options happen that might use the same register
 ; (see "Accessing 16-bit registers" in the Atmel documentation)
 ext_int0:	in	i_sreg, SREG
-		clr	i_temp1			; disable extint edge may be changed
-		out	GIMSK, i_temp1
 
 ; evaluate edge of this interrupt
-		in	i_temp1, MCUCR
-		sbrs	i_temp1, ISC00
-		rjmp	falling_edge		; bit is clear = falling edge
-
-; should be rising edge - test rc impuls level state for possible jitter
 		sbis	PIND, rcp_in
-		rjmp	extint1_exit		; jump, if low state
+		rjmp	falling_edge		; bit is clear = falling edge
 
 ; rc impuls is at high state
 		ldi	i_temp1, (1<<ISC01)
@@ -430,9 +423,7 @@ extint1_fail:	tst	rcpuls_timeout
 		rjmp	extint1_exit
 
 ; rc impuls is at low state
-falling_edge:	sbic	PIND, rcp_in		; test level of rc impuls
-		rjmp	extint1_exit		; seems to be a spike
-
+falling_edge:
 		ldi	i_temp1, (1<<ISC01)+(1<<ISC00)
 		out	MCUCR, i_temp1		; set next int0 to rising edge
 		sbrc	flags1, RC_PULS_UPDATED
@@ -451,7 +442,7 @@ falling_edge:	sbic	PIND, rcp_in		; test level of rc impuls
 		sub	i_temp1, start_rcpuls_l
 		sbc	i_temp2, start_rcpuls_h
 
-	; save impuls length
+; save impuls length
 		sts	new_rcpuls_l, i_temp1
 		sts	new_rcpuls_h, i_temp2
 		cpi	i_temp1, low (MAX_RC_PULS)
@@ -468,10 +459,7 @@ falling_edge:	sbic	PIND, rcp_in		; test level of rc impuls
 		breq	extint1_exit
 		inc	rcpuls_timeout
 
-; enable int1 again -  also entry for spike detect
-extint1_exit:	ldi	i_temp2, EXT0_EN
-		out	GIMSK, i_temp2
-		out	SREG, i_sreg
+extint1_exit:	out	SREG, i_sreg
 		reti
 
 ;-----bko-----------------------------------------------------------------
