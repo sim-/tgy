@@ -656,25 +656,24 @@ evaluate_rc_puls:
 		tst	ZH
 		brne	eval_rc_p00
 	; Previously zero throttle, so check the start hysteresis.
-		cpi	temp2, high (START_HYST)
-		brlo	eval_rc_stop
-		brne	eval_rc_p00
 		cpi	temp1, low  (START_HYST)
+		ldi	temp3, high (START_HYST)
+		cpc	temp2, temp3
 		brsh	eval_rc_p00
 eval_rc_stop:
 		clr	ZH
 		rjmp	set_new_duty
+eval_rc_full:	ldi	ZH, MAX_POWER
+		rjmp	set_new_duty
 eval_rc_p00:
 	; Limit the maximum PPM here since it will wrap
 	; when scaled to POWER_RANGE below
-		cpi	temp2, high  (816)	; Should be 800
-		brlo	eval_rc_p05
-		brne	eval_rc_p09
-		cpi	temp1, low   (816)	; but see below
-		brsh	eval_rc_p09
-eval_rc_full:
-		
-eval_rc_p05:
+
+		cpi	temp1, low  (816)	; Should be 800
+		ldi	temp3, high (816)	; but see below
+		cpc	temp2, temp3
+		brsh	eval_rc_full
+
 ;	; This used to shift 0-800 -> 0-200,
 ;	; but instead we now *8/25, which gives us 0-256.
 ;	; divide stolen from gcc.
@@ -731,8 +730,6 @@ eval_rc_p05:
 		ror	temp1
 
 		mov	ZH, temp1
-		rjmp	set_new_duty
-eval_rc_p09:	ldi	ZH, MAX_POWER
 		rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
 ;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
