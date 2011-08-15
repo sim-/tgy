@@ -108,6 +108,7 @@
 
 ;**** **** **** **** ****
 ; Register Definitions
+.def	zero		 = r0	; stays at 0
 .def	i_sreg		 = r1	; status register save in interrupts
 .def	tcnt0_power_on	 = r2	; timer0 counts nFETs are switched on
 ;.def	tcnt0_change_tot = r3	; when zero, tcnt0_power_on is changed by one (inc or dec)
@@ -417,10 +418,8 @@ ext_int0:	in	i_sreg, SREG
 		sbr	flags2, (1<<RC_INTERVAL_OK) ; set to rc impuls value is ok !
 		rjmp	extint1_exit
 
-extint1_fail:	tst	rcpuls_timeout
-		breq	extint1_exit
+extint1_fail:	cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
-		rjmp	extint1_exit
 
 ; rc impuls is at low state
 falling_edge:
@@ -472,16 +471,11 @@ t1oca_int:	in	i_sreg, SREG
 ; overflow timer1 / happens all 65536µs
 t1ovfl_int:	in	i_sreg, SREG
 		sbr	flags0, (1<<T1OVFL_FLAG)
-
-		tst	t1_timeout
-		breq	t1ovfl_10
+		cpse	t1_timeout, zero
 		dec	t1_timeout
-t1ovfl_10:
-		tst	rcpuls_timeout
-		breq	t1ovfl_99
+		cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
-
-t1ovfl_99:	out	SREG, i_sreg
+		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
 ; timer0 overflow interrupt
