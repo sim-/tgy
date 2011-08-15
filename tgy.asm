@@ -120,7 +120,7 @@
 ;.def		 	 = r9
 ;.def			 = r10
 .def	rcpuls_timeout	 = r11
-.equ	RCP_TOT		 = 32	; Also affects time spent trying to start -Simon
+.equ	RCP_TOT		 = 32	; Number of timer1 overflows before considering rc pulse lost
 
 .def	sys_control	 = r13
 .def	t1_timeout	 = r14
@@ -927,6 +927,8 @@ set_tot2:
 
 		rcall	sync_with_poweron	; wait at least 100+ microseconds
 		rcall	sync_with_poweron	; for demagnetisation - one sync may be added
+		rcall	evaluate_rc_puls
+;		rcall	evaluate_uart
 
 		ret
 ;-----bko-----------------------------------------------------------------
@@ -1088,8 +1090,6 @@ start1_1:	rcall	sync_with_poweron
 		rcall	com2com3
 		rcall	com3com4
 
-		rcall	evaluate_rc_puls
-;		rcall	evaluate_uart
 		rcall	start_timeout
 		rjmp	start4
 
@@ -1130,9 +1130,6 @@ start2_3:	rcall	sync_with_poweron
 
 start2_9:
 		rcall	com2com3
-		rcall	evaluate_rc_puls
-		sbrc	flags1, POWER_OFF
-		rjmp	init_startup
 		rcall	start_timeout
 
 ; state 3 = A(p-on) + B(n-choppered) - comparator C evaluated
@@ -1160,7 +1157,6 @@ start3_3:	rcall	sync_with_poweron
 
 start3_9:
 		rcall	com3com4
-;		rcall	evaluate_uart
 		rcall	start_timeout
 
 ; state 4 = C(p-on) + B(n-choppered) - comparator A evaluated
@@ -1189,7 +1185,6 @@ start4_3:	rcall	sync_with_poweron
 start4_9:
 		rcall	com4com5
 		rcall	start_timeout
-
 
 ; state 5 = C(p-on) + A(n-choppered) - comparator B evaluated
 ; out_cB changes from low to high
@@ -1247,9 +1242,10 @@ start6_3:	rcall	sync_with_poweron
 start6_9:
 		rcall	com6com1
 
-		sbrc	flags1, POWER_OFF	; Check if power turned off
+		tst	tcnt0_pwron_next	; Check if power turned off
+		brne	s6_pwr_ok
 		rjmp	init_startup
-
+s6_pwr_ok:
 		tst	rcpuls_timeout		; Check for RC timeout
 		brne	s6_rcp_ok
 		rjmp	restart_control
