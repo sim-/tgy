@@ -420,6 +420,7 @@ ext_int0:	in	i_sreg, SREG
 
 extint1_fail:	cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
+		rjmp	extint1_exit
 
 ; rc impuls is at low state
 falling_edge:
