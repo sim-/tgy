@@ -611,21 +611,6 @@ beep2_BpCn22:	in	temp1, TCNT2
 		brne	beep2_BpCn20
 		ret
 ;-----bko-----------------------------------------------------------------
-tcnt1_to_temp:	ldi	temp4, EXT0_DIS		; disable ext0int
-		out	GIMSK, temp4
-		ldi	temp4, T1STOP		; stop timer1
-		out	TCCR1B, temp4
-		ldi	temp4, T1CK8		; preload temp with restart timer1
-		in	temp1, TCNT1L		;  - the preload cycle is needed to complete stop operation
-		in	temp2, TCNT1H
-		out	TCCR1B, temp4
-		ret				; !!! ext0int stays disabled - must be enabled again by caller
-	; there seems to be only one TEMP register in the AVR
-	; that is used for atomic 16-bit read/write timer operations
-	; if the ext0int interrupt falls between readad LOW value while HIGH value is captured in TEMP and
-	; read HIGH value, TEMP register is changed in ext_int0 routine,
-	; so it must be disabled here (cli is also fine)
-;-----bko-----------------------------------------------------------------
 evaluate_rc_puls:
 		sbrs	flags1, RC_PULS_UPDATED
 		ret
@@ -738,20 +723,19 @@ set_timing_v:	ldi	ZL, 0x01
 
 		ret
 ;-----bko-----------------------------------------------------------------
-update_timing:	rcall	tcnt1_to_temp
+update_timing:	cli
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		sei
 		sts	tcnt1_sav_l, temp1
 		sts	tcnt1_sav_h, temp2
 		add	temp1, YL
 		adc	temp2, YH
-		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
-		out	TIMSK, temp4
+		cli
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
+		sei
 		sbr	flags0, (1<<OCT1_PENDING)
-		ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2) ; enable interrupt again
-		out	TIMSK, temp4
-		ldi	temp4, EXT0_EN		; ext0int enable
-		out	GIMSK, temp4		; enable ext0int
 
 	; calculate next waiting times - timing(-l-h-x) holds the time of 4 commutations
 		lds	temp1, timing_l
@@ -852,36 +836,34 @@ wait_OCT1_tot:	sbrc	flags0, OCT1_PENDING
 set_OCT1_tot:
 		lds	YH, zero_wt_h
 		lds	YL, zero_wt_l
-		rcall	tcnt1_to_temp
+		cli
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		sei
 		add	temp1, YL
 		adc	temp2, YH
-		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
-		out	TIMSK, temp4
+		cli
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
+		sei
 		sbr	flags0, (1<<OCT1_PENDING)
-		ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIMSK, temp4
-		ldi	temp4, EXT0_EN		; ext0int enable
-		out	GIMSK, temp4		; enable ext0int
 
 		ret
 ;-----bko-----------------------------------------------------------------
 wait_OCT1_before_switch:
-		rcall	tcnt1_to_temp
+		cli
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		sei
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
 		add	temp1, YL
 		adc	temp2, YH
-		ldi	temp3, (1<<TOIE1)+(1<<TOIE2)
-		out	TIMSK, temp3
+		cli
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
+		sei
 		sbr	flags0, (1<<OCT1_PENDING)
-		ldi	temp3, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIMSK, temp3
-		ldi	temp4, EXT0_EN		; ext0int enable
-		out	GIMSK, temp4		; enable ext0int
 
 	; don't waste time while waiting - do some controls, if indicated
 
