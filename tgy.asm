@@ -410,11 +410,11 @@ ext_int0:	in	i_sreg, SREG
 		cpi	i_temp1, low (25000)
 		ldi	i_temp3, high(25000)	; test range high
 		cpc	i_temp2, i_temp3
-		brsh	extint1_fail		; through away
+		brsh	extint1_exit		; could just first pulse
 		cpi	i_temp1, low (5)	; 200 ok for 417Hz, 5 for 495Hz
 		ldi	i_temp3, high(5)	; test range low
 		cpc	i_temp2, i_temp3
-		brlo	extint1_fail		; through away
+		brlo	extint1_fail		; throw away
 		sbr	flags2, (1<<RC_INTERVAL_OK) ; set to rc impuls value is ok !
 		rjmp	extint1_exit
 
@@ -448,11 +448,11 @@ falling_edge:
 		cpi	i_temp1, low (MAX_RC_PULS)
 		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
 		cpc	i_temp2, i_temp3
-		brsh	extint1_fail		; through away
+		brsh	extint1_fail		; throw away
 		cpi	i_temp1, low (MIN_RC_PULS)
 		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
 		cpc	i_temp2, i_temp3
-		brlo	extint1_fail		; through away
+		brlo	extint1_fail		; throw away
 		sbr	flags1, (1<<RC_PULS_UPDATED) ; set to rc impuls value is ok !
 		mov	i_temp1, rcpuls_timeout
 		cpi	i_temp1, RCP_TOT
