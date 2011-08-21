@@ -166,7 +166,7 @@
 	.equ	COMP_SAVE	= 4	; if set ACO was high
 	.equ	STARTUP		= 5	; if set startup-phase is active
 	.equ	RC_INTERVAL_OK	= 6	;
-	.equ	GP_FLAG		= 7	;
+;	.equ	GP_FLAG		= 7	;
 
 ; here the XYZ registers are placed ( r26-r31)
 
@@ -1218,7 +1218,6 @@ s6_run1:	rcall	calc_next_timing
 		ldi	temp1, MAX_POWER
 		mov	sys_control, temp1
 		cbr	flags2, (1<<STARTUP)
-		cbr	flags2, (1<<GP_FLAG)	; OCT1-timeout
 		rjmp	run1			; running state begins
 
 s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
@@ -1328,7 +1327,6 @@ run6:		rcall	wait_for_high
 		lds	temp1, timing_x
 		tst	temp1
 		breq	run6_2			; higher than 610 RPM if zero
-		sbr	flags2, (1<<GP_FLAG)	; mark low RPM
 run_to_start:	sbr	flags2, (1<<STARTUP)
 		rjmp	init_startup
 
