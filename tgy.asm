@@ -1235,9 +1235,7 @@ s6_start2:
 ; run 1 = B(p-on) + C(n-choppered) - comparator A evaluated
 ; out_cA changes from low to high
 
-run1:		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run1:
 		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1250,9 +1248,7 @@ run1:		rcall	wait_for_low
 ; run 2 = A(p-on) + C(n-choppered) - comparator B evaluated
 ; out_cB changes from high to low
 
-run2:		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run2:
 		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1265,9 +1261,7 @@ run2:		rcall	wait_for_high
 ; run 3 = A(p-on) + B(n-choppered) - comparator C evaluated
 ; out_cC changes from low to high
 
-run3:		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run3:
 		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1279,9 +1273,7 @@ run3:		rcall	wait_for_low
 
 ; run 4 = C(p-on) + B(n-choppered) - comparator A evaluated
 ; out_cA changes from high to low
-run4:		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run4:
 		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1294,9 +1286,7 @@ run4:		rcall	wait_for_high
 ; run 5 = C(p-on) + A(n-choppered) - comparator B evaluated
 ; out_cB changes from low to high
 
-run5:		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run5:
 		rcall	wait_for_high
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
@@ -1309,9 +1299,7 @@ run5:		rcall	wait_for_low
 ; run 6 = B(p-on) + A(n-choppered) - comparator C evaluated
 ; out_cC changes from high to low
 
-run6:		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
+run6:
 		rcall	wait_for_low
 		sbrs	flags0, OCT1_PENDING
 		rjmp	run_to_start
