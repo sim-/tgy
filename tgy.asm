@@ -22,28 +22,30 @@
 ; October 2004
 ; autor: Bernhard Konze
 ; email: bernhard.konze@versanet.de
+;--
+; Forked from "TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal" which removed
+; OSCCAL setting from EEPROM and tweaked some startup parameters, all which
+; have since been replaced.
 ;
-; TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal
-; For Turnigy Plush 30A or similar ESCs.
-; Applying various small code changes documented in the RC Groups thread on
-; converting TowerPro 25A ESCs. PPM - mod only - no code for TWI/I2C based implementation
-; Corrected the minimum PPM pulse to 1040usec and decreased the min throttle value
-; to 2 for larger range. Decreased RC Pulse Interval from ~58Hz to ~416Hz. No calibration
-; code as didn't work
+; NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK. Always test
+; without propellers! Please respect Bernhard Konze's license above.
+;--
+; WARNING: I have blown FETs on Turnigy Plush 18A ESCs in previous versions
+; of this code with my modifications. Some bugs have since been fixed, such
+; as leaving PWM enabled while busy-looping forever outside of ISR code.
+; However, this does run with higher PWM frequency than most original code,
+; so higher FET temperatures may occur! USE AT YOUR OWN RISK, and maybe see
+; how it compares and let me know!
 ;
-; Modified to not reboot if motor does not start, for full 8-bit PWM, and
-; for better but not perfect starting with 2213N motors.
-; -Simon, 2011-04-17
+; WARNING: This does not yet check temperature or voltage ADC inputs!
 ;
-; WARNING: I have blown a FET on two Turnigy Plush 18A ESCs in
-; upside-down crashes with this code. This didn't seem to happen with
-; the original Plush code, but if I try to reproduce it, this code
-; usually seems to behave better than the Plush code which seems to
-; scream instead of stop in such cases. I'm not sure what the issue is.
-; -Simon, 2011-07-04
+; NOTE: PWM values are not stored inverted anymore; 0 is off, higher is on.
 ;
-; WARNING: Unlike the original Turnigy Plush code, this does not check
-; the AVR temperature ADC or the battery voltage!
+; NOTE: This version is using hardware 8-bit phase-correct PWM mode on timer2,
+; which operates at clk/(512-2) == 8MHz/510 == 15.686kHz, which is mostly
+; just out of audible range.
+;
+; Simon Kirby <sim@simulated.ca>
 ;
 ;**** **** **** **** ****
 ; Device
