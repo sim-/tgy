@@ -163,12 +163,12 @@
 .def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
-	.equ	SCAN_TIMEOUT	= 2	; if set a startup timeout occurred
+	.equ	RC_INTERVAL_OK	= 2
 ;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
 	.equ	COMP_SAVE	= 4	; if set ACO was high
-	.equ	STARTUP		= 5	; if set startup-phase is active
-	.equ	RC_INTERVAL_OK	= 6	;
-;	.equ	GP_FLAG		= 7	;
+	.equ	COMP_SAVE_READY	= 5	; COMP_SAVE is ready
+	.equ	STARTUP		= 6	; if set startup-phase is active
+	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
 
 ; here the XYZ registers are placed ( r26-r31)
 
@@ -177,7 +177,7 @@
 
 ;**** **** **** **** ****
 ; RAM Definitions
-.dseg					;EEPROM segment
+.dseg				; DATA segment
 .org SRAM_START
 
 tcnt1_sav_l:	.byte	1	; actual timer1 value
@@ -215,7 +215,7 @@ goodies:	.byte	1
 comp_state:	.byte	1
 gp_cnt:		.byte	1
 
-uart_data:	.byte	100		; only for debug requirements
+uart_data:	.byte	100	; only for debug requirements
 
 
 ;**** **** **** **** ****
@@ -249,26 +249,26 @@ uart_data:	.byte	100		; only for debug requirements
 
 ;-----bko-----------------------------------------------------------------
 ; reset and interrupt jump table
-		rjmp	reset
-		rjmp	ext_int0
-		nop	; ext_int1
-		rjmp	t2oc_int
-		nop	; t2ovfl_int
-		nop	; icp1
-		rjmp	t1oca_int
-		nop	; t1ocb_int
-		rjmp	t1ovfl_int
-		nop	; t0ovfl_int
-		nop	; spi_int
-		nop	; urxc
-		nop	; udre
-		nop	; utxc
+		rjmp reset
+		rjmp_ext_int0	; ext_int0
+		nop		; ext_int1
+		rjmp t2oc_int	; t2oc_int
+		nop		; t2ovfl_int
+		rjmp_icp1_int	; icp1_int
+		rjmp t1oca_int
+		nop		; t1ocb_int
+		rjmp t1ovfl_int
+		nop		; t0ovfl_int
+		nop		; spi_int
+		nop		; urxc
+		nop		; udre
+		nop		; utxc
 
-; not used	nop	; adc_int
-; not used	nop	; eep_int
-; not used	nop	; aci_int
-; not used	nop	; wire2_int
-; not used	nop	; spmc_int
+; not used	nop		; adc_int
+; not used	nop		; eep_int
+; not used	nop		; aci_int
+; not used	nop		; wire2_int
+; not used	nop		; spmc_int
 
 ;-----bko-----------------------------------------------------------------
 ; init after reset
@@ -357,10 +357,8 @@ control_start:	; init variables
 		sei				; enable all interrupts
 
 ; init rc-puls
-		ldi	temp1, (1<<ISC01)+(1<<ISC00)
-		out	MCUCR, temp1		; set next int0 to rising edge
-		ldi	temp1, EXT0_EN		; enable ext0int
-		out	GIMSK, temp1
+		rcp_int_rising_edge temp1
+		rcp_int_enable temp1
 i_rc_puls1:	ldi	temp3, 10		; wait for this count of receiving power off
 i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 		rjmp	i_rc_puls2
@@ -384,24 +382,40 @@ i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
 		rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
-; external interrupt0 = rc pulse input
 ; NOTE: This interrupt uses the 16-bit atomic timer read/write register
 ; by reading TCNT1L and TCNT1H, so this interrupt must be disabled before
 ; any other 16-bit timer options happen that might use the same register
 ; (see "Accessing 16-bit registers" in the Atmel documentation)
-ext_int0:	in	i_sreg, SREG
+.if USE_ICP
+; icp1 = rc pulse input, if enabled
+icp1_int:	in	i_temp3, TCCR1B
+		in	i_sreg, SREG
+
+; get captured timer values
+		in	i_temp1, ICR1L
+		in	i_temp2, ICR1H
 
 ; evaluate edge of this interrupt
-		sbis	PIND, rcp_in
-		rjmp	falling_edge		; bit is clear = falling edge
+		sbrs	i_temp3, ICES1
 
-; rc impuls is at high state
-		ldi	i_temp1, (1<<ISC01)
-		out	MCUCR, i_temp1		; set next int0 to falling edge
+.else
+;-----bko-----------------------------------------------------------------
+ext_int0:
+		in	i_temp3, PIND
+		in	i_sreg, SREG
 
 ; get timer1 values
 		in	i_temp1, TCNT1L
 		in	i_temp2, TCNT1H
+
+; evaluate edge of this interrupt
+		sbrs	i_temp3, rcp_in
+.endif
+
+		rjmp	falling_edge		; bit is clear = falling edge
+; rc impuls is at high state
+		rcp_int_falling_edge i_temp3	; set next int to falling edge
+
 		mov	start_rcpuls_l, i_temp1
 		mov	start_rcpuls_h, i_temp2
 ; test rcpulse low interval
@@ -413,33 +427,30 @@ ext_int0:	in	i_sreg, SREG
 		cpi	i_temp1, low (25000)
 		ldi	i_temp3, high(25000)	; test range high
 		cpc	i_temp2, i_temp3
-		brsh	extint1_exit		; could just first pulse
+		brsh    rcpint_exit		; could just first pulse
 		cpi	i_temp1, low (5)	; 200 ok for 417Hz, 5 for 495Hz
 		ldi	i_temp3, high(5)	; test range low
 		cpc	i_temp2, i_temp3
-		brlo	extint1_fail		; throw away
+		brlo	rcpint_fail		; throw away
 		sbr	flags2, (1<<RC_INTERVAL_OK) ; set to rc impuls value is ok !
-		rjmp	extint1_exit
+		rjmp	rcpint_exit
 
-extint1_fail:	cpse	rcpuls_timeout, zero
+rcpint_fail:	cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
-		rjmp	extint1_exit
+		rjmp	rcpint_exit
 
 ; rc impuls is at low state
 falling_edge:
-		ldi	i_temp1, (1<<ISC01)+(1<<ISC00)
-		out	MCUCR, i_temp1		; set next int0 to rising edge
+		rcp_int_rising_edge i_temp3	; set next int to rising edge
 		sbrc	flags1, RC_PULS_UPDATED
-		rjmp	extint1_exit
+		rjmp	rcpint_exit
 
 ; get timer1 values
-		in	i_temp1, TCNT1L
-		in	i_temp2, TCNT1H
 		sts	stop_rcpuls_l, i_temp1	; prepare next interval evaluation
 		sts	stop_rcpuls_h, i_temp2
 
 		sbrs	flags2, RC_INTERVAL_OK
-		rjmp	extint1_exit
+		rjmp	rcpint_exit
 		cbr	flags2, (1<<RC_INTERVAL_OK) ; flag is evaluated
 
 		sub	i_temp1, start_rcpuls_l
@@ -451,18 +462,18 @@ falling_edge:
 		cpi	i_temp1, low (MAX_RC_PULS)
 		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
 		cpc	i_temp2, i_temp3
-		brsh	extint1_fail		; throw away
+		brsh	rcpint_fail			; throw away
 		cpi	i_temp1, low (MIN_RC_PULS)
 		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
 		cpc	i_temp2, i_temp3
-		brlo	extint1_fail		; throw away
+		brlo	rcpint_fail			; throw away
 		sbr	flags1, (1<<RC_PULS_UPDATED) ; set to rc impuls value is ok !
 		mov	i_temp1, rcpuls_timeout
 		cpi	i_temp1, RCP_TOT
-		breq	extint1_exit
+		breq	rcpint_exit
 		inc	rcpuls_timeout
 
-extint1_exit:	out	SREG, i_sreg
+rcpint_exit:	out	SREG, i_sreg
 		reti
 
 ;-----bko-----------------------------------------------------------------
@@ -484,55 +495,58 @@ t1ovfl_int:	in	i_sreg, SREG
 ; timer2 output compare interrupt (output PWM)
 t2oc_int:
 ; Test immediately if we are upcounting or downcounting without touching flags
-		in	i_temp1, TCNT2
+		in	i_temp3, TCNT2
 		in	i_temp2, TCNT2
 		in	i_sreg, SREG
-		cp	i_temp2, i_temp1
+		cp	i_temp2, i_temp3
 		brcc	pwm_off_cycle
 
 ; ON cycle: switch appropriate nFET on as soon as possible
-
+pwm_on:
 		cpse	current_duty, zero
 		ijmp	; Z should be set to one of the below labels
 pwm_off:
-		sbr	flags0, (1<<I_ON_CYCLE) ; PWM state = on cycle
 		out	SREG, i_sreg
 		reti
 pwm_afet_on:
 		BnFET_off
 		AnFET_on
-		sbr	flags0, (1<<I_ON_CYCLE)+(1<<I_FET_ON)
+		sbr	flags0, (1<<I_FET_ON)
 		out	SREG, i_sreg
 		reti
 pwm_bfet_on:
 		CnFET_off
 		BnFET_on
-		sbr	flags0, (1<<I_ON_CYCLE)+(1<<I_FET_ON)
+		sbr	flags0, (1<<I_FET_ON)
 		out	SREG, i_sreg
 		reti
 pwm_cfet_on:
 		AnFET_off
 		CnFET_on
-		sbr	flags0, (1<<I_ON_CYCLE)+(1<<I_FET_ON)
+		sbr	flags0, (1<<I_FET_ON)
 		out	SREG, i_sreg
 		reti
+pwm_on_exit:
 
 pwm_off_cycle:
-		sbr	flags2, (1<<COMP_SAVE)
+		sbr	flags2, (1<<COMP_SAVE)+(1<<COMP_SAVE_READY)
 		sbic	ACSR, ACO		; mirror inverted ACO to bit-var
 		cbr	flags2, (1<<COMP_SAVE)
-		ldi	i_temp1, (1<<I_ON_CYCLE)
-		eor	flags0, i_temp1		; Off cycle, or we missed the on state (so just pretend)
-		mov	i_temp1, current_duty
-		cpi	i_temp1, MAX_POWER
-		breq	pwm_ret
+		cp	current_duty, max_pwr
+		breq	pwm_exit
 		cbr	flags0, (1<<I_FET_ON)
-	; We can just turn them all off as we only have one nFET on at a
-	; time, and interrupts are disabled during beeps.
-		CnFET_off
-		AnFET_off
-		BnFET_off
-pwm_ret:
+	; We can just turn all nFETs off as we only have one nFET on at a
+	; time, and interrupts are disabled during beeps. Doing this with
+	; three cbi instructions is 6 cycles, while in/cbr/out is 3 cycles.
+		all_nFETs_off	i_temp1
+	; If we were called right before TCNT2 reached 0xff, the interrupt
+	; servicing delay may mean we're already into the ON cycle again.
+	; Check to see if the timer is going back down again already.
+;		in	i_temp3, TCNT2
+;		in	i_temp2, TCNT2
+;		cp	i_temp2, i_temp3
+;		brcs	pwm_on
+pwm_exit:
 		out	SREG, i_sreg
 		reti
 
@@ -895,21 +909,16 @@ set_new_duty10:	lds	temp2, timing_x
 		lds	temp2, timing_h		; get actual RPM reference high
 		cpi	temp2, PWR_RANGE1	; lower range1 ?
 		brcs	set_new_duty25		; on carry - test next range
-set_new_duty12:	;sbr	flags2, (1<<RPM_RANGE1)
-		;sbr	flags2, (1<<RPM_RANGE2)
-		cpi	temp1, PWR_MAX_RPM1	; higher than range1 power max ?
+set_new_duty12:	cpi	temp1, PWR_MAX_RPM1	; higher than range1 power max ?
 		brcs	set_new_duty31		; on carry - not higher, no restriction
 		ldi	temp1, PWR_MAX_RPM1	; low (range1) RPM - set PWR_MAX_RPM1
 		rjmp	set_new_duty31
 set_new_duty25:	cpi	temp2, PWR_RANGE2	; lower range2 ?
-		brcs	set_new_duty30		; on carry - not lower, no restriction
-		;cbr	flags2, (1<<RPM_RANGE1)
-		;sbr	flags2, (1<<RPM_RANGE2)
+		brcs	set_new_duty31		; on carry - not lower, no restriction
 		cpi	temp1, PWR_MAX_RPM2	; higher than range2 power max ?
 		brcs	set_new_duty31		; on carry - not higher, no restriction
 		ldi	temp1, PWR_MAX_RPM2	; low (range2) RPM - set PWR_MAX_RPM2
 		rjmp	set_new_duty31
-set_new_duty30:	;cbr	flags2, (1<<RPM_RANGE1)+(1<<RPM_RANGE2)
 set_new_duty31: sbrs	flags2, STARTUP		; Check for STARTUP phase
 		rjmp	set_new_duty32
 		cpi	temp1, PWR_MAX_STARTUP	; limit power in startup phase
@@ -923,14 +932,12 @@ switch_power_off:
 		ldi	temp1, NO_POWER
 		mov	rc_duty, temp1
 		mov	current_duty, temp1
-		mov	sys_control, zero
+		clr	sys_control
 		ldi	XL, low  (pwm_off)
 		ldi	XH, high (pwm_off)
 		movw	ZL, XL			; Atomic set (read by ISR)
-		ldi	temp1, INIT_PB		; all off
-		out	PORTB, temp1
-		ldi	temp1, INIT_PD		; all off
-		out	PORTD, temp1
+		all_nFETs_off temp1
+		all_pFETs_off temp1
 		sbr	flags2, (1<<STARTUP)
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
@@ -940,29 +947,26 @@ wait_if_spike2:	dec	temp1
 		ret
 ;-----bko-----------------------------------------------------------------
 sync_with_poweron:
-		sbrs	flags0, I_ON_CYCLE	; first wait for power on
-		rjmp	sync_with_poweron
+		cbr	flags2, (1<<COMP_SAVE_READY)
 wait_for_poweroff:
-		sbrc	flags0, I_ON_CYCLE	; now wait for power off
+		sbrs	flags2, COMP_SAVE_READY
 		rjmp	wait_for_poweroff
-
 		ret
 ;-----bko-----------------------------------------------------------------
+; sys_control must be cleared (by switch_power_off) before calling
 motor_brake:
 .if MOT_BRAKE == 1
-mot_brk10:
-		ldi	temp1, INIT_PB		; all off
-		in	temp1, tcnt1l
-		sbrs	temp1, 6
-		ldi	temp1, BRAKE_PB		; all N-FETs on
-		out	PORTB, temp1
+		all_nFETs_off temp1
+		all_pFETs_off temp1
+		in	temp2, TCNT1L
+		sbrc	temp2, 6
+		rjmp	brake_off_cycle
+		nFET_brake temp1
+brake_off_cycle:
 		rcall	evaluate_rc_puls
-		cpi	rc_duty, MIN_DUTY+3		; avoid jitter detect
-		brcs	mot_brk10
-		ldi	temp1, INIT_PB		; all off
-		out	PORTB, temp1
-		ldi	temp1, INIT_PD		; all off
-		out	PORTD, temp1
+		cpi	rc_duty, MIN_DUTY
+		brcs	motor_brake
+		all_nFETs_off temp1
 .endif	; MOT_BRAKE == 1
 		ret
 
@@ -982,15 +986,8 @@ wait_for_power_on:
 		cpse	rcpuls_timeout, temp1
 		rjmp	wait_for_power_on
 
-		cbi	ADCSRA, ADEN		; switch to comparator multiplexed
-		in	temp1, SFIOR
-		sbr	temp1, (1<<ACME)
-		out	SFIOR, temp1
+		set_comp_phase_a temp1
 
-		ldi	temp1, INIT_PB		; all off
-		out	PORTB, temp1
-		ldi	temp1, INIT_PD		; all off
-		out	PORTD, temp1
 		ldi	temp1, 27		; wait about 5mikosec
 FETs_off_wt:	dec	temp1
 		brne	FETs_off_wt
@@ -1185,7 +1182,7 @@ start6_3:	rcall	sync_with_poweron
 start6_9:
 		rcall	com6com1
 
-		tst	current_duty	; Check if power turned off
+		tst	current_duty		; Check if power turned off
 		brne	s6_pwr_ok
 		rjmp	init_startup
 s6_pwr_ok:
@@ -1354,78 +1351,52 @@ wait_for_high:	sbrs	flags0, OCT1_PENDING
 		ret
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
-com1com2:	BpFET_off		; Bp off
+com1com2:	BpFET_off			; bP off
 		cpse	current_duty, zero
-		ApFET_on		; Ap on
-		ldi	temp1, mux_b		; set comparator multiplexer to phase B
-		out	ADMUX, temp1
-		cbi	ADCSRA, ADEN		; disable ADC
-		in	temp1, SFIOR
-		sbr	temp1, (1<<ACME)	; switch to comparator multiplexed
-		out	SFIOR, temp1
+		ApFET_on			; aP on
+		set_comp_phase_b temp1		; Set comparator to phase B
 		ret
 
 com2com3:	ldi	XL, low  (pwm_bfet_on)
 		ldi	XH, high (pwm_bfet_on)
-		movw	ZL, XL
+		movw	ZL, XL			; Atomic set (read by ISR)
 		cli
 		sbrc	flags0, I_FET_ON
-		icall
+		icall				; bN on
 		sei
-		in	temp1, SFIOR
-		cbr	temp1, (1<<ACME)	; set to AN1
-		out	SFIOR, temp1
-		sbi	ADCSRA, ADEN		; enable ADC
+		set_comp_phase_c temp1		; Set comparator to phase C
 		ret
 
-com3com4:	ApFET_off		; Ap off
+com3com4:	ApFET_off			; aP off
 		cpse	current_duty, zero
-		CpFET_on		; Cp on
-		ldi	temp1, mux_a		; set comparator multiplexer to phase A
-		out	ADMUX, temp1
-		cbi	ADCSRA, ADEN		; disable ADC
-		in	temp1, SFIOR
-		sbr	temp1, (1<<ACME)	; switch to comparator multiplexed
-		out	SFIOR, temp1
+		CpFET_on			; cP on
+		set_comp_phase_a temp1		; Set comparator to phase A
 		ret
 
 com4com5:	ldi	XL, low  (pwm_afet_on)
 		ldi	XH, high (pwm_afet_on)
-		movw	ZL, XL
+		movw	ZL, XL			; Atomic set (read by ISR)
 		cli
 		sbrc	flags0, I_FET_ON
-		icall
+		icall				; aN on
 		sei
-		ldi	temp1, mux_b		; set comparator multiplexer to phase B
-		out	ADMUX, temp1
-		cbi	ADCSRA, ADEN		; disable ADC
-		in	temp1, SFIOR
-		sbr	temp1, (1<<ACME)	; switch to comparator multiplexed
-		out	SFIOR, temp1
+		set_comp_phase_b temp1		; Set comparator to phase B
 		ret
 
-com5com6:	CpFET_off		; Cp off
+com5com6:	CpFET_off			; Cp off
 		cpse	current_duty, zero
-		BpFET_on		; Bp on
-		in	temp1, SFIOR
-		cbr	temp1, (1<<ACME)	; set to AN1
-		out	SFIOR, temp1
-		sbi	ADCSRA, ADEN		; enable ADC
+		BpFET_on			; Bp on
+		set_comp_phase_c temp1		; Set comparator to phase C
 		ret
 
 com6com1:	ldi	XL, low  (pwm_cfet_on)
 		ldi	XH, high (pwm_cfet_on)
-		movw	ZL, XL
+		movw	ZL, XL			; Atomic set (read by ISR)
 		cli
 		sbrc	flags0, I_FET_ON
-		icall
+		icall				; cN on
 		sei
-		ldi	temp1, mux_a		; set comparator multiplexer to phase A
-		out	ADMUX, temp1
-		cbi	ADCSRA, ADEN		; disable ADC
-		in	temp1, SFIOR
-		sbr	temp1, (1<<ACME)	; switch to comparator multiplexed
-		out	SFIOR, temp1
+		set_comp_phase_a temp1		; Set comparator to phase A
 		ret
 
 .exit
