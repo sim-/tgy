@@ -982,9 +982,9 @@ wait_for_power_on:
 		ldi	temp1, MIN_DUTY
 		cp	rc_duty, temp1
 		brcs	wait_for_power_on
-		ldi	temp1, RCP_TOT
-		cpse	rcpuls_timeout, temp1
-		rjmp	wait_for_power_on
+		ldi	temp1, RCP_TOT - 1	; allow some racing with t1ovfl_int
+		cp	rcpuls_timeout, temp1
+		brcs	wait_for_power_on
 
 		set_comp_phase_a temp1
 
