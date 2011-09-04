@@ -595,7 +595,7 @@ beep_BpCn21:	clr	temp1
 		out	TCNT0, temp1
 		out	TIFR, temp1
 beep_BpCn22:	in	temp1, TIFR
-		sbrs	temp1, TOV2
+		sbrs	temp1, TOV0
 		rjmp	beep_BpCn22
 		dec	temp3
 		brne	beep_BpCn21
