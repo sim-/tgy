@@ -1012,18 +1012,8 @@ FETs_off_wt:	dec	temp1
 
 ; state 1 = B(p-on) + C(n-choppered) - comparator A evaluated
 ; out_cA changes from low to high
-start1:		sbrs	flags2, COMP_SAVE	; high ?
-		rjmp	start1_2		; .. no - loop, while high
-
-start1_0:	sbrc	flags0, OCT1_PENDING
-		rjmp	start1_1
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start1_9
-start1_1:	rcall	sync_with_poweron
-
-		sbrc	flags2, COMP_SAVE	; high ?
-		rjmp	start1_0		; .. no - loop, while high
-
+start1:		rcall	start_step
+		brcs	start1_9
 ; do the special 120° switch
 		sts	goodies, zero
 		rcall	com1com2
@@ -1032,15 +1022,6 @@ start1_1:	rcall	sync_with_poweron
 
 		rcall	start_timeout
 		rjmp	start4
-
-start1_2:	sbrc	flags0, OCT1_PENDING
-		rjmp	start1_3
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start1_9
-start1_3:	rcall	sync_with_poweron
-		sbrs	flags2, COMP_SAVE	; high ?
-		rjmp	start1_2		; .. no - loop, while low
-
 start1_9:
 		rcall	com1com2
 		rcall	start_timeout
@@ -1048,109 +1029,28 @@ start1_9:
 ; state 2 = A(p-on) + C(n-choppered) - comparator B evaluated
 ; out_cB changes from high to low
 
-start2:		sbrc	flags2, COMP_SAVE
-		rjmp	start2_2
-
-start2_0:	sbrc	flags0, OCT1_PENDING
-		rjmp	start2_1
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start2_9
-start2_1:	rcall	sync_with_poweron
-		sbrs	flags2, COMP_SAVE
-		rjmp	start2_0
-		rjmp	start2_9
-
-start2_2:	sbrc	flags0, OCT1_PENDING
-		rjmp	start2_3
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start2_9
-start2_3:	rcall	sync_with_poweron
-		sbrc	flags2, COMP_SAVE
-		rjmp	start2_2
-
-start2_9:
+start2:		rcall	start_step
 		rcall	com2com3
 		rcall	start_timeout
 
 ; state 3 = A(p-on) + B(n-choppered) - comparator C evaluated
 ; out_cC changes from low to high
 
-start3:		sbrs	flags2, COMP_SAVE
-		rjmp	start3_2
-
-start3_0:	sbrc	flags0, OCT1_PENDING
-		rjmp	start3_1
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start3_9
-start3_1:	rcall	sync_with_poweron
-		sbrc	flags2, COMP_SAVE
-		rjmp	start3_0
-		rjmp	start3_9
-
-start3_2:	sbrc	flags0, OCT1_PENDING
-		rjmp	start3_3
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start3_9
-start3_3:	rcall	sync_with_poweron
-		sbrs	flags2, COMP_SAVE
-		rjmp	start3_2
-
-start3_9:
+start3:		rcall	start_step
 		rcall	com3com4
 		rcall	start_timeout
 
 ; state 4 = C(p-on) + B(n-choppered) - comparator A evaluated
 ; out_cA changes from high to low
 
-start4:		sbrc	flags2, COMP_SAVE
-		rjmp	start4_2
-
-start4_0:	sbrc	flags0, OCT1_PENDING
-		rjmp	start4_1
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start4_9
-start4_1:	rcall	sync_with_poweron
-		sbrs	flags2, COMP_SAVE
-		rjmp	start4_0
-		rjmp	start4_9
-
-start4_2:	sbrc	flags0, OCT1_PENDING
-		rjmp	start4_3
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start4_9
-start4_3:	rcall	sync_with_poweron
-		sbrc	flags2, COMP_SAVE
-		rjmp	start4_2
-
-start4_9:
+start4:		rcall	start_step
 		rcall	com4com5
 		rcall	start_timeout
 
 ; state 5 = C(p-on) + A(n-choppered) - comparator B evaluated
 ; out_cB changes from low to high
 
-
-start5:		sbrs	flags2, COMP_SAVE
-		rjmp	start5_2
-
-start5_0:	sbrc	flags0, OCT1_PENDING
-		rjmp	start5_1
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start5_9
-start5_1:	rcall	sync_with_poweron
-		sbrc	flags2, COMP_SAVE
-		rjmp	start5_0
-		rjmp	start5_9
-
-start5_2:	sbrc	flags0, OCT1_PENDING
-		rjmp	start5_3
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start5_9
-start5_3:	rcall	sync_with_poweron
-		sbrs	flags2, COMP_SAVE
-		rjmp	start5_2
-
-start5_9:
+start5:		rcall	start_step
 		rcall	com5com6
 ;		rcall	evaluate_sys_state
 ;		rcall	set_new_duty
@@ -1159,27 +1059,7 @@ start5_9:
 ; state 6 = B(p-on) + A(n-choppered) - comparator C evaluated
 ; out_cC changes from high to low
 
-start6:		sbrc	flags2, COMP_SAVE
-		rjmp	start6_2
-
-start6_0:	sbrc	flags0, OCT1_PENDING
-		rjmp	start6_1
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start6_9
-start6_1:	rcall	sync_with_poweron
-		sbrs	flags2, COMP_SAVE
-		rjmp	start6_0
-		rjmp	start6_9
-
-start6_2:	sbrc	flags0, OCT1_PENDING
-		rjmp	start6_3
-		sbr	flags2, (1<<SCAN_TIMEOUT)
-		rjmp	start6_9
-start6_3:	rcall	sync_with_poweron
-		sbrc	flags2, COMP_SAVE
-		rjmp	start6_2
-
-start6_9:
+start6:		rcall	start_step
 		rcall	com6com1
 
 		tst	current_duty		; Check if power turned off
@@ -1227,6 +1107,30 @@ s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 		mov	sys_control, temp1
 s6_start2:
 		rjmp	start1			; go back to state 1
+
+start_step:
+		sbrc    flags0, OCT1_PENDING
+		rjmp	start_1
+start_0:
+		sbr	flags2, (1<<SCAN_TIMEOUT)
+		ret
+start_1:	rcall	sync_with_poweron
+		sbrc	flags2, COMP_SAVE
+		rjmp	start_3
+
+start_2:	sbrs	flags0, OCT1_PENDING
+		rjmp	start_0
+		sbrs	flags2, COMP_SAVE
+		rjmp	start_2
+		sec
+		ret
+
+start_3:	sbrs	flags0, OCT1_PENDING
+		rjmp	start_0
+		sbrc	flags2, COMP_SAVE
+		rjmp	start_3
+		clc
+		ret
 
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
