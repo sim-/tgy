@@ -273,7 +273,8 @@ uart_data:	.byte	100	; only for debug requirements
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
-reset:		ldi	temp1, high(RAMEND)	; stack = RAMEND
+reset:
+		ldi	temp1, high(RAMEND)	; stack = RAMEND
 		out	SPH, temp1
 		ldi	temp1, low(RAMEND)
 		out 	SPL, temp1
@@ -304,7 +305,25 @@ reset:		ldi	temp1, high(RAMEND)	; stack = RAMEND
 		ldi	temp1, DIR_PD
 		out	DDRD, temp1
 
-	; timer0: clk/1 for beep control
+	; clear registers r0 through r26
+		ldi	XH, high(0)
+		ldi	XL, low (0)
+clear_regs:	st	X+, XH
+		tst	XL			; XL will be cleared by store
+		brne	clear_regs
+
+	; clear RAM
+		ldi	XH, high(SRAM_START)
+		ldi	XL, low (SRAM_START)
+clear_ram:	st	X+, zero
+		cpi	XL, uart_data+1
+		brlo	clear_ram
+
+	; power off (sys_control is zero)
+		rcall	switch_power_off
+		rcall	set_new_duty
+
+	; timer0: clk/1 for beep control and waiting
 		ldi	temp1, (1<<CS00)
 		out	TCCR0, temp1
 
@@ -316,22 +335,7 @@ reset:		ldi	temp1, high(RAMEND)	; stack = RAMEND
 		ldi	temp1, (1<<CS20)+(1<<WGM20)
 		out	TCCR2, temp1
 
-	; reset state flags
-		clr	flags0
-		clr	flags1
-		clr	flags2
-
-	; clear RAM
-		clr	XH
-		ldi	XL, low (SRAM_START)
-		clr	temp1
-clear_ram:	st	X+, temp1
-		cpi	XL, uart_data+1
-		brlo	clear_ram
-
-	; power off
-		rcall	switch_power_off
-
+	; startup beeps
 		rcall	wait260ms	; wait a while
 
 		rcall	beep_f1
@@ -341,9 +345,8 @@ clear_ram:	st	X+, temp1
 		rcall	beep_f3
 		rcall	wait30ms
 
-control_start:	; init variables
-;		ldi	temp1, CHANGE_TIMEOUT
-;		mov	tcnt0_change_tot, temp1
+control_start:
+	; init variables
 		ldi	temp1, NO_POWER
 		mov	current_duty, temp1
 		ldi	temp1, MAX_POWER
