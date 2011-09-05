@@ -1074,6 +1074,7 @@ start_0:
 		sbr	flags2, (1<<SCAN_TIMEOUT)
 		ret
 start_1:	rcall	sync_with_poweron
+		rcall	sync_with_poweron
 		sbrc	flags2, COMP_SAVE
 		rjmp	start_3
 
