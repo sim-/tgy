@@ -886,10 +886,6 @@ set_new_duty31: mov	current_duty, temp1	; set new duty
 		ret
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
-		ldi	temp1, NO_POWER
-		mov	rc_duty, temp1
-		mov	current_duty, temp1
-		clr	sys_control
 		ldi	XL, low  (pwm_off)
 		ldi	XH, high (pwm_off)
 		movw	ZL, XL			; Atomic set (read by ISR)
@@ -912,9 +908,9 @@ wait_for_poweroff:
 		rjmp	wait_for_poweroff
 		ret
 ;-----bko-----------------------------------------------------------------
-; sys_control must be cleared (by switch_power_off) before calling
 motor_brake:
 .if MOT_BRAKE == 1
+		clr	sys_control
 		all_nFETs_off temp1
 		all_pFETs_off temp1
 		in	temp2, TCNT1L
@@ -1180,6 +1176,8 @@ run6_2:		rjmp	run1			; go back to run 1
 restart_control:
 		cli				; disable all interrupts
 		rcall	switch_power_off
+		clr	sys_control
+		rcall	set_new_duty
 		rcall	wait30ms
 		rcall	beep_f3
 		rcall	beep_f2
