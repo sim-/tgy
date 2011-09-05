@@ -825,9 +825,7 @@ update_t99:
 calc_next_timing:
 		lds	YL, wt_comp_scan_l	; holds wait-before-scan value
 		lds	YH, wt_comp_scan_h
-		rcall	update_timing
-
-		ret
+		rjmp	update_timing
 
 wait_OCT1_tot:	sbrc	flags0, OCT1_PENDING
 		rjmp	wait_OCT1_tot
@@ -838,10 +836,8 @@ set_OCT1_tot:
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
-		sei
 		add	temp1, YL
 		adc	temp2, YH
-		cli
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
 		sei
@@ -850,15 +846,13 @@ set_OCT1_tot:
 		ret
 ;-----bko-----------------------------------------------------------------
 wait_OCT1_before_switch:
+		lds	YL, com_timing_l
+		lds	YH, com_timing_h
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
-		sei
-		lds	YL, com_timing_l
-		lds	YH, com_timing_h
 		add	temp1, YL
 		adc	temp2, YH
-		cli
 		out	OCR1AH, temp2
 		out	OCR1AL, temp1
 		sei
