@@ -481,7 +481,7 @@ t1ovfl_int:	in	i_sreg, SREG
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; timer2 output compare interrupt (output PWM)
+; timer2 output compare interrupt (8-bit phase-correct WGM output PWM)
 t2oc_int:
 ; Test immediately if we are upcounting or downcounting without touching flags
 		in	i_temp3, TCNT2
@@ -528,13 +528,6 @@ pwm_off_cycle:
 	; time, and interrupts are disabled during beeps. Doing this with
 	; three cbi instructions is 6 cycles, while in/cbr/out is 3 cycles.
 		all_nFETs_off	i_temp1
-	; If we were called right before TCNT2 reached 0xff, the interrupt
-	; servicing delay may mean we're already into the ON cycle again.
-	; Check to see if the timer is going back down again already.
-;		in	i_temp3, TCNT2
-;		in	i_temp2, TCNT2
-;		cp	i_temp2, i_temp3
-;		brcs	pwm_on
 pwm_exit:
 		out	SREG, i_sreg
 		reti
