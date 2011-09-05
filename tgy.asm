@@ -62,82 +62,62 @@
 ;**** **** **** **** ****
 ;**** **** **** **** ****
 
-.equ MOT_BRAKE    = 0
+.include "tgy.inc"		; TowerPro/Turnigy ESC pinout (INT0 PPM)
+;.include "afro.inc"		; AfroESC pinout (ICP PPM)
 
-.equ RC_PULS 	  = 1
+.equ	MOT_BRAKE   	= 0	; Enable brake
+.equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
+.equ	RCP_TOT		= 32	; Number of timer1 overflows before considering rc pulse lost
 
-; 1040 here seems to low for output from multikopter board -sim
-; 1110 here is right, but cold weather just trips it -sim
 .equ	MIN_RC_PULS	= 800	; Less than this is illegal pulse length
 .equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 
-.include "tgy.inc"
-
-;.equ	CHANGE_TIMEOUT	= 1
-;.equ	CHANGE_TOT_LOW	= 2
-
-.equ	POWER_RANGE	= 256			; full range of tcnt0 setting
-; The following is Javierete's mod to ensure smoother start up with heavier motors.
-; Note that in the I2C version original value is 8, changed to 2 !
-.equ	MIN_DUTY	= 12			; wait for this minimum before starting when stopped
-;.equ	NO_POWER	= 256-MIN_DUTY		; (POWER_OFF)
-;.equ	MAX_POWER	= 256-POWER_RANGE	; (FULL_POWER)
+.equ	POWER_RANGE	= 256	; Full 8-bit PWM range (0-255)
+.equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	NO_POWER	= 0
-.equ	MAX_POWER	= 255
-
-.equ	PWR_MAX_RPM1	= POWER_RANGE/4
-.equ	PWR_MAX_RPM2	= POWER_RANGE/2
-
-.equ	PWR_STARTUP	= 16
-.equ	PWR_MAX_STARTUP	= 64
-
-.equ	timeoutSTART	= 48000
-.equ	timeoutMIN	= 36000
-
-.equ	T1STOP	= 0x00
-.equ	T1CK8	= 0x02
-
-.equ	EXT0_DIS	= 0x00	; disable ext0int
-
-.equ	EXT0_EN		= 0x40	; enable ext0int
+.equ	MAX_POWER	= (POWER_RANGE-1)
 
 .equ	PWR_RANGE_RUN	= 0x20	; ( ~4800 RPM )
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
 
+.equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than PWR_RANGE1
+.equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than PWR_RANGE2
+
+.equ	timeoutSTART	= 48000	; ~833 RPM
+.equ	timeoutMIN	= 36000	; ~1111 RPM
+
 .equ	ENOUGH_GOODIES	= 200
 
 ;**** **** **** **** ****
 ; Register Definitions
-.def	zero		 = r0	; stays at 0
-.def	i_sreg		 = r1	; status register save in interrupts
-.def	current_duty	 = r2	; current duty cycle
-.def	rc_duty		 = r3	; desired duty cycle
-.def	max_pwr 	 = r4	; register copy of MAX_POWER
-.def	uart_cnt	 = r5
-;.def		 	 = r6
-.def	start_rcpuls_l	 = r7
-.def	start_rcpuls_h	 = r8
-;.def		 	 = r9
-;.def			 = r10
-.def	rcpuls_timeout	 = r11
-.equ	RCP_TOT		 = 32	; Number of timer1 overflows before considering rc pulse lost
+.def	zero		= r0		; stays at 0
+.def	i_sreg		= r1		; status register save in interrupts
+.def	current_duty	= r2		; current duty cycle
+.def	rc_duty		= r3		; desired duty cycle
+.def	max_pwr 	= r4		; register copy of MAX_POWER
+.def	uart_cnt	= r5
+;.def			= r6
+.def	start_rcpuls_l	= r7
+.def	start_rcpuls_h	= r8
+;.def		 	= r9
+;.def			= r10
+.def	rcpuls_timeout	= r11
+;.def			= r12
+.def	sys_control	= r13
+.def	t1_timeout	= r14
 
-.def	sys_control	 = r13
-.def	t1_timeout	 = r14
+.def	temp1		= r16		; main temporary (L)
+.def	temp2		= r17		; main temporary (H)
+.def	temp3		= r18		; main temporary (L)
+.def	temp4		= r19		; main temporary (H)
+.def	temp5		= r9		; aux temporary (limited operations)
+.def	temp6		= r10		; aux temporary (limited operations)
 
-.def	temp1	= r16			; main temporary
-.def	temp2	= r17			; main temporary
-.def	temp3	= r18			; main temporary
-.def	temp4	= r19			; main temporary
-.def	temp5	= r9
-.def	temp6	= r10
-.def	temp7	= r6
-
-.def	i_temp1	= r20			; interrupt temporary
-.def	i_temp2	= r15			; interrupt temporary
-.def	i_temp3	= r22			; interrupt temporary
+.def	i_temp1		= r20		; interrupt temporary
+.def	i_temp2		= r15		; interrupt temporary (limited operations)
+.def	i_temp3		= r22		; interrupt temporary
 
 .def	flags0	= r23	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrunpt is pending
