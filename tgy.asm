@@ -78,7 +78,7 @@
 .equ	NO_POWER	= 0
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
-.equ	PWR_RANGE_RUN	= 0x20	; ( ~4800 RPM )
+.equ	PWR_RANGE_RUN	= 0x10	; ( ~1200 RPM )
 .equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
 .equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
 
@@ -87,8 +87,6 @@
 
 .equ	timeoutSTART	= 48000	; ~833 RPM
 .equ	timeoutMIN	= 36000	; ~1111 RPM
-
-.equ	ENOUGH_GOODIES	= 200
 
 ;**** **** **** **** ****
 ; Register Definitions
@@ -106,7 +104,7 @@
 .def	rcpuls_timeout	= r11
 ;.def			= r12
 .def	sys_control	= r13
-.def	t1_timeout	= r14
+;.def			= r14
 
 .def	temp1		= r16		; main temporary (L)
 .def	temp2		= r17		; main temporary (H)
@@ -454,8 +452,6 @@ t1oca_int:	in	i_sreg, SREG
 ;-----bko-----------------------------------------------------------------
 ; overflow timer1 / happens all 65536µs
 t1ovfl_int:	in	i_sreg, SREG
-		cpse	t1_timeout, zero
-		dec	t1_timeout
 		cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
 		out	SREG, i_sreg
@@ -930,9 +926,6 @@ FETs_off_wt:	dec	temp1
 		cbr	flags2, (1<<SCAN_TIMEOUT)
 		sts	goodies, zero
 
-		ldi	temp1, 40	; x 65msec
-		mov	t1_timeout, temp1
-
 		rcall	set_new_duty
 		rcall	set_all_timings
 
@@ -1002,30 +995,14 @@ start6:		rcall	start_step
 		rjmp	init_startup
 s6_pwr_ok:
 		tst	rcpuls_timeout		; Check for RC timeout
-		brne	s6_rcp_ok
+		brne	s6_test_rpm
 		rjmp	restart_control
 
-s6_rcp_ok:	tst	t1_timeout		; Check for start attempt timeout
-		brne	s6_test_rpm
-		rjmp	init_startup
-
-s6_test_rpm:	lds	temp1, timing_x
-		tst	temp1
-		brne	s6_goodies
-		lds	temp1, timing_h		; get actual RPM reference high
+s6_test_rpm:	lds	temp1, timing_h		; get actual RPM reference high
 		cpi	temp1, PWR_RANGE_RUN
-;		cpi	temp1, PWR_RANGE1
-;		cpi	temp1, PWR_RANGE2
-		brcs	s6_run1
-
-s6_goodies:	lds	temp1, goodies
-		sbrc	flags2, SCAN_TIMEOUT
-		clr	temp1
-		inc	temp1
-		sts	goodies,  temp1
-		cbr	flags2, (1<<SCAN_TIMEOUT)
-		cpi	temp1, ENOUGH_GOODIES
-		brcs	s6_start1
+		lds	temp1, timing_x
+		cpc	temp1, zero
+		brcc	s6_start1
 
 s6_run1:	rcall	calc_next_timing
 		rcall	set_OCT1_tot
