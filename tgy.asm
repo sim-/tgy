@@ -488,13 +488,24 @@ t2oc_int:
 		in	i_temp2, TCNT2
 		in	i_sreg, SREG
 		cp	i_temp2, i_temp3
-		brcc	pwm_off_cycle
+		brcc	pwm_off
 
 ; ON cycle: switch appropriate nFET on as soon as possible
 pwm_on:
 		cpse	current_duty, zero
 		ijmp	; Z should be set to one of the below labels
 pwm_off:
+		sbr	flags2, (1<<COMP_SAVE)+(1<<COMP_SAVE_READY)
+		sbic	ACSR, ACO		; mirror inverted ACO to bit-var
+		cbr	flags2, (1<<COMP_SAVE)
+		cp	current_duty, max_pwr
+		breq	pwm_exit
+		cbr	flags0, (1<<I_FET_ON)
+	; We can just turn all nFETs off as we only have one nFET on at a
+	; time, and interrupts are disabled during beeps. Doing this with
+	; three cbi instructions is 6 cycles, while in/cbr/out is 3 cycles.
+		all_nFETs_off	i_temp1
+pwm_exit:
 		out	SREG, i_sreg
 		reti
 pwm_afet_on:
@@ -515,22 +526,7 @@ pwm_cfet_on:
 		sbr	flags0, (1<<I_FET_ON)
 		out	SREG, i_sreg
 		reti
-pwm_on_exit:
 
-pwm_off_cycle:
-		sbr	flags2, (1<<COMP_SAVE)+(1<<COMP_SAVE_READY)
-		sbic	ACSR, ACO		; mirror inverted ACO to bit-var
-		cbr	flags2, (1<<COMP_SAVE)
-		cp	current_duty, max_pwr
-		breq	pwm_exit
-		cbr	flags0, (1<<I_FET_ON)
-	; We can just turn all nFETs off as we only have one nFET on at a
-	; time, and interrupts are disabled during beeps. Doing this with
-	; three cbi instructions is 6 cycles, while in/cbr/out is 3 cycles.
-		all_nFETs_off	i_temp1
-pwm_exit:
-		out	SREG, i_sreg
-		reti
 
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
@@ -910,6 +906,8 @@ wait_if_spike2:	dec	temp1
 sync_with_poweron:
 		cbr	flags2, (1<<COMP_SAVE_READY)
 wait_for_poweroff:
+		sbrs	flags0, OCT1_PENDING
+		ret
 		sbrs	flags2, COMP_SAVE_READY
 		rjmp	wait_for_poweroff
 		ret
