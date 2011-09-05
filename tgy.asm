@@ -427,10 +427,6 @@ ext_int0:
 		sub	i_temp1, i_temp3
 		lds	i_temp3, stop_rcpuls_h
 		sbc	i_temp2, i_temp3
-		cpi	i_temp1, low (25000)
-		ldi	i_temp3, high(25000)	; test range high
-		cpc	i_temp2, i_temp3
-		brsh    rcpint_exit		; could just first pulse
 		cpi	i_temp1, low (5)	; 200 ok for 417Hz, 5 for 495Hz
 		ldi	i_temp3, high(5)	; test range low
 		cpc	i_temp2, i_temp3
