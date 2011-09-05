@@ -844,6 +844,11 @@ start_timeout:	lds	YL, wt_OCT1_tot_l
 		lds	YH, wt_OCT1_tot_h
 		rcall	update_timing
 
+		lds	YH, wt_OCT1_tot_h
+		sbrs	flags2, SCAN_TIMEOUT
+		rjmp	set_tot2
+
+	; speed up timing if we could not detect the zero crossing
 		in	temp1, TCNT1L
 		andi	temp1, 0x0f
 		sub	YH, temp1
