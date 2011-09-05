@@ -145,7 +145,7 @@
 ;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
 	.equ	COMP_SAVE	= 4	; if set ACO was high
 	.equ	COMP_SAVE_READY	= 5	; COMP_SAVE is ready
-	.equ	STARTUP		= 6	; if set startup-phase is active
+;	.equ	STARTUP		= 6	; if set startup-phase is active
 	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
 
 ; here the XYZ registers are placed ( r26-r31)
@@ -867,7 +867,6 @@ switch_power_off:
 		movw	ZL, XL			; Atomic set (read by ISR)
 		all_nFETs_off temp1
 		all_pFETs_off temp1
-		sbr	flags2, (1<<STARTUP)
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
 wait_if_spike:	ldi	temp1, 4
@@ -1008,7 +1007,6 @@ s6_run1:	rcall	calc_next_timing
 		rcall	set_OCT1_tot
 		ldi	temp1, MAX_POWER
 		mov	sys_control, temp1
-		cbr	flags2, (1<<STARTUP)
 		rjmp	run1			; running state begins
 
 s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
@@ -1125,8 +1123,7 @@ run6:
 		lds	temp1, timing_x
 		tst	temp1
 		breq	run6_2			; higher than 610 RPM if zero
-run_to_start:	sbr	flags2, (1<<STARTUP)
-		rjmp	init_startup
+run_to_start:	rjmp	init_startup
 
 run6_2:		rjmp	run1			; go back to run 1
 
