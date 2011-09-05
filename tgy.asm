@@ -839,6 +839,8 @@ wait_OCT1_before_switch:
 
 	; don't waste time while waiting - do some controls, if indicated
 
+		cpse	sys_control, max_pwr
+		inc	sys_control
 		rcall	evaluate_rc_puls
 
 OCT1_wait:	sbrc	flags0, OCT1_PENDING
