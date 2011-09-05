@@ -933,8 +933,6 @@ brake_off_cycle:
 ; **** startup loop ****
 init_startup:
 		rcall	switch_power_off
-		ldi	temp1, PWR_STARTUP
-		mov	sys_control, temp1
 wait_for_power_on:
 		rcall	motor_brake
 		rcall	evaluate_rc_puls
@@ -951,8 +949,7 @@ wait_for_power_on:
 FETs_off_wt:	dec	temp1
 		brne	FETs_off_wt
 
-		rcall	com5com6
-		rcall	com6com1
+		mov	sys_control, max_pwr
 
 		cbr	flags2, (1<<SCAN_TIMEOUT)
 		sts	goodies, zero
@@ -960,8 +957,11 @@ FETs_off_wt:	dec	temp1
 		ldi	temp1, 40	; x 65msec
 		mov	t1_timeout, temp1
 
+		rcall	set_new_duty
 		rcall	set_all_timings
 
+		rcall	com5com6
+		rcall	com6com1
 		rcall	start_timeout
 
 	; fall through start1
@@ -1059,12 +1059,6 @@ s6_run1:	rcall	calc_next_timing
 		rjmp	run1			; running state begins
 
 s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
-		lsl	sys_control
-		ldi	temp1, PWR_MAX_STARTUP
-		cp	sys_control, temp1
-		brlo	s6_start2
-		mov	sys_control, temp1
-s6_start2:
 		rjmp	start1			; go back to state 1
 
 start_step:
