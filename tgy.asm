@@ -860,38 +860,27 @@ set_tot2:
 
 		ret
 ;-----bko-----------------------------------------------------------------
-set_new_duty:	tst	sys_control
-		breq	switch_power_off
-		mov	temp1, rc_duty
-		mov	temp2, sys_control	; Limit PWM to sys_control
-		cp	temp1, temp2
+set_new_duty:	mov	temp1, rc_duty
+		cp	temp1, sys_control
 		brcs	set_new_duty10
-		mov	temp1, temp2
-		cpi	temp2, MAX_POWER
-		breq	set_new_duty10
-		inc	sys_control		; Build up sys_control to MAX_POWER
+		mov	temp1, sys_control	; Limit PWM to sys_control
 set_new_duty10:	lds	temp2, timing_x
 		tst	temp2
-		brne	set_new_duty12
-		lds	temp2, timing_h		; get actual RPM reference high
-		cpi	temp2, PWR_RANGE1	; lower range1 ?
+		brne	set_new_duty12		; on carry - very slow timing
+		lds	temp2, timing_h		; work with the timing high byte
+		cpi	temp2, PWR_RANGE1	; timing longer than PWR_RANGE1?
 		brcs	set_new_duty25		; on carry - test next range
 set_new_duty12:	cpi	temp1, PWR_MAX_RPM1	; higher than range1 power max ?
-		brcs	set_new_duty31		; on carry - not higher, no restriction
+		brcs	set_new_duty31		; on carry - not longer, no restriction
 		ldi	temp1, PWR_MAX_RPM1	; low (range1) RPM - set PWR_MAX_RPM1
 		rjmp	set_new_duty31
-set_new_duty25:	cpi	temp2, PWR_RANGE2	; lower range2 ?
-		brcs	set_new_duty31		; on carry - not lower, no restriction
+set_new_duty25:	cpi	temp2, PWR_RANGE2	; timing longer than PWR_RANGE2?
+		brcs	set_new_duty31		; on carry - not longer, no restriction
 		cpi	temp1, PWR_MAX_RPM2	; higher than range2 power max ?
-		brcs	set_new_duty31		; on carry - not higher, no restriction
+		brcs	set_new_duty31		; on carry - not shorter, no restriction
 		ldi	temp1, PWR_MAX_RPM2	; low (range2) RPM - set PWR_MAX_RPM2
 		rjmp	set_new_duty31
-set_new_duty31: sbrs	flags2, STARTUP		; Check for STARTUP phase
-		rjmp	set_new_duty32
-		cpi	temp1, PWR_MAX_STARTUP	; limit power in startup phase
-		brcs	set_new_duty32
-		ldi	temp1, PWR_MAX_STARTUP	; set PWR_MAX_STARTUP limit
-set_new_duty32: mov	current_duty, temp1	; save in next
+set_new_duty31: mov	current_duty, temp1	; set new duty
 		out	OCR2, temp1
 		ret
 ;-----bko-----------------------------------------------------------------
