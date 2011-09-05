@@ -180,19 +180,11 @@
 .dseg				; DATA segment
 .org SRAM_START
 
-tcnt1_sav_l:	.byte	1	; actual timer1 value
-tcnt1_sav_h:	.byte	1
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
 timing_l:	.byte	1	; holds time of 4 commutations
 timing_h:	.byte	1
 timing_x:	.byte	1
-
-rpm_l:		.byte	1	; holds the average time of 4 commutations
-rpm_h:		.byte	1
-rpm_x:		.byte	1
-
-
 
 wt_comp_scan_l:	.byte	1	; time from switch to comparator scan
 wt_comp_scan_h:	.byte	1
@@ -202,8 +194,6 @@ wt_OCT1_tot_l:	.byte	1	; OCT1 waiting time
 wt_OCT1_tot_h:	.byte	1
 zero_wt_l:	.byte	1
 zero_wt_h:	.byte	1
-last_com_l:	.byte	1
-last_com_h:	.byte	1
 
 stop_rcpuls_l:	.byte	1
 stop_rcpuls_h:	.byte	1
@@ -725,72 +715,61 @@ set_timing_v:	ldi	temp4, 0x01
 update_timing:	cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
-		sei
-		sts	tcnt1_sav_l, temp1
-		sts	tcnt1_sav_h, temp2
-		add	temp1, YL
-		adc	temp2, YH
-		cli
-		out	OCR1AH, temp2
-		out	OCR1AL, temp1
+		add	YL, temp1
+		adc	YH, temp2
+		out	OCR1AH, YH
+		out	OCR1AL, YL
 		sei
 		sbr	flags0, (1<<OCT1_PENDING)
 
-	; calculate next waiting times - timing(-l-h-x) holds the time of 4 commutations
-		lds	temp1, timing_l
-		lds	temp2, timing_h
-		lds	temp5, timing_x
-
-		sts	zero_wt_l, temp1	; save for zero crossing timeout
-		sts	zero_wt_h, temp2
-		tst	temp5
-		breq	update_t00
-		ldi	temp4, 0xff
-		sts	zero_wt_l, temp4	; save for zero crossing timeout
-		sts	zero_wt_h, temp4
-update_t00:
-		lsr	temp5			; build a quarter
-		ror	temp2
-		ror	temp1
-
-		lsr	temp5
-		ror	temp2
-		ror	temp1
-		lds	temp3, timing_l		; .. and subtract from timing
-		lds	temp4, timing_h
-		lds	temp5, timing_x
-		sub	temp3, temp1
-		sbc	temp4, temp2
-		sbc	temp5, zero
-
-		lds	temp1, tcnt1_sav_l	; calculate this commutation time
-		lds	temp2, tcnt1_sav_h
-		lds	YL, last_tcnt1_l
-		lds	YH, last_tcnt1_h
+	; calculate this commutation time
+		lds	temp3, last_tcnt1_l
+		lds	temp4, last_tcnt1_h
 		sts	last_tcnt1_l, temp1
 		sts	last_tcnt1_h, temp2
-		sub	temp1, YL
-		sbc	temp2, YH
-		sts	last_com_l, temp1
-		sts	last_com_h, temp2
+		sub	temp1, temp3
+		sbc	temp2, temp4
 
-		add	temp3, temp1		; .. and add to timing
+	; calculate next waiting times - timing(-l-h-x) holds the time of 4 commutations
+		lds	temp3, timing_l
+		lds	temp4, timing_h
+		lds	temp5, timing_x
+
+		sts	zero_wt_l, temp3	; save for zero crossing timeout
+		sts	zero_wt_h, temp4
+		tst	temp5
+		breq	update_t00
+		ldi	YL, 0xff
+		sts	zero_wt_l, YL		; save for zero crossing timeout
+		sts	zero_wt_h, YL
+update_t00:
+		movw	YL, temp3		; copy timing to Y
+		lsr	temp5			; build a quarter
+		ror	YH
+		ror	YL
+		lsr	temp5
+		ror	YH			; temp5 no longer needed (should be 0)
+		ror	YL
+
+		lds	temp5, timing_x		; reload original timing_x
+
+		sub	temp3, YL		; subtract quarter from timing
+		sbc	temp4, YH
+		sbc	temp5, zero
+
+		add	temp3, temp1		; .. and add the new time
 		adc	temp4, temp2
 		adc	temp5, zero
 
 	; limit RPM to 120.000
-		tst	temp5
-		brne	update_t90
-		cpi	temp4, 0x01
-		brcs	update_t10
-		brne	update_t90
 		cpi	temp3, 0x4c		; 0x14c = 120.000 RPM
+		ldi	temp1, 0x1
+		cpc	temp4, temp1
+		cpc	temp5, zero
 		brcc	update_t90
-update_t10:
-		mov	temp1, sys_control
-		cpi	temp1, 2
-		brcs	update_t90
-		lsr	sys_control
+
+		lsr	sys_control		; limit by reducing power
+		adc	sys_control, zero
 
 update_t90:	sts	timing_l, temp3
 		sts	timing_h, temp4
