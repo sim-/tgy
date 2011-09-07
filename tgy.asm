@@ -119,19 +119,19 @@
 
 .def	flags0	= r23	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrunpt is pending
-	.equ	UB_LOW 		= 1	; set if accu voltage low
+;	.equ	UB_LOW 		= 1	; set if accu voltage low
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
-	.equ	GET_STATE	= 3	; set if state is to be send
-	.equ	C_FET		= 4	; if set, C-FET state is to be changed
-	.equ	A_FET		= 5	; if set, A-FET state is to be changed
+;	.equ	GET_STATE	= 3	; set if state is to be send
+;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
+;	.equ	A_FET		= 5	; if set, A-FET state is to be changed
 	     ; if neither 1 nor 2 is set, B-FET state is to be changed
-	.equ	I_ON_CYCLE	= 6	; if set, current on cycle is active
+;	.equ	I_ON_CYCLE	= 6	; if set, current on cycle is active
 	.equ	I_FET_ON	= 7	; if set, fets off
 
 .def	flags1	= r24	; state flags
 ;	.equ	POWER_OFF	= 0	; switch fets on disabled
 ;	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
-	.equ	CALC_NEXT_OCT1	= 2	; calculate OCT1 offset, when wait_OCT1_before_switch is called
+;	.equ	CALC_NEXT_OCT1	= 2	; calculate OCT1 offset, when wait_OCT1_before_switch is called
 	.equ	RC_PULS_UPDATED	= 3	; new rc-puls value available
 ;	.equ	EVAL_RC_PULS	= 4	; if set, new rc puls is evaluated, while waiting for OCT1
 ;	.equ	EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
@@ -150,8 +150,9 @@
 
 ; here the XYZ registers are placed ( r26-r31)
 
-; ZH = new_duty		; PWM destination
-
+; X: general temporary
+; Y: general temporary
+; Z: interrupt-accessed address of current PWM FET ON routine (eg: pwm_afet_on)
 
 ;**** **** **** **** ****
 ; RAM Definitions
