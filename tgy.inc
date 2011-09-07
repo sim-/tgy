@@ -59,7 +59,7 @@
 .MACRO all_pFETs_off
 	in	@0, PORTD
 	cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
-	out	PORTB, @0
+	out	PORTD, @0
 .ENDMACRO
 
 
