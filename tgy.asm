@@ -274,10 +274,11 @@ reset:
 		ldi	temp1, DIR_PD
 		out	DDRD, temp1
 
-	; clear registers r0 through r26
+	; clear all registers r0 through r26
+		clr	zero
 		ldi	XH, high(0)
 		ldi	XL, low (0)
-clear_regs:	st	X+, XH
+clear_regs:	st	X+, zero
 		tst	XL			; XL will be cleared by store
 		brne	clear_regs
 
