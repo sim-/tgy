@@ -78,9 +78,9 @@
 .equ	NO_POWER	= 0
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
-.equ	PWR_RANGE_RUN	= 0x10	; ( ~1200 RPM )
-.equ	PWR_RANGE1	= 0x40	; ( ~2400 RPM )
-.equ	PWR_RANGE2	= 0x20	; ( ~4800 RPM )
+.equ	PWR_RANGE_RUN	= 0x20	; 2048 microseconds per commutation
+.equ	PWR_RANGE1	= 0x40	; 4096 microseconds per commutation
+.equ	PWR_RANGE2	= 0x20	; 2048 microseconds per commutation
 
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than PWR_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than PWR_RANGE2
