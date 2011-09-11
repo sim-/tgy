@@ -104,7 +104,7 @@
 .def	rcpuls_timeout	= r11
 ;.def			= r12
 .def	sys_control	= r13
-;.def			= r14
+.def	acsr_save	= r14
 
 .def	temp1		= r16		; main temporary (L)
 .def	temp2		= r17		; main temporary (H)
@@ -143,8 +143,8 @@
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
 	.equ	RC_INTERVAL_OK	= 2
 ;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
-	.equ	COMP_SAVE	= 4	; if set ACO was high
-	.equ	COMP_SAVE_READY	= 5	; COMP_SAVE is ready
+;	.equ	COMP_SAVE	= 4	; if set ACO was high
+	.equ	COMP_SAVE_READY	= 5	; if acsr_save was set by PWM interrupt
 ;	.equ	STARTUP		= 6	; if set startup-phase is active
 	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
 
@@ -475,10 +475,9 @@ pwm_on:
 		cpse	current_duty, zero
 		ijmp	; Z should be set to one of the below labels
 pwm_off:
-		sbr	flags2, (1<<COMP_SAVE)+(1<<COMP_SAVE_READY)
-		sbic	ACSR, ACO		; mirror inverted ACO to bit-var
-		cbr	flags2, (1<<COMP_SAVE)
+		sbr	flags2, (1<<COMP_SAVE_READY)
 		cp	current_duty, max_pwr
+		in	acsr_save, ACSR
 		breq	pwm_exit
 		cbr	flags0, (1<<I_FET_ON)
 	; We can just turn all nFETs off as we only have one nFET on at a
@@ -647,14 +646,14 @@ evaluate_rc_puls:
 		ror	temp1
 		lsr	temp2
 		ror	temp1
-eval_rc_exit:
 		mov	rc_duty, temp1
 		rjmp	set_new_duty
 eval_rc_stop:
 		clr	rc_duty
 		rjmp	set_new_duty
-eval_rc_full:	ldi	temp1, MAX_POWER
-		rjmp	eval_rc_exit
+eval_rc_full:
+		mov	rc_duty, max_pwr
+		rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
 ;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
 ;		ret
@@ -980,8 +979,6 @@ start4:		rcall	start_step
 
 start5:		rcall	start_step
 		rcall	com5com6
-;		rcall	evaluate_sys_state
-;		rcall	set_new_duty
 		rcall	start_timeout
 
 ; state 6 = B(p-on) + A(n-choppered) - comparator C evaluated
@@ -1021,19 +1018,22 @@ start_0:
 		ret
 start_1:	rcall	sync_with_poweron
 		rcall	sync_with_poweron
-		sbrc	flags2, COMP_SAVE
+;		sbrc	flags2, COMP_SAVE
+		sbrs	acsr_save, ACO
 		rjmp	start_3
 
 start_2:	sbrs	flags0, OCT1_PENDING
 		rjmp	start_0
-		sbrs	flags2, COMP_SAVE
+;		sbrs	flags2, COMP_SAVE
+		sbrc	acsr_save, ACO
 		rjmp	start_2
 		sec
 		ret
 
 start_3:	sbrs	flags0, OCT1_PENDING
 		rjmp	start_0
-		sbrc	flags2, COMP_SAVE
+;		sbrc	flags2, COMP_SAVE
+		sbrs	acsr_save, ACO
 		rjmp	start_3
 		clc
 		ret
