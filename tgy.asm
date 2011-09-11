@@ -297,7 +297,7 @@ clear_ram:	st	X+, zero
 		out	TCCR0, temp1
 
 	; timer1: clk/8 for commutation control, RC pulse measurement
-		ldi	temp1, (1<<CS11)
+		ldi	temp1, (1<<CS11)+T1ICP
 		out	TCCR1B, temp1
 
 	; timer2: clk/1 in phase-correct PWM mode (counts up and down) for PWM
@@ -313,6 +313,9 @@ clear_ram:	st	X+, zero
 		rcall	wait30ms
 		rcall	beep_f3
 		rcall	wait30ms
+
+		; status led on
+		GRN_on
 
 control_start:
 	; init variables
@@ -927,6 +930,7 @@ FETs_off_wt:	dec	temp1
 
 		rcall	com5com6
 		rcall	com6com1
+		RED_off
 		rcall	start_timeout
 
 	; fall through start1
@@ -1010,7 +1014,7 @@ s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 		rjmp	start1			; go back to state 1
 
 start_step:
-		sbrc    flags0, OCT1_PENDING
+		sbrc	flags0, OCT1_PENDING
 		rjmp	start_1
 start_0:
 		sbr	flags2, (1<<SCAN_TIMEOUT)

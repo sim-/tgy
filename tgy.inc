@@ -19,6 +19,8 @@
 .equ	BRAKE_PD	= 0
 
 .equ	USE_ICP		= 0
+.equ	T1ICP		= 0
+
 .MACRO rjmp_ext_int0
 	rjmp	ext_int0
 .ENDMACRO
@@ -150,3 +152,11 @@
 	out	PORTB, @0
 .ENDMACRO
 
+.MACRO RED_on
+.ENDMACRO
+.MACRO RED_off
+.ENDMACRO
+.MACRO GRN_on
+.ENDMACRO
+.MACRO GRN_off
+.ENDMACRO
