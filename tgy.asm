@@ -914,7 +914,7 @@ wait_for_power_on:
 		cp	rcpuls_timeout, temp1
 		brcs	wait_for_power_on
 
-		set_comp_phase_a temp1
+		comp_init temp1			; init comparator
 
 		ldi	temp1, 27		; wait about 5mikosec
 FETs_off_wt:	dec	temp1

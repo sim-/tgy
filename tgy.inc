@@ -1,13 +1,13 @@
-;*********************************************************** 
+;***********************************************************
 ;* tp-18a                                                  *
 ;* Mai.2007
 ;* http://home.versanet.de/~b-konze/                       *
-;*********************************************************** 
+;***********************************************************
 
 ;*********************
 ; PORT D definitions *
-;*********************  
-;.equ    mux_c   	= 7     ;i <plus> comparator input (AIN0)
+;*********************
+;.equ	mux_c		= 7	;i <plus> comparator input (AIN0)
 ;.equ	c_comp		= 6	;i common comparator input (AIN0)
 .equ	ApFET		= 5	;o
 .equ	BpFET		= 4	;o
@@ -28,16 +28,16 @@
 	nop
 .ENDMACRO
 .MACRO rcp_int_enable
-	ldi     @0, (1<<INT0)	; enable ext0int
+	ldi	@0, (1<<INT0)	; enable ext0int
 	out	GICR, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
 	ldi	@0, (1<<ISC01)+(1<<ISC00)
-	out	MCUCR, @0	; set next int0 to rising edge 
+	out	MCUCR, @0	; set next int0 to rising edge
 .ENDMACRO
 .MACRO rcp_int_falling_edge
-	ldi     @0, (1<<ISC01)
-	out     MCUCR, @0	; set next int0 to falling edge
+	ldi	@0, (1<<ISC01)
+	out	MCUCR, @0	; set next int0 to falling edge
 .ENDMACRO
 
 .MACRO ApFET_on
@@ -68,42 +68,36 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-;.equ    	  	= 7	; ADC7
-;.equ    	  	= 6	; ADC6
+;.equ			= 7	; ADC7
+;.equ			= 6	; ADC6
 .equ	mux_a		= 5	; ADC5 phase input
 .equ	mux_b		= 4	; ADC4 phase input
-;.equ    	  	= 3	; ADC3
-;.equ    	  	= 2	; ADC2
-.equ 	temp_adc	= 1 	; ADC1 temperature control input 
-.equ 	accu_adc	= 0 	; ADC0 voltage control input 
+;.equ			= 3	; ADC3
+;.equ			= 2	; ADC2 (plush has something on here)
+;.equ	temp_adc	= 1	; ADC1 temperature control input
+;.equ	accu_adc	= 0	; ADC0 voltage control input
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0
 .equ	BRAKE_PC	= 0
 
+.MACRO comp_init
+	in	@0, SFIOR
+	sbr	@0, (1<<ACME)	; set Analog Comparator Multiplexer Enable
+	out	SFIOR, @0
+.ENDMACRO
 .MACRO set_comp_phase_a
-	ldi	@0, mux_a		; set comparator multiplexer to phase A
+	ldi	@0, mux_a	; set comparator multiplexer to phase A
 	out	ADMUX, @0
-	cbi	ADCSRA, ADEN		; disable ADC
-	in	@0, SFIOR
-	sbr	@0, (1<<ACME)		; switch to comparator multiplexed
-	out     SFIOR, @0
+	cbi	ADCSRA, ADEN	; disable ADC
 .ENDMACRO
-
 .MACRO set_comp_phase_b
-	ldi	@0, mux_b		; set comparator multiplexer to phase B
+	ldi	@0, mux_b	; set comparator multiplexer to phase B
 	out	ADMUX, @0
-	cbi	ADCSRA, ADEN		; disable ADC
-	in	@0, SFIOR
-	sbr	@0, (1<<ACME)		; switch to comparator multiplexed
-	out	SFIOR, @0
+	cbi	ADCSRA, ADEN	; disable ADC
 .ENDMACRO
-
-.MACRO set_comp_phase_c
-	in	@0, SFIOR
-	cbr	@0, (1<<ACME)		; set to AN1 (phase C)
-	out	SFIOR, @0
-	sbi	ADCSRA, ADEN		; enable ADC
+.MACRO set_comp_phase_c	
+	sbi	ADCSRA, ADEN	; enable ADC and comparator to phase C (AIN1)
 .ENDMACRO
 
 
@@ -112,9 +106,9 @@
 ;*********************
 ;.equ			= 7
 ;.equ			= 6
-;.equ			= 5    	(sck stk200 interface) 
+;.equ			= 5	(sck stk200 interface)
 ;.equ			= 4	(miso stk200 interface)
-;.equ			= 3	(mosi stk200 interface) 
+;.equ			= 3	(mosi stk200 interface)
 .equ	AnFET		= 2
 .equ	BnFET		= 1
 .equ	CnFET		= 0
