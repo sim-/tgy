@@ -2,7 +2,7 @@ all: build
 
 build: tgy.hex
 
-tgy.hex: tgy.asm
+tgy.hex: tgy.asm $(wildcard *.inc)
 	rm -f $@
 	avra $<
 
