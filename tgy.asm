@@ -243,6 +243,8 @@ uart_data:	.byte	100	; only for debug requirements
 ; init after reset
 
 reset:
+		clr	zero
+
 		ldi	temp1, high(RAMEND)	; stack = RAMEND
 		out	SPH, temp1
 		ldi	temp1, low(RAMEND)
@@ -275,11 +277,10 @@ reset:
 		out	DDRD, temp1
 
 	; clear all registers r0 through r26
-		clr	zero
-		ldi	XH, high(0)
-		ldi	XL, low (0)
-clear_regs:	st	X+, zero
-		tst	XL			; XL will be cleared by store
+		ldi	XH, high(27)
+		ldi	XL, low (27)
+clear_regs:	st	-X, zero
+		tst	XL
 		brne	clear_regs
 
 	; clear RAM
