@@ -38,7 +38,7 @@
 ;*************************************************************************
 
 .ifndef _M8DEF_INC_
-.define _M8DEF_INC_
+#define _M8DEF_INC_
 
 
 ;.pragma partinc 0
