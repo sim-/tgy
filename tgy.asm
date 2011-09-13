@@ -73,9 +73,8 @@
 .equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 
-.equ	POWER_RANGE	= 256	; Full 8-bit PWM range (0-255)
+.equ	POWER_RANGE	= 400	; Number of PWM steps (if adjusted, see scaling in evaluate_rc_puls)
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
-.equ	NO_POWER	= 0
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
 .equ	PWR_RANGE_RUN	= 0x20	; 2048 microseconds per commutation
@@ -92,26 +91,25 @@
 ; Register Definitions
 .def	zero		= r0		; stays at 0
 .def	i_sreg		= r1		; status register save in interrupts
-.def	current_duty	= r2		; current duty cycle
-.def	rc_duty		= r3		; desired duty cycle
-.def	max_pwr 	= r4		; register copy of MAX_POWER
-.def	uart_cnt	= r5
-;.def			= r6
-.def	start_rcpuls_l	= r7
-.def	start_rcpuls_h	= r8
+.def	duty_l		= r2		; on duty cycle low, one's complement
+.def	duty_h		= r3		; on duty cycle high
+.def	com_duty_l 	= r4		; off duty cycle low, one's complement
+.def	com_duty_h	= r5		; off duty cycle high
+.def	start_rcpuls_l	= r6
+.def	start_rcpuls_h	= r7
+.def	tcnt2h		= r8
 ;.def		 	= r9
-;.def			= r10
+.def	uart_cnt	= r10
 .def	rcpuls_timeout	= r11
-;.def			= r12
-.def	sys_control	= r13
-.def	acsr_save	= r14
+.def	sys_control_l	= r12		; duty limit low (word register aligned)
+.def	sys_control_h	= r13		; duty limit high
+.def	acsr_save	= r14		; saved ACSR register value
 
 .def	temp1		= r16		; main temporary (L)
 .def	temp2		= r17		; main temporary (H)
 .def	temp3		= r18		; main temporary (L)
 .def	temp4		= r19		; main temporary (H)
 .def	temp5		= r9		; aux temporary (limited operations)
-.def	temp6		= r10		; aux temporary (limited operations)
 
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r15		; interrupt temporary (limited operations)
@@ -125,12 +123,12 @@
 ;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
 ;	.equ	A_FET		= 5	; if set, A-FET state is to be changed
 	     ; if neither 1 nor 2 is set, B-FET state is to be changed
-;	.equ	I_ON_CYCLE	= 6	; if set, current on cycle is active
-	.equ	I_FET_ON	= 7	; if set, fets off
+	.equ	I_FET_ON	= 6	; if set, fets off
+	.equ	I_ON_CYCLE	= 7	; if set, current on cycle is active (optimized as MSB)
 
 .def	flags1	= r24	; state flags
-;	.equ	POWER_OFF	= 0	; switch fets on disabled
-;	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
+	.equ	POWER_OFF	= 0	; switch fets on disabled
+	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 ;	.equ	CALC_NEXT_OCT1	= 2	; calculate OCT1 offset, when wait_OCT1_before_switch is called
 	.equ	RC_PULS_UPDATED	= 3	; new rc-puls value available
 ;	.equ	EVAL_RC_PULS	= 4	; if set, new rc puls is evaluated, while waiting for OCT1
@@ -178,6 +176,8 @@ stop_rcpuls_l:	.byte	1
 stop_rcpuls_h:	.byte	1
 new_rcpuls_l:	.byte	1
 new_rcpuls_h:	.byte	1
+rc_duty_l:	.byte	1	; desired duty cycle
+rc_duty_h:	.byte	1
 
 ;duty_offset:	.byte	1
 goodies:	.byte	1
@@ -221,8 +221,8 @@ uart_data:	.byte	100	; only for debug requirements
 		rjmp reset
 		rjmp_ext_int0	; ext_int0
 		nop		; ext_int1
-		rjmp t2oc_int	; t2oc_int
-		nop		; t2ovfl_int
+		nop		; t2oc_int
+		rjmp t2ovfl_int	; t2ovfl_int
 		rjmp_icp1_int	; icp1_int
 		rjmp t1oca_int
 		nop		; t1ocb_int
@@ -302,8 +302,8 @@ clear_ram:	st	X+, zero
 		ldi	temp1, (1<<CS11)+T1ICP
 		out	TCCR1B, temp1
 
-	; timer2: clk/1 in phase-correct PWM mode (counts up and down) for PWM
-		ldi	temp1, (1<<CS20)+(1<<WGM20)
+	; timer2: clk/1 for output PWM
+		ldi	temp1, (1<<CS20)
 		out	TCCR2, temp1
 
 	; startup beeps
@@ -320,12 +320,6 @@ clear_ram:	st	X+, zero
 		GRN_on
 
 control_start:
-	; init variables
-		ldi	temp1, NO_POWER
-		mov	current_duty, temp1
-		ldi	temp1, MAX_POWER
-		mov	max_pwr, temp1
-
 	; init registers and interrupts
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
@@ -443,69 +437,74 @@ falling_edge:
 		sbr	flags1, (1<<RC_PULS_UPDATED) ; set to rc impuls value is ok !
 		mov	i_temp1, rcpuls_timeout
 		cpi	i_temp1, RCP_TOT
-		breq	rcpint_exit
-		inc	rcpuls_timeout
-
+		adc	rcpuls_timeout, zero
 rcpint_exit:	out	SREG, i_sreg
 		reti
 
 ;-----bko-----------------------------------------------------------------
-; output compare timer1 interrupt
+; timer output compare interrupt
 t1oca_int:	in	i_sreg, SREG
 		cbr	flags0, (1<<OCT1_PENDING) ; signal OCT1 passed
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; overflow timer1 / happens all 65536µs
+; timer1 overflow interrupt (happens every 65536µs)
 t1ovfl_int:	in	i_sreg, SREG
 		cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
-		out	SREG, i_sreg
+pwm_exit:	out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; timer2 output compare interrupt (8-bit phase-correct WGM output PWM)
-t2oc_int:
-; Test immediately if we are upcounting or downcounting without touching flags
-		in	i_temp3, TCNT2
-		in	i_temp2, TCNT2
+; timer2 overflow compare interrupt (output PWM)
+t2ovfl_int:
 		in	i_sreg, SREG
-		cp	i_temp2, i_temp3
-		brcc	pwm_off
+		dec	tcnt2h			; decrement tcnt2 "high byte"
+		brpl	pwm_exit		; exit if >= 0
+		subi	flags0, (1<<I_ON_CYCLE)	; fast toggle of msb
+		brmi	pwm_off			; fast branch on msb
 
 ; ON cycle: switch appropriate nFET on as soon as possible
 pwm_on:
-		cpse	current_duty, zero
+		sbrs	flags1, POWER_OFF
 		ijmp	; Z should be set to one of the below labels
 pwm_off:
 		sbr	flags2, (1<<COMP_SAVE_READY)
-		cp	current_duty, max_pwr
 		in	acsr_save, ACSR
-		breq	pwm_exit
+		sbrc	flags1, FULL_POWER
+		rjmp	pwm_off_exit
 		cbr	flags0, (1<<I_FET_ON)
 	; We can just turn all nFETs off as we only have one nFET on at a
 	; time, and interrupts are disabled during beeps. Doing this with
 	; three cbi instructions is 6 cycles, while in/cbr/out is 3 cycles.
 		all_nFETs_off	i_temp1
-pwm_exit:
+pwm_off_exit:
+		mov	tcnt2h, com_duty_h
 		out	SREG, i_sreg
+		out	TCNT2, com_duty_l
 		reti
 pwm_afet_on:
 		BnFET_off
 		AnFET_on
 		sbr	flags0, (1<<I_FET_ON)
+		mov	tcnt2h, duty_h
 		out	SREG, i_sreg
+		out	TCNT2, duty_l
 		reti
 pwm_bfet_on:
 		CnFET_off
 		BnFET_on
 		sbr	flags0, (1<<I_FET_ON)
+		mov	tcnt2h, duty_h
 		out	SREG, i_sreg
+		out	TCNT2, duty_l
 		reti
 pwm_cfet_on:
 		AnFET_off
 		CnFET_on
 		sbr	flags0, (1<<I_FET_ON)
+		mov	tcnt2h, duty_h
 		out	SREG, i_sreg
+		out	TCNT2, duty_l
 		reti
 
 
@@ -584,77 +583,21 @@ evaluate_rc_puls:
 		cbr	flags1, (1<<RC_PULS_UPDATED) ; rc impuls value is read out
 		subi	temp1, low  (STOP_RC_PULS)
 		sbci	temp2, high (STOP_RC_PULS)
-		brcs	eval_rc_stop
-
-	; Limit the maximum PPM here since it will wrap
-	; when scaled to POWER_RANGE below
-
-		cpi	temp1, low  (816)	; Should be 800
-		ldi	temp3, high (816)	; but see below
+		brcc	eval_rc_nonzero
+		clr	temp1
+		clr	temp2
+eval_rc_nonzero:
+		cpi	temp1, low (POWER_RANGE*2)
+		ldi	temp3, high(POWER_RANGE*2)
 		cpc	temp2, temp3
-		brsh	eval_rc_full
-
-;	; This used to shift 0-800 -> 0-200,
-;	; but instead we now *8/25, which gives us 0-256.
-;	; divide stolen from gcc.
-;
-;		lsl	temp1
-;		rol	temp2
-;		lsl	temp1
-;		rol	temp2
-;		lsl	temp1		; value low (0-6400)
-;		rol	temp2		; value high
-;		ldi	temp3, 17
-;		mov	temp7, temp3	; divide iteration counter
-;		ldi	temp3, 25	; r24	divisor low
-;		clr	temp4		; r25	divisor high
-;		sub	temp5, temp5	; r26
-;		sub	temp6, temp6	; r27
-;		; carry is cleared now
-;		rjmp	__udivmodhi4_ep
-;__udivmodhi4_loop:
-;		adc	temp5, temp5	; r26
-;		adc	temp6, temp6	; r27
-;		cp	temp5, temp3	; r26, r22
-;		cpc	temp6, temp4	; r27, r23
-;		brcs	__udivmodhi4_ep
-;		sub	temp5, temp3	; r26, r22
-;		sbc	temp6, temp4	; r27, r23
-;__udivmodhi4_ep:
-;		adc	temp1, temp1	; r24
-;		adc	temp2, temp2	; r25
-;		dec	temp7
-;		brne	__udivmodhi4_loop
-;		com	temp1		; r24
-;		com	temp2		; r25
-;		movw	temp3, temp1	; r22, r24
-
-	; Meh, scale 0-816 -> 0-255 with *5/16, since it seems to be
-	; usable anyway, and this is much faster than dividing by 25
-		mov	temp3, temp1
-		mov	temp4, temp2
-		lsl	temp1
-		rol	temp2
-		lsl	temp1
-		rol	temp2
-		add	temp1, temp3
-		adc	temp2, temp4
-
+		brlo	eval_rc_not_full
+		ldi	temp1, low (POWER_RANGE*2)
+		ldi	temp2, high(POWER_RANGE*2)
+eval_rc_not_full:
 		lsr	temp2
 		ror	temp1
-		lsr	temp2
-		ror	temp1
-		lsr	temp2
-		ror	temp1
-		lsr	temp2
-		ror	temp1
-		mov	rc_duty, temp1
-		rjmp	set_new_duty
-eval_rc_stop:
-		clr	rc_duty
-		rjmp	set_new_duty
-eval_rc_full:
-		mov	rc_duty, max_pwr
+		sts	rc_duty_l, temp1
+		sts	rc_duty_h, temp2
 		rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
 ;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
@@ -738,8 +681,9 @@ update_t00:
 		cpc	temp5, zero
 		brcc	update_t90
 
-		lsr	sys_control		; limit by reducing power
-		adc	sys_control, zero
+		lsr	sys_control_h		; limit by reducing power
+		ror	sys_control_l
+		adc	sys_control_l, zero
 
 update_t90:	sts	timing_l, temp3
 		sts	timing_h, temp4
@@ -809,8 +753,12 @@ wait_OCT1_before_switch:
 
 	; don't waste time while waiting - do some controls, if indicated
 
-		cpse	sys_control, max_pwr
-		inc	sys_control
+		ldi	temp1, low(MAX_POWER)
+		cp	sys_control_l, temp1
+		ldi	temp1, high(MAX_POWER)
+		cpc	sys_control_h, temp1
+		adc	sys_control_l, zero	; increment sys_control
+		adc	sys_control_h, zero	; if not yet at MAX_POWER
 		rcall	evaluate_rc_puls
 
 OCT1_wait:	sbrc	flags0, OCT1_PENDING
@@ -838,34 +786,62 @@ set_tot2:
 
 		ret
 ;-----bko-----------------------------------------------------------------
-set_new_duty:	mov	temp1, rc_duty
-		cp	temp1, sys_control
+set_new_duty:	lds	YL, rc_duty_l
+		cp	YL, sys_control_l
+		lds	YH, rc_duty_h
+		cpc	YH, sys_control_h
 		brcs	set_new_duty10
-		mov	temp1, sys_control	; Limit PWM to sys_control
+		movw	YL, sys_control_l	; Limit duty to sys_control
 set_new_duty10:	lds	temp2, timing_x
 		tst	temp2
 		brne	set_new_duty12		; on carry - very slow timing
 		lds	temp2, timing_h		; work with the timing high byte
 		cpi	temp2, PWR_RANGE1	; timing longer than PWR_RANGE1?
 		brcs	set_new_duty25		; on carry - test next range
-set_new_duty12:	cpi	temp1, PWR_MAX_RPM1	; higher than range1 power max ?
+set_new_duty12:	cpi	YL, low(PWR_MAX_RPM1)	; higher than range1 power max ?
+		ldi	temp1, high(PWR_MAX_RPM1)
+		cpc	YH, temp1
 		brcs	set_new_duty31		; on carry - not longer, no restriction
-		ldi	temp1, PWR_MAX_RPM1	; low (range1) RPM - set PWR_MAX_RPM1
+		ldi	YL, low(PWR_MAX_RPM1)	; low (range1) RPM - set PWR_MAX_RPM1
+		ldi	YH, high(PWR_MAX_RPM1)
 		rjmp	set_new_duty31
 set_new_duty25:	cpi	temp2, PWR_RANGE2	; timing longer than PWR_RANGE2?
 		brcs	set_new_duty31		; on carry - not longer, no restriction
-		cpi	temp1, PWR_MAX_RPM2	; higher than range2 power max ?
+		cpi	YL, low(PWR_MAX_RPM2)	; higher than range2 power max ?
+		ldi	temp1, high(PWR_MAX_RPM2)
+		cpc	YH, temp1
 		brcs	set_new_duty31		; on carry - not shorter, no restriction
-		ldi	temp1, PWR_MAX_RPM2	; low (range2) RPM - set PWR_MAX_RPM2
-		rjmp	set_new_duty31
-set_new_duty31: mov	current_duty, temp1	; set new duty
-		out	OCR2, temp1
+		ldi	YL, low(PWR_MAX_RPM2)	; low (range2) RPM - set PWR_MAX_RPM2
+		ldi	YH, high(PWR_MAX_RPM2)
+set_new_duty31: 
+		cp	YL, zero
+		cpc	YH, zero
+		breq	set_new_duty_zero
+		cbr	flags1, (1<<POWER_OFF)	; atomic clear of POWER_OFF for PWM interrupt
+set_new_duty32:
+		ldi	temp1, low(MAX_POWER)
+		ldi	temp2, high(MAX_POWER)
+		sub	temp1, YL		; Calculate OFF duty
+		sbc	temp2, YH
+		breq	set_new_duty_full
+		cbr	flags1, (1<<FULL_POWER)	; atomic clear of FULL_POWER for PWM interrupt
+set_new_duty33:
+		com	YL			; Save one's complement of both
+		com	temp1			; low bytes for up-counting TCNT2
+		movw	duty_l, YL		; atomic set of new ON duty for PWM interrupt
+		movw	com_duty_l, temp1	; atomic set of new OFF duty for PWM interrupt
 		ret
+set_new_duty_full:
+		sbr	flags1, (1<<FULL_POWER)	; atomic set of FULL_POWER for PWM interrupt
+		rjmp	set_new_duty33
+set_new_duty_zero:
+		sbr	flags1, (1<<POWER_OFF)	; atomic set of POWER_OFF for PWM interrupt
+		rjmp	set_new_duty32
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
 		ldi	XL, low  (pwm_off)
 		ldi	XH, high (pwm_off)
-		movw	ZL, XL			; Atomic set (read by ISR)
+		movw	ZL, XL			; atomic set of FET for PWM interrupt
 		all_nFETs_off temp1
 		all_pFETs_off temp1
 		ret				; motor is off
@@ -895,7 +871,11 @@ motor_brake:
 		nFET_brake temp1
 brake_off_cycle:
 		rcall	evaluate_rc_puls
-		cpi	rc_duty, MIN_DUTY
+		lds	temp1, rc_duty_l
+		cpi	temp1, low(MIN_DUTY)
+		lds	temp1, rc_duty_h
+		ldi	temp2, high(MIN_DUTY)
+		cpc	temp1, temp1
 		brcs	motor_brake
 		all_nFETs_off temp1
 .endif	; MOT_BRAKE == 1
@@ -908,8 +888,11 @@ init_startup:
 wait_for_power_on:
 		rcall	motor_brake
 		rcall	evaluate_rc_puls
-		ldi	temp1, MIN_DUTY
-		cp	rc_duty, temp1
+		lds	temp1, rc_duty_l
+		cpi	temp1, low(MIN_DUTY)
+		lds	temp1, rc_duty_h
+		ldi	temp2, high(MIN_DUTY)
+		cpc	temp1, temp1
 		brcs	wait_for_power_on
 		ldi	temp1, RCP_TOT - 1	; allow some racing with t1ovfl_int
 		cp	rcpuls_timeout, temp1
@@ -921,7 +904,9 @@ wait_for_power_on:
 FETs_off_wt:	dec	temp1
 		brne	FETs_off_wt
 
-		mov	sys_control, max_pwr
+		ldi	YL, low(MAX_POWER)
+		ldi	YH, high(MAX_POWER)
+		movw	sys_control_l, YL
 
 		cbr	flags2, (1<<SCAN_TIMEOUT)
 		sts	goodies, zero
@@ -989,10 +974,9 @@ start5:		rcall	start_step
 start6:		rcall	start_step
 		rcall	com6com1
 
-		tst	current_duty		; Check if power turned off
-		brne	s6_pwr_ok
+		sbrc	flags1, POWER_OFF	; Check if power turned off
 		rjmp	init_startup
-s6_pwr_ok:
+
 		tst	rcpuls_timeout		; Check for RC timeout
 		brne	s6_test_rpm
 		rjmp	restart_control
@@ -1005,8 +989,6 @@ s6_test_rpm:	lds	temp1, timing_h		; get actual RPM reference high
 
 s6_run1:	rcall	calc_next_timing
 		rcall	set_OCT1_tot
-		ldi	temp1, MAX_POWER
-		mov	sys_control, temp1
 		rjmp	run1			; running state begins
 
 s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
@@ -1020,13 +1002,11 @@ start_0:
 		ret
 start_1:	rcall	sync_with_poweron
 		rcall	sync_with_poweron
-;		sbrc	flags2, COMP_SAVE
 		sbrs	acsr_save, ACO
 		rjmp	start_3
 
 start_2:	sbrs	flags0, OCT1_PENDING
 		rjmp	start_0
-;		sbrs	flags2, COMP_SAVE
 		sbrc	acsr_save, ACO
 		rjmp	start_2
 		sec
@@ -1034,7 +1014,6 @@ start_2:	sbrs	flags0, OCT1_PENDING
 
 start_3:	sbrs	flags0, OCT1_PENDING
 		rjmp	start_0
-;		sbrc	flags2, COMP_SAVE
 		sbrs	acsr_save, ACO
 		rjmp	start_3
 		clc
@@ -1133,7 +1112,8 @@ run6_2:		rjmp	run1			; go back to run 1
 restart_control:
 		cli				; disable all interrupts
 		rcall	switch_power_off
-		clr	sys_control
+		clr	sys_control_l
+		clr	sys_control_h
 		rcall	set_new_duty
 		rcall	wait30ms
 		rcall	beep_f3
@@ -1164,13 +1144,15 @@ wait_for_high:	sbrs	flags0, OCT1_PENDING
 		ret
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
-com1com2:	BpFET_off			; bP off
-		cpse	current_duty, zero
+com1com2:
+		BpFET_off			; bP off
+		sbrs	flags1, POWER_OFF
 		ApFET_on			; aP on
 		set_comp_phase_b temp1		; Set comparator to phase B
 		ret
 
-com2com3:	ldi	XL, low  (pwm_bfet_on)
+com2com3:
+		ldi	XL, low  (pwm_bfet_on)
 		ldi	XH, high (pwm_bfet_on)
 		movw	ZL, XL			; Atomic set (read by ISR)
 		cli
@@ -1180,13 +1162,15 @@ com2com3:	ldi	XL, low  (pwm_bfet_on)
 		set_comp_phase_c temp1		; Set comparator to phase C
 		ret
 
-com3com4:	ApFET_off			; aP off
-		cpse	current_duty, zero
+com3com4:
+		ApFET_off			; aP off
+		sbrs	flags1, POWER_OFF
 		CpFET_on			; cP on
 		set_comp_phase_a temp1		; Set comparator to phase A
 		ret
 
-com4com5:	ldi	XL, low  (pwm_afet_on)
+com4com5:
+		ldi	XL, low  (pwm_afet_on)
 		ldi	XH, high (pwm_afet_on)
 		movw	ZL, XL			; Atomic set (read by ISR)
 		cli
@@ -1196,13 +1180,15 @@ com4com5:	ldi	XL, low  (pwm_afet_on)
 		set_comp_phase_b temp1		; Set comparator to phase B
 		ret
 
-com5com6:	CpFET_off			; Cp off
-		cpse	current_duty, zero
+com5com6:
+		CpFET_off			; Cp off
+		sbrs	flags1, POWER_OFF
 		BpFET_on			; Bp on
 		set_comp_phase_c temp1		; Set comparator to phase C
 		ret
 
-com6com1:	ldi	XL, low  (pwm_cfet_on)
+com6com1:
+		ldi	XL, low  (pwm_cfet_on)
 		ldi	XH, high (pwm_cfet_on)
 		movw	ZL, XL			; Atomic set (read by ISR)
 		cli
