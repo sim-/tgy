@@ -64,6 +64,7 @@
 
 .include "tgy.inc"		; TowerPro/Turnigy ESC pinout (INT0 PPM)
 ;.include "afro.inc"		; AfroESC pinout (ICP PPM)
+;.include "bs_nfet.inc"		; HobbyKing BlueSeries with all nFETs (INT0 PPM)
 
 .equ	MOT_BRAKE   	= 0	; Enable brake
 .equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
