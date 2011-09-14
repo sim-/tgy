@@ -62,8 +62,9 @@
 ;**** **** **** **** ****
 ;**** **** **** **** ****
 
-.include "tgy.inc"		; TowerPro/Turnigy ESC pinout (INT0 PPM)
-;.include "afro.inc"		; AfroESC pinout (ICP PPM)
+.include "tgy.inc"		; TowerPro/Turnigy Basic/Plush (INT0 PPM)
+;.include "afro.inc"		; AfroESC (ICP PPM)
+;.include "bs.inc"		; HobbyKing BlueSeries *UNTESTED* (INT0 PPM)
 ;.include "bs_nfet.inc"		; HobbyKing BlueSeries with all nFETs (INT0 PPM)
 
 .equ	MOT_BRAKE   	= 0	; Enable brake
