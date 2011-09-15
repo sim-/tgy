@@ -816,17 +816,17 @@ set_new_duty25:	cpi	temp2, PWR_RANGE2	; timing longer than PWR_RANGE2?
 		ldi	YL, low(PWR_MAX_RPM2)	; low (range2) RPM - set PWR_MAX_RPM2
 		ldi	YH, high(PWR_MAX_RPM2)
 set_new_duty31: 
-		cp	YL, zero
-		cpc	YH, zero
-		breq	set_new_duty_zero
-		cbr	flags1, (1<<POWER_OFF)	; atomic clear of POWER_OFF for PWM interrupt
-set_new_duty32:
 		ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
 		breq	set_new_duty_full
 		cbr	flags1, (1<<FULL_POWER)	; atomic clear of FULL_POWER for PWM interrupt
+set_new_duty32:
+		cp	YL, zero
+		cpc	YH, zero
+		breq	set_new_duty_zero
+		cbr	flags1, (1<<POWER_OFF)	; atomic clear of POWER_OFF for PWM interrupt
 set_new_duty33:
 		com	YL			; Save one's complement of both
 		com	temp1			; low bytes for up-counting TCNT2
@@ -835,10 +835,10 @@ set_new_duty33:
 		ret
 set_new_duty_full:
 		sbr	flags1, (1<<FULL_POWER)	; atomic set of FULL_POWER for PWM interrupt
-		rjmp	set_new_duty33
+		rjmp	set_new_duty32
 set_new_duty_zero:
 		sbr	flags1, (1<<POWER_OFF)	; atomic set of POWER_OFF for PWM interrupt
-		rjmp	set_new_duty32
+		rjmp	set_new_duty33
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
 		ldi	XL, low  (pwm_off)
