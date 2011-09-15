@@ -471,16 +471,23 @@ pwm_on:
 		sbrs	flags1, POWER_OFF
 		ijmp	; Z should be set to one of the below labels
 pwm_off:
-		in	acsr_save, ACSR
 		sbrc	flags1, FULL_POWER
 		rjmp	pwm_off_exit
 		cbr	flags0, (1<<I_FET_ON)
 	; We can just turn all nFETs off as we only have one nFET on at a
-	; time, and interrupts are disabled during beeps. Doing this with
-	; three cbi instructions is 6 cycles, while in/cbr/out is 3 cycles.
+	; time. Doing this with three cbi instructions is 6 cycles, while
+	; in/cbr/out is 3 cycles.
 		all_nFETs_off	i_temp1
 pwm_off_exit:
 		mov	tcnt2h, com_duty_h
+	; We want to sample the comparator as late as possible into the ON
+	; cycle, after the FETs on the other two phases have been pulled high
+	; and low, leaving us with a clean zero crossing on the undriven phase.
+	; If sampled too early, the FETs may not have finished turning on.
+	; The FETs take at least half a microsecond to start turning off and
+	; the AVR buffers the comparator for 1-2 cycles, so this should be a
+	; good spot.
+		in	acsr_save, ACSR
 		out	SREG, i_sreg
 		out	TCNT2, com_duty_l
 		reti
