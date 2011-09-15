@@ -685,7 +685,6 @@ update_t00:
 
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
-		adc	sys_control_l, zero
 
 update_t90:	sts	timing_l, temp3
 		sts	timing_h, temp4
@@ -755,12 +754,6 @@ wait_OCT1_before_switch:
 
 	; don't waste time while waiting - do some controls, if indicated
 
-		ldi	temp1, low(MAX_POWER)
-		cp	sys_control_l, temp1
-		ldi	temp1, high(MAX_POWER)
-		cpc	sys_control_h, temp1
-		adc	sys_control_l, zero	; increment sys_control
-		adc	sys_control_h, zero	; if not yet at MAX_POWER
 		rcall	evaluate_rc_puls
 
 OCT1_wait:	sbrc	flags0, OCT1_PENDING
@@ -781,11 +774,11 @@ start_timeout:	lds	YL, wt_OCT1_tot_l
 set_tot2:
 		sts	wt_OCT1_tot_h, YH
 
-		rcall	sync_with_poweron	; wait at least 100+ microseconds
-		rcall	sync_with_poweron	; for demagnetisation - one sync may be added
 		rcall	evaluate_rc_puls
 ;		rcall	evaluate_uart
-
+		rcall	sync_with_poweron	; wait at least 100+ microseconds
+		rcall	sync_with_poweron	; for demagnetisation - one sync may be added
+		rcall	sync_with_poweron
 		ret
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
@@ -1104,6 +1097,17 @@ run6:
 
 		tst	rcpuls_timeout
 		breq	restart_control
+
+		cp	sys_control_l, zero
+		cpc	sys_control_h, zero
+		breq	run_to_start
+
+		ldi	temp1, low(MAX_POWER)
+		cp	sys_control_l, temp1
+		ldi	temp1, high(MAX_POWER)
+		cpc	sys_control_h, temp1
+		adc	sys_control_l, zero	; increment sys_control
+		adc	sys_control_h, zero	; if not yet at MAX_POWER
 
 		lds	temp1, timing_x
 		tst	temp1
