@@ -37,13 +37,14 @@
 ; so higher FET temperatures may occur! USE AT YOUR OWN RISK, and maybe see
 ; how it compares and let me know!
 ;
-; WARNING: This does not yet check temperature or voltage ADC inputs!
+; WARNING: This does not check temperature or voltage ADC inputs.
 ;
-; NOTE: PWM values are not stored inverted anymore; 0 is off, higher is on.
-;
-; NOTE: This version is using hardware 8-bit phase-correct PWM mode on timer2,
-; which operates at clk/(512-2) == 8MHz/510 == 15.686kHz, which is mostly
-; just out of audible range.
+; NOTE: This version is using hardware 16-bit capable PWM mode on timer2,
+; using a tcnt2h register to simulate the high byte, and so can operate at
+; any frequency with the resolution of the clock. POWER_RANGE set to 400
+; gives approximately 18kHz PWM output frequency due to cycles used in the
+; interrupt before reloading TCNT2. This should allow compatibilty with 8MHz
+; or 16MHz main clocks with minor adjustments.
 ;
 ; Simon Kirby <sim@simulated.ca>
 ;

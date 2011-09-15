@@ -1,25 +1,32 @@
 tgy
 ===
-tgy is Atmel AVR assembly code for older Turnigy Plush/Basic/SS, TowerPro,
-and other AVR-based 3-phase sensorless motor electronic speed control
-(ESC) boards. This work is based on Bernhard Konze's "tp-18a" code from
-October, 2004, with significant modifications. Please see tgy.asm for
-Bernhard's license.
+tgy is Atmel AVR assembly code for AVR-based 3-phase sensorless motor
+electronic speed control (ESC) boards. This work is based on Bernhard
+Konze's "tp-18a" code, with significant modifications. Please see
+tgy.asm for Bernhard's license.
 
 Features and Changes
 --------------------
-- Full 8-bit phase-correct PWM at 15.686kHz using hardware waveform
-  generation mode
+- 16-bit output PWM with full clock rate resolution (~18kHz PWM with
+  a POWER_RANGE of 400 steps)
 - Immediate PPM input to PWM output for best possible multicopter
-  stability (eg: ideal for tricopters, quadcopters, etc., but NOT where
-  where slow-start or significant current limiting is required!)
+  response (eg: ideal for tricopters, quadcopters, etc., but NOT where
+  where slow-start or really any significant current limiting is needed!)
 - Accepts 495Hz PPM update rates (minimum 5microseconds PPM low time)
 - Optimized interrupt code (very low minimum PWM and reduced full
-  throttle bump, and should go beyond 120,000 RPM now - test carefully!)
-- Configurable pin assignments by include files (eg: TowerPro/Turnigy
-  or AfroESC ICP PPM input, which seems a much more sane layout)
+  throttle bump, and work beyond 120,000 RPM now - test carefully!)
+- Configurable board pin assignments by include file
 - Improved startup (though heavy hard drives are still a bit dodgy -
   suggestions/patches welcome!)
+
+Supported Hardware
+------------------
+- TowerPro 18A, Turnigy Basic and Turnigy Plush 18A and 25A
+- AfroESC
+- HobbyKing BlueSeries w/all nFETs
+- HobbyKing BlueSeries w/pFETs (not fully tested, but should work)
+- ...any other board that uses a similar hardware configuration and
+  compatible AVR8 chip!
 
 Notes
 -----
@@ -30,10 +37,6 @@ Notes
   the pads are MOSI, MISO, SCLK, GND, VCC, and RESET. If it has 4 pads,
   it is probably a newer SiLabs-based one, for which this code will not
   work.
-- I am considering porting this to C (ala rcgroups.com renatopub's
-  port of quax' original code, "ArduEsc") and then to the SiLabs chips. 
-  It seems there is no gcc 8051 target, but sdcc might work. Pull
-  requests welcome. ;)
 - i2c support was pulled out in the fork I started with. Patches welcome,
   though all of the ifdefs before were pretty ugly.
 - I build and maintain this in Linux with avra (1.3.0 or newer); I hear
