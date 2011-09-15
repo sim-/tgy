@@ -90,6 +90,8 @@
 .equ	timeoutSTART	= 48000	; ~833 RPM
 .equ	timeoutMIN	= 36000	; ~1111 RPM
 
+.equ	ENOUGH_GOODIES	= 60	; This many start cycles without timeout will transition to running mode
+
 ;**** **** **** **** ****
 ; Register Definitions
 .def	zero		= r0		; stays at 0
@@ -147,7 +149,7 @@
 ;	.equ	COMP_SAVE	= 4	; if set ACO was high
 ;	.equ	COMP_SAVE_READY	= 5	; if acsr_save was set by PWM interrupt
 ;	.equ	STARTUP		= 6	; if set startup-phase is active
-	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
+;	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
 
 ; here the XYZ registers are placed ( r26-r31)
 
@@ -911,7 +913,6 @@ FETs_off_wt:	dec	temp1
 		ldi	YH, high(MAX_POWER)
 		movw	sys_control_l, YL
 
-		cbr	flags2, (1<<SCAN_TIMEOUT)
 		sts	goodies, zero
 
 		rcall	set_new_duty
@@ -981,19 +982,14 @@ start6:		rcall	start_step
 		rjmp	init_startup
 
 		tst	rcpuls_timeout		; Check for RC timeout
-		brne	s6_test_rpm
+		brne	s6_rcp_ok
 		rjmp	restart_control
-
-s6_test_rpm:	lds	temp1, timing_h		; get actual RPM reference high
-		cpi	temp1, PWR_RANGE_RUN
-		lds	temp1, timing_x
-		cpc	temp1, zero
-		brcc	s6_start1
-
-s6_run1:	rcall	calc_next_timing
-		rcall	set_OCT1_tot
-		rjmp	run1			; running state begins
-
+s6_rcp_ok:
+		lds     temp1, goodies
+		cpi     temp1, ENOUGH_GOODIES
+		brcc	s6_run1
+		inc     temp1
+		sts	goodies, temp1
 s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 		rjmp	start1			; go back to state 1
 
@@ -1001,10 +997,9 @@ start_step:
 		sbrc	flags0, OCT1_PENDING
 		rjmp	start_1
 start_0:
-		sbr	flags2, (1<<SCAN_TIMEOUT)
+		sts	goodies, zero
 		ret
-start_1:	rcall	sync_with_poweron
-		rcall	sync_with_poweron
+start_1:
 		sbrs	acsr_save, ACO
 		rjmp	start_3
 
@@ -1021,6 +1016,15 @@ start_3:	sbrs	flags0, OCT1_PENDING
 		rjmp	start_3
 		clc
 		ret
+
+s6_run1:
+		lds	temp1, timing_x
+		tst	temp1
+		brne	s6_start1		; timing must be fast enough to stay in run mode
+		rcall	calc_next_timing
+;		rcall	set_OCT1_tot
+		rcall	wait_OCT1_tot
+	; running state begins
 
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
