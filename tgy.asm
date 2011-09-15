@@ -145,7 +145,7 @@
 	.equ	RC_INTERVAL_OK	= 2
 ;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
 ;	.equ	COMP_SAVE	= 4	; if set ACO was high
-	.equ	COMP_SAVE_READY	= 5	; if acsr_save was set by PWM interrupt
+;	.equ	COMP_SAVE_READY	= 5	; if acsr_save was set by PWM interrupt
 ;	.equ	STARTUP		= 6	; if set startup-phase is active
 	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
 
@@ -471,7 +471,6 @@ pwm_on:
 		sbrs	flags1, POWER_OFF
 		ijmp	; Z should be set to one of the below labels
 pwm_off:
-		sbr	flags2, (1<<COMP_SAVE_READY)
 		in	acsr_save, ACSR
 		sbrc	flags1, FULL_POWER
 		rjmp	pwm_off_exit
@@ -855,12 +854,13 @@ wait_if_spike2:	dec	temp1
 		ret
 ;-----bko-----------------------------------------------------------------
 sync_with_poweron:
-		cbr	flags2, (1<<COMP_SAVE_READY)
+		ldi	temp1, 0xff
+		mov	acsr_save, temp1	; ACSR will never be 0xff
 wait_for_poweroff:
 		sbrs	flags0, OCT1_PENDING
 		ret
-		sbrs	flags2, COMP_SAVE_READY
-		rjmp	wait_for_poweroff
+		cp	acsr_save, temp1
+		breq	wait_for_poweroff
 		ret
 ;-----bko-----------------------------------------------------------------
 motor_brake:
