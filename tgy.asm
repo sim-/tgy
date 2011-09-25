@@ -1051,9 +1051,6 @@ start_2:	cp	temp1, acsr_save
 		ret
 
 s6_run1:
-		lds	temp1, timing_x
-		tst	temp1
-		brne	s6_start1		; timing must be fast enough to stay in run mode
 		rcall	calc_next_timing
 ;		rcall	set_OCT1_tot
 		rcall	wait_OCT1_tot
