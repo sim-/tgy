@@ -80,7 +80,7 @@
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
-.equ	PWR_RANGE_RUN	= 0x20	; 2048 microseconds per commutation
+.equ	PWR_RANGE_SYNC	= 0x10	; 1024 microseconds per commutation
 .equ	PWR_RANGE1	= 0x40	; 4096 microseconds per commutation
 .equ	PWR_RANGE2	= 0x20	; 2048 microseconds per commutation
 
@@ -814,9 +814,6 @@ set_tot2:
 
 		rcall	evaluate_rc_puls
 ;		rcall	evaluate_uart
-		rcall	sync_with_poweron	; wait at least 100+ microseconds
-		rcall	sync_with_poweron	; for demagnetisation - one sync may be added
-		rcall	sync_with_poweron
 		ret
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
@@ -1028,27 +1025,29 @@ s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 		rjmp	start1			; go back to state 1
 
 start_step:
-		sbrc	flags0, OCT1_PENDING
-		rjmp	start_1
-start_0:
-		sts	goodies, zero
-		ret
-start_1:
-		sbrs	acsr_save, ACO
-		rjmp	start_3
-
-start_2:	sbrs	flags0, OCT1_PENDING
-		rjmp	start_0
-		sbrc	acsr_save, ACO
-		rjmp	start_2
-		sec
-		ret
-
-start_3:	sbrs	flags0, OCT1_PENDING
-		rjmp	start_0
-		sbrs	acsr_save, ACO
-		rjmp	start_3
+		; We must wait for the low phase to pull low, the high
+		; phase to pull high and the undriven phase to demagnetize
+		; before we can get an accurate zero crossing; so, while
+		; starting, we use the value saved from the PWM interrupt
+		; right at turn-off time, which should be most accurate.
+		; If timing is slow enough, add another PWM wait to help
+		; with higher inductance motors when back-EMF is low.
+		lds	temp1, timing_h
+		cpi	temp1, PWR_RANGE_SYNC
+		ldi	temp1, timing_x
+		cpc	temp1, zero
+		brcc	start_1			; Skip second sync if fast timing
+		rcall	sync_with_poweron
+start_1:	rcall	sync_with_poweron	; Wait for PWM off
+		mov	temp1, acsr_save	; Interrupt has set acsr_save
+start_2:	cp	temp1, acsr_save
+		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
+		breq	start_2			; Loop while ACSR unchanged
 		clc
+		sbrs    acsr_save, ACO		; Copy ACO to carry flag
+		sec
+		sbrs	flags0, OCT1_PENDING
+		sts	goodies, zero		; Clear goodies if timeout
 		ret
 
 s6_run1:
