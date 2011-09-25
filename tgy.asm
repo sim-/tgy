@@ -144,7 +144,7 @@
 .def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
-	.equ	RC_INTERVAL_OK	= 2
+;	.equ	RC_INTERVAL_OK	= 2
 ;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
 ;	.equ	COMP_SAVE	= 4	; if set ACO was high
 ;	.equ	COMP_SAVE_READY	= 5	; if acsr_save was set by PWM interrupt
@@ -397,17 +397,6 @@ ext_int0:
 
 		mov	start_rcpuls_l, i_temp1
 		mov	start_rcpuls_h, i_temp2
-; test rcpulse low interval
-		cbr	flags2, (1<<RC_INTERVAL_OK) ; preset to not ok
-		lds	i_temp3, stop_rcpuls_l
-		sub	i_temp1, i_temp3
-		lds	i_temp3, stop_rcpuls_h
-		sbc	i_temp2, i_temp3
-		cpi	i_temp1, low (5)	; 200 ok for 417Hz, 5 for 495Hz
-		ldi	i_temp3, high(5)	; test range low
-		cpc	i_temp2, i_temp3
-		brlo	rcpint_fail		; throw away
-		sbr	flags2, (1<<RC_INTERVAL_OK) ; set to rc impuls value is ok !
 		rjmp	rcpint_exit
 
 rcpint_fail:	cpse	rcpuls_timeout, zero
@@ -423,10 +412,6 @@ falling_edge:
 ; get timer1 values
 		sts	stop_rcpuls_l, i_temp1	; prepare next interval evaluation
 		sts	stop_rcpuls_h, i_temp2
-
-		sbrs	flags2, RC_INTERVAL_OK
-		rjmp	rcpint_exit
-		cbr	flags2, (1<<RC_INTERVAL_OK) ; flag is evaluated
 
 		sub	i_temp1, start_rcpuls_l
 		sbc	i_temp2, start_rcpuls_h
