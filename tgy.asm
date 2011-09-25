@@ -822,13 +822,12 @@ set_new_duty:	lds	YL, rc_duty_l
 		cpc	YH, sys_control_h
 		brcs	set_new_duty10
 		movw	YL, sys_control_l	; Limit duty to sys_control
-set_new_duty10:	lds	temp2, timing_x
-		tst	temp2
-		brne	set_new_duty12		; on carry - very slow timing
-		lds	temp2, timing_h		; work with the timing high byte
+set_new_duty10:	lds	temp2, timing_h
 		cpi	temp2, PWR_RANGE1	; timing longer than PWR_RANGE1?
+		lds	temp1, timing_x
+		cpc	temp1, zero
 		brcs	set_new_duty25		; on carry - test next range
-set_new_duty12:	cpi	YL, low(PWR_MAX_RPM1)	; higher than range1 power max ?
+		cpi	YL, low(PWR_MAX_RPM1)	; higher than range1 power max ?
 		ldi	temp1, high(PWR_MAX_RPM1)
 		cpc	YH, temp1
 		brcs	set_new_duty31		; on carry - not longer, no restriction
@@ -889,9 +888,8 @@ sync_with_poweron:
 		ldi	temp1, 0xff
 		mov	acsr_save, temp1	; ACSR will never be 0xff
 wait_for_poweroff:
-		sbrs	flags0, OCT1_PENDING
-		ret
 		cp	acsr_save, temp1
+		sbrc	flags0, OCT1_PENDING
 		breq	wait_for_poweroff
 		ret
 ;-----bko-----------------------------------------------------------------
