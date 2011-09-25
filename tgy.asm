@@ -70,7 +70,7 @@
 
 .equ	MOT_BRAKE   	= 0	; Enable brake
 .equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
-.equ	RCP_TOT		= 32	; Number of timer1 overflows before considering rc pulse lost
+.equ	RCP_TOT		= 16	; Number of timer1 overflows before considering rc pulse lost
 
 .equ	MIN_RC_PULS	= 800	; Less than this is illegal pulse length
 .equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
@@ -100,8 +100,8 @@
 .def	duty_h		= r3		; on duty cycle high
 .def	com_duty_l 	= r4		; off duty cycle low, one's complement
 .def	com_duty_h	= r5		; off duty cycle high
-.def	start_rcpuls_l	= r6
-.def	start_rcpuls_h	= r7
+.def	rcpuls_l	= r6
+.def	rcpuls_h	= r7
 .def	tcnt2h		= r8
 ;.def		 	= r9
 .def	uart_cnt	= r10
@@ -135,7 +135,7 @@
 	.equ	POWER_OFF	= 0	; switch fets on disabled
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 ;	.equ	CALC_NEXT_OCT1	= 2	; calculate OCT1 offset, when wait_OCT1_before_switch is called
-	.equ	RC_PULS_UPDATED	= 3	; new rc-puls value available
+	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 ;	.equ	EVAL_RC_PULS	= 4	; if set, new rc puls is evaluated, while waiting for OCT1
 ;	.equ	EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
 ;	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
@@ -180,10 +180,8 @@ wt_OCT1_tot_h:	.byte	1
 zero_wt_l:	.byte	1
 zero_wt_h:	.byte	1
 
-stop_rcpuls_l:	.byte	1
-stop_rcpuls_h:	.byte	1
-new_rcpuls_l:	.byte	1
-new_rcpuls_h:	.byte	1
+start_rcpuls_l:	.byte	1
+start_rcpuls_h:	.byte	1
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 
@@ -338,17 +336,16 @@ control_start:
 ; init rc-puls
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
+		clr	YL
+		clr	YH
 i_rc_puls1:	ldi	temp3, 10		; wait for this count of receiving power off
-i_rc_puls2:	sbrs	flags1, RC_PULS_UPDATED
-		rjmp	i_rc_puls2
-		lds	temp1, new_rcpuls_l
-		lds	temp2, new_rcpuls_h
-		cbr	flags1, (1<<RC_PULS_UPDATED) ; rc impuls value is read out
-		subi	temp1, low  (MIN_RC_PULS) ; valid RC pulse?
-		sbci	temp2, high (MIN_RC_PULS)
-		brcs	i_rc_puls1		; no - reset counter
-		subi	temp1, low  (STOP_RC_PULS - MIN_RC_PULS) ; power off received?
-		sbci	temp2, high (STOP_RC_PULS - MIN_RC_PULS)
+i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
+		cp	temp1, zero
+		cpc	temp2, zero
+		breq	i_rc_puls2		; Loop while pulse length is 0
+		movw	rcpuls_l, YL		; Atomic clear of rc pulse length
+		subi	temp1, low  (STOP_RC_PULS) ; power off received?
+		sbci	temp2, high (STOP_RC_PULS)
 		brcc	i_rc_puls1		; no - reset counter
 		dec	temp3			; yes - decrement counter
 		brne	i_rc_puls2		; repeat until zero
@@ -394,9 +391,9 @@ ext_int0:
 		rjmp	falling_edge		; bit is clear = falling edge
 ; rc impuls is at high state
 		rcp_int_falling_edge i_temp3	; set next int to falling edge
-
-		mov	start_rcpuls_l, i_temp1
-		mov	start_rcpuls_h, i_temp2
+; save pulse start time
+		sts	start_rcpuls_l, i_temp1
+		sts	start_rcpuls_h, i_temp2
 		rjmp	rcpint_exit
 
 rcpint_fail:	cpse	rcpuls_timeout, zero
@@ -406,19 +403,11 @@ rcpint_fail:	cpse	rcpuls_timeout, zero
 ; rc impuls is at low state
 falling_edge:
 		rcp_int_rising_edge i_temp3	; set next int to rising edge
-		sbrc	flags1, RC_PULS_UPDATED
-		rjmp	rcpint_exit
-
-; get timer1 values
-		sts	stop_rcpuls_l, i_temp1	; prepare next interval evaluation
-		sts	stop_rcpuls_h, i_temp2
-
-		sub	i_temp1, start_rcpuls_l
-		sbc	i_temp2, start_rcpuls_h
-
-; save impuls length
-		sts	new_rcpuls_l, i_temp1
-		sts	new_rcpuls_h, i_temp2
+; calculate pulse length
+		lds	i_temp3, start_rcpuls_l
+		sub	i_temp1, i_temp3
+		lds	i_temp3, start_rcpuls_h
+		sbc	i_temp2, i_temp3
 		cpi	i_temp1, low (MAX_RC_PULS)
 		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
 		cpc	i_temp2, i_temp3
@@ -427,10 +416,15 @@ falling_edge:
 		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
 		cpc	i_temp2, i_temp3
 		brlo	rcpint_fail			; throw away
-		sbr	flags1, (1<<RC_PULS_UPDATED) ; set to rc impuls value is ok !
-		mov	i_temp1, rcpuls_timeout
+		cp	rcpuls_l, i_temp1
+		cpc	rcpuls_h, i_temp2
+		breq	rcpint_same
+		mov	rcpuls_l, i_temp1
+		mov	rcpuls_h, i_temp2
+		sbr	flags1, (1<<RC_PULS_UPDATED)
+rcpint_same:	mov	i_temp1, rcpuls_timeout
 		cpi	i_temp1, RCP_TOT
-		adc	rcpuls_timeout, zero
+		adc	rcpuls_timeout, zero	; increment if not at RCP_TOT
 rcpint_exit:	out	SREG, i_sreg
 		reti
 
@@ -603,9 +597,8 @@ beep2_BpCn22:	in	temp1, TCNT0
 evaluate_rc_puls:
 		sbrs	flags1, RC_PULS_UPDATED
 		ret
-		lds	temp1, new_rcpuls_l
-		lds	temp2, new_rcpuls_h
-		cbr	flags1, (1<<RC_PULS_UPDATED) ; rc impuls value is read out
+		cbr	flags1, (1<<RC_PULS_UPDATED)
+		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		subi	temp1, low  (STOP_RC_PULS)
 		sbci	temp2, high (STOP_RC_PULS)
 		brcc	eval_rc_nonzero
