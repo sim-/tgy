@@ -852,6 +852,14 @@ set_new_duty31:	cbr	flags1, (1<<POWER_OFF)+(1<<FULL_POWER)
 		cpc	YH, zero
 		breq	set_new_duty_zero
 		; Not off and not full power
+		; Halve PWM frequency when starting
+		lds	temp3, goodies
+		cpi     temp3, ENOUGH_GOODIES
+		brcc	set_new_duty_set
+		lsl	temp1
+		rol	temp2
+		lsl	YL
+		rol	YH
 set_new_duty_set:
 		com	YL			; Save one's complement of both
 		com	temp1			; low bytes for up-counting TCNT2
