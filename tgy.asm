@@ -90,7 +90,7 @@
 .equ	timeoutSTART	= 48000	; ~833 RPM
 .equ	timeoutMIN	= 36000	; ~1111 RPM
 
-.equ	ENOUGH_GOODIES	= 60	; This many start cycles without timeout will transition to running mode
+.equ	ENOUGH_GOODIES	= 16	; This many start cycles without timeout will transition to running mode
 
 ;**** **** **** **** ****
 ; Register Definitions
