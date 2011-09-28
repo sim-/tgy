@@ -479,12 +479,13 @@ pwm_afet_on:
 		out	TCNT2, duty_l
 		reti
 pwm_afet_off:
-		AnFET_off		; This instruction skipped during FULL_POWER
 		mov	ZL, XH
 		cpse	com_duty_h, zero
 		ldi	ZL, low(pwm_on_high)
 		mov	tcnt2h, com_duty_h
 		in	acsr_save, ACSR
+		sbrs	flags1, FULL_POWER
+		AnFET_off
 		out	TCNT2, com_duty_l
 		reti
 
@@ -497,12 +498,13 @@ pwm_bfet_on:
 		out	TCNT2, duty_l
 		reti
 pwm_bfet_off:
-		BnFET_off		; This instruction skipped during FULL_POWER
 		mov	ZL, XH
 		cpse	com_duty_h, zero
 		ldi	ZL, low(pwm_on_high)
 		mov	tcnt2h, com_duty_h
 		in	acsr_save, ACSR
+		sbrs	flags1, FULL_POWER
+		BnFET_off
 		out	TCNT2, com_duty_l
 		reti
 
@@ -515,12 +517,13 @@ pwm_cfet_on:
 		out	TCNT2, duty_l
 		reti
 pwm_cfet_off:
-		CnFET_off		; This instruction skipped during FULL_POWER
 		mov	ZL, XH
 		cpse	com_duty_h, zero
 		ldi	ZL, low(pwm_on_high)
 		mov	tcnt2h, com_duty_h
 		in	acsr_save, ACSR
+		sbrs	flags1, FULL_POWER
+		CnFET_off
 		out	TCNT2, com_duty_l
 		reti
 
@@ -1230,32 +1233,27 @@ com6com1_reti:	reti				; Return and enable interrupts
 com_nfet_step:
 	; Update PWM nFET vectors and return with interrupts disabled
 	; if immediate FET ON switching is to be performed.
-		movw	YL, XL			; Back up old ON/OFF vectors
 		sbrs	flags1, POWER_OFF
 		rjmp	com_nfet_step1
 		inc	temp2			; Skip FET ON instruction
 		movw	XL, temp1		; Load new vectors
 		mov	ZL, XL			; Set next vector to this FET OFF
 		ret				; Return with interrupts enabled
-com_nfet_step1:	sbrs	flags1, FULL_POWER
-		rjmp	com_nfet_step2
-		inc	temp1			; Skip FET OFF instruction
+com_nfet_step1:	movw	YL, XL			; Back up old ON/OFF vectors
 		cli				; Avoid racing with PWM interrupt
 		movw	XL, temp1		; Load new vectors
-		mov	ZL, XH			; Set next vector to this FET ON
-		ret				; Return with interrupts disabled
-com_nfet_step2:	cli				; Avoid racing with PWM interrupt
-		movw	XL, temp1		; Load new vectors
-		cp	ZL, YL			; Waiting for off?
-		brne	com_nfet_step3
+		cp	ZL, YL			; Waiting for old off?
+		brne	com_nfet_step2
 		mov	ZL, XL			; Update vector to this FET OFF
 		ret				; Return with interrupts disabled
-com_nfet_step3:	cp	ZL, YH			; Waiting for on?
+com_nfet_step2:	cp	ZL, YH			; Waiting for old on?
 		brne	com_nfet_step4
 		mov	ZL, XH			; Update vector to this FET ON
-com_nfet_reti:	reti				; Return with interrupts enabled
+com_nfet_step3:	sbrs	flags1, FULL_POWER	; FET would be on if FULL_POWER
+		reti				; Return with interrupts enabled
+		ret				; Return with interrupts disabled
 com_nfet_step4:	cpi	ZL, low(pwm_off_high)	; Waiting for off high byte?
-		brne	com_nfet_reti		; If not, FET should be off
+		brne	com_nfet_step3		; If not, FET should be off
 		ret				; Return with interrupts disabled
 
 .exit
