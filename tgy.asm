@@ -63,10 +63,17 @@
 ;**** **** **** **** ****
 ;**** **** **** **** ****
 
+; The following only works with avra or avrasm2.
+; For avrasm32, just comment out all but the include you need.
+.if defined(afro_esc)
+.include "afro.inc"		; AfroESC (ICP PPM)
+.elif defined(bs_esc)
+.include "bs.inc"		; HobbyKing BlueSeries *UNTESTED* (INT0 PPM)
+.elif defined(bs_nfet_esc)
+.include "bs_nfet.inc"		; HobbyKing BlueSeries with all nFETs (INT0 PPM)
+.else
 .include "tgy.inc"		; TowerPro/Turnigy Basic/Plush (INT0 PPM)
-;.include "afro.inc"		; AfroESC (ICP PPM)
-;.include "bs.inc"		; HobbyKing BlueSeries *UNTESTED* (INT0 PPM)
-;.include "bs_nfet.inc"		; HobbyKing BlueSeries with all nFETs (INT0 PPM)
+.endif
 
 .equ	MOT_BRAKE   	= 0	; Enable brake
 .equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
