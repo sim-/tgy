@@ -57,11 +57,11 @@
 ; 8K Bytes of In-System Self-Programmable Flash
 ; 512 Bytes EEPROM
 ; 1K Byte Internal SRAM
-;**** **** **** **** ****
-;**** **** **** **** ****
-; fuses must be set to internal calibrated oscillator = 8 mhz
-;**** **** **** **** ****
-;**** **** **** **** ****
+;
+; Normal fuses for internal oscillator at 8 MHz are lfuse=0xa4 hfuse=0xdf,
+; although we set OSCCAL to actually run at about 16 MHz. Boards with all
+; nFETs should probably set lfuse=0x84 to avoid delaying inverted FET off.
+; Boards with external 16MHz resonators can set lfuse=0x9f.
 
 ; The following only works with avra or avrasm2.
 ; For avrasm32, just comment out all but the include you need.
@@ -87,17 +87,19 @@
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
-.equ	PWR_RANGE_SYNC	= 0x20	; 1024 microseconds per commutation
+.equ	PWR_RANGE_RUN	= 0x20	; 1024 microseconds per commutation
 .equ	PWR_RANGE1	= 0x80	; 4096 microseconds per commutation
 .equ	PWR_RANGE2	= 0x40	; 2048 microseconds per commutation
 
+.equ	PWR_MIN_START	= (POWER_RANGE/8) ; Power limit until running mode
+.equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit until running mode
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than PWR_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than PWR_RANGE2
 
 .equ	timeoutSTART	= 65535	; 8192 microseconds per commutation
 .equ	timeoutMIN	= 42000	; 5250 microseconds per commutation
 
-.equ	ENOUGH_GOODIES	= 16	; This many start cycles without timeout will transition to running mode
+.equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 
 ;**** **** **** **** ****
 ; Register Definitions
@@ -813,7 +815,7 @@ set_new_duty31:	ldi	temp1, low(MAX_POWER)
 		; Not off and not full power
 		; Halve PWM frequency when starting
 		lds	temp3, goodies
-		cpi     temp3, ENOUGH_GOODIES
+		cpi	temp3, ENOUGH_GOODIES
 		brcc	set_new_duty_set
 		lsl	temp1
 		rol	temp2
@@ -910,17 +912,16 @@ wait_for_power_on:
 FETs_off_wt:	dec	temp1
 		brne	FETs_off_wt
 
-		ldi	YL, low(MAX_POWER)
-		ldi	YH, high(MAX_POWER)
-		movw	sys_control_l, YL
+		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
+		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
+		movw	sys_control_l, YL	; align to a timing harmonic
 
 		sts	goodies, zero
 
 		RED_off
 
 		rcall	set_all_timings
-		rcall	start_timeout
-		rcall	set_new_duty		; Clears POWER_OFF, sets duty
+		rcall	start_timeout		; Clears POWER_OFF, sets duty
 
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
@@ -987,31 +988,48 @@ start6:		rcall	start_step
 		brne	s6_rcp_ok
 		rjmp	restart_control
 s6_rcp_ok:
-		lds     temp1, goodies
-		cpi     temp1, ENOUGH_GOODIES
+		; For low KV motors or with low voltage, we need a check
+		; for a lot of start cycles without timeout so that we can
+		; transition to running mode even if timing never becomes
+		; fast enough.
+		lds	temp1, goodies
+		cpi	temp1, ENOUGH_GOODIES
 		brcc	s6_run1
-		inc     temp1
+		inc	temp1
 		sts	goodies, temp1
+		; With higher KV motors or high voltage, we need a check
+		; for timing to transition immediately to running mode so
+		; that we don't lose timing in the start loop.
+		lds	temp1, timing_h		; get actual RPM reference high
+		cpi	temp1, PWR_RANGE_RUN
+		lds	temp1, timing_x
+		cpc	temp1, zero
+		brcs	s6_run1
+
+		movw	YL, sys_control_l
+		cpi	YL, low (PWR_MAX_START)
+		ldi	temp1, high(PWR_MAX_START)
+		cpc	YH, temp1
+		brcc	s6_start1
+		; Build up sys_control to MAX_POWER in steps.
+		; This only limits initial start ramp-up; once running,
+		; this should stay at MAX_POWER unless timing is lost.
+		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 15) / 16
+		movw	sys_control_l, YL
+
 s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 		rjmp	start1			; go back to state 1
 
 start_step:
 		rcall	sync_with_poweron
 		rcall	sync_with_poweron
-		rcall	sync_with_poweron
 		mov	temp2, acsr_save	; Interrupt has set acsr_save
 		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
-		rcall	sync_with_poweron
 start_2:	cp	temp2, acsr_save
 		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
 		breq	start_2			; Loop while ACSR unchanged
-		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
-		rcall	sync_with_poweron
-		cp	temp2, acsr_save
-		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
-		breq	start_2
 		clc
-		sbrs    acsr_save, ACO		; Copy ACO to carry flag
+		sbrs	acsr_save, ACO		; Copy ACO to carry flag
 		sec
 		sbrs	flags0, OCT1_PENDING
 		sts	goodies, zero		; Clear goodies if timeout
@@ -1102,19 +1120,30 @@ run6:
 		cpc	sys_control_h, zero
 		breq	run_to_start
 
-		ldi	temp1, low(MAX_POWER)
-		cp	sys_control_l, temp1
-		ldi	temp1, high(MAX_POWER)
-		cpc	sys_control_h, temp1
-		adc	sys_control_l, zero	; increment sys_control
-		adc	sys_control_h, zero	; if not yet at MAX_POWER
-
 		lds	temp1, timing_x
-		tst	temp1
-		breq	run6_2			; higher than 610 RPM if zero
-run_to_start:	rjmp	init_startup
+		cpse	temp1, zero		; higher than 610 RPM if zero
+		rjmp	start1
 
-run6_2:		rjmp	run1			; go back to run 1
+		lds	temp1, goodies
+		cpi	temp1, ENOUGH_GOODIES
+		brcc	run6_1
+		inc	temp1
+		sts	goodies, temp1
+		rjmp	run1
+
+run6_1:		movw	YL, sys_control_l
+		cpi	YL, low (MAX_POWER)
+		ldi	temp1, high(MAX_POWER)
+		cpc	YH, temp1
+		brcc	run6_2
+		; Build up sys_control to MAX_POWER in steps.
+		; This only limits initial start ramp-up; once running,
+		; this should stay at MAX_POWER unless timing is lost.
+		adiw	YL, (POWER_RANGE + 31) / 32
+		movw	sys_control_l, YL
+run6_2:		rjmp	run1
+
+run_to_start:	rjmp	init_startup
 
 restart_control:
 		cli				; disable all interrupts
