@@ -576,7 +576,7 @@ beep2_BpCn22:	in	temp1, TCNT0
 ;-----bko-----------------------------------------------------------------
 evaluate_rc_puls:
 		sbrs	flags1, RC_PULS_UPDATED
-		ret
+		rjmp	set_new_duty
 		cbr	flags1, (1<<RC_PULS_UPDATED)
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		subi	temp1, low  (STOP_RC_PULS*2)
@@ -712,10 +712,11 @@ update_t99:
 
 		ret
 ;-----bko-----------------------------------------------------------------
-calc_next_timing:
+calc_next_timing_and_wait:
 		lds	YL, wt_comp_scan_l	; holds wait-before-scan value
 		lds	YH, wt_comp_scan_h
-		rjmp	update_timing
+		rcall	update_timing
+		rcall	evaluate_rc_puls
 
 wait_OCT1_tot:	sbrc	flags0, OCT1_PENDING
 		rjmp	wait_OCT1_tot
@@ -1017,9 +1018,7 @@ start_2:	cp	temp2, acsr_save
 		ret
 
 s6_run1:
-		rcall	calc_next_timing
-;		rcall	set_OCT1_tot
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 	; running state begins
 
 ;-----bko-----------------------------------------------------------------
@@ -1035,8 +1034,7 @@ run1:
 
 		rcall	wait_OCT1_before_switch
 		rcall	com1com2
-		rcall	calc_next_timing
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 
 ; run 2 = A(p-on) + C(n-choppered) - comparator B evaluated
 ; out_cB changes from high to low
@@ -1048,8 +1046,7 @@ run2:
 
 		rcall	wait_OCT1_before_switch
 		rcall	com2com3
-		rcall	calc_next_timing
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 
 ; run 3 = A(p-on) + B(n-choppered) - comparator C evaluated
 ; out_cC changes from low to high
@@ -1061,8 +1058,7 @@ run3:
 
 		rcall	wait_OCT1_before_switch
 		rcall	com3com4
-		rcall	calc_next_timing
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 
 ; run 4 = C(p-on) + B(n-choppered) - comparator A evaluated
 ; out_cA changes from high to low
@@ -1073,8 +1069,7 @@ run4:
 
 		rcall	wait_OCT1_before_switch
 		rcall	com4com5
-		rcall	calc_next_timing
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 
 ; run 5 = C(p-on) + A(n-choppered) - comparator B evaluated
 ; out_cB changes from low to high
@@ -1086,8 +1081,7 @@ run5:
 
 		rcall	wait_OCT1_before_switch
 		rcall	com5com6
-		rcall	calc_next_timing
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 
 ; run 6 = B(p-on) + A(n-choppered) - comparator C evaluated
 ; out_cC changes from high to low
@@ -1099,8 +1093,7 @@ run6:
 
 		rcall	wait_OCT1_before_switch
 		rcall	com6com1
-		rcall	calc_next_timing
-		rcall	wait_OCT1_tot
+		rcall	calc_next_timing_and_wait
 
 		tst	rcpuls_timeout
 		breq	restart_control
