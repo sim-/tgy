@@ -530,7 +530,7 @@ beep:		clr	temp1
 		BpFET_on		; BpFET on
 		AnFET_on		; CnFET on
 beep_BpCn10:	in	temp1, TCNT0
-		cpi	temp1, 64		; 32µs on (was 32)
+		cpi	temp1, 32		; 32µs on (was 32)
 		brlo	beep_BpCn10
 		BpFET_off		; BpFET off
 		AnFET_off		; CnFET off
