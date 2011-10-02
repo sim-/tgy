@@ -990,24 +990,20 @@ s6_start1:	rcall	start_timeout		; need to be here for a correct temp1=comp_state
 		rjmp	start1			; go back to state 1
 
 start_step:
-		; We must wait for the low phase to pull low, the high
-		; phase to pull high and the undriven phase to demagnetize
-		; before we can get an accurate zero crossing; so, while
-		; starting, we use the value saved from the PWM interrupt
-		; right at turn-off time, which should be most accurate.
-		; If timing is slow enough, add another PWM wait to help
-		; with higher inductance motors when back-EMF is low.
-		lds	temp1, timing_h
-		cpi	temp1, PWR_RANGE_SYNC
-		ldi	temp1, timing_x
-		cpc	temp1, zero
-		brcc	start_1			; Skip second sync if fast timing
 		rcall	sync_with_poweron
-start_1:	rcall	sync_with_poweron	; Wait for PWM off
-		mov	temp1, acsr_save	; Interrupt has set acsr_save
-start_2:	cp	temp1, acsr_save
+		rcall	sync_with_poweron
+		rcall	sync_with_poweron
+		mov	temp2, acsr_save	; Interrupt has set acsr_save
+		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
+		rcall	sync_with_poweron
+start_2:	cp	temp2, acsr_save
 		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
 		breq	start_2			; Loop while ACSR unchanged
+		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
+		rcall	sync_with_poweron
+		cp	temp2, acsr_save
+		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
+		breq	start_2
 		clc
 		sbrs    acsr_save, ACO		; Copy ACO to carry flag
 		sec
