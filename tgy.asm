@@ -579,21 +579,21 @@ evaluate_rc_puls:
 		rjmp	set_new_duty
 		cbr	flags1, (1<<RC_PULS_UPDATED)
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
-		subi	temp1, low  (STOP_RC_PULS*2)
-		sbci	temp2, high (STOP_RC_PULS*2)
+		lsr	temp2			; Halve microsecond input
+		ror	temp1
+		subi	temp1, low  (STOP_RC_PULS)
+		sbci	temp2, high (STOP_RC_PULS)
 		brcc	eval_rc_nonzero
 		clr	temp1
 		clr	temp2
 eval_rc_nonzero:
-		cpi	temp1, low (POWER_RANGE*2)
-		ldi	temp3, high(POWER_RANGE*2)
+		cpi	temp1, low (MAX_POWER)
+		ldi	temp3, high(MAX_POWER)
 		cpc	temp2, temp3
 		brlo	eval_rc_not_full
-		ldi	temp1, low (POWER_RANGE*2)
-		ldi	temp2, high(POWER_RANGE*2)
+		ldi	temp1, low (MAX_POWER)
+		ldi	temp2, high(MAX_POWER)
 eval_rc_not_full:
-		lsr	temp2			; Halve microsecond input
-		ror	temp1
 		sts	rc_duty_l, temp1
 		sts	rc_duty_h, temp2
 		rjmp	set_new_duty
