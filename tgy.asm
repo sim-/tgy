@@ -83,19 +83,19 @@
 .equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 
-.equ	POWER_RANGE	= 400	; Number of PWM steps (if adjusted, see scaling in evaluate_rc_puls)
+.equ	POWER_RANGE	= 800	; Number of PWM steps (if adjusted, see scaling in evaluate_rc_puls)
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
-.equ	PWR_RANGE_SYNC	= 0x10	; 1024 microseconds per commutation
-.equ	PWR_RANGE1	= 0x40	; 4096 microseconds per commutation
-.equ	PWR_RANGE2	= 0x20	; 2048 microseconds per commutation
+.equ	PWR_RANGE_SYNC	= 0x20	; 1024 microseconds per commutation
+.equ	PWR_RANGE1	= 0x80	; 4096 microseconds per commutation
+.equ	PWR_RANGE2	= 0x40	; 2048 microseconds per commutation
 
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than PWR_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than PWR_RANGE2
 
-.equ	timeoutSTART	= 48000	; ~833 RPM
-.equ	timeoutMIN	= 36000	; ~1111 RPM
+.equ	timeoutSTART	= 65535	; 8192 microseconds per commutation
+.equ	timeoutMIN	= 42000	; 5250 microseconds per commutation
 
 .equ	ENOUGH_GOODIES	= 16	; This many start cycles without timeout will transition to running mode
 
@@ -310,8 +310,8 @@ clear_ram:	st	X+, zero
 		rcall	switch_power_off
 		rcall	set_new_duty
 
-	; timer0: clk/1 for beep control and waiting
-		ldi	temp1, (1<<CS00)
+	; timer0: clk/8 for beep control and waiting
+		ldi	temp1, (1<<CS01)
 		out	TCCR0, temp1
 
 	; timer1: clk/8 for commutation control, RC pulse measurement
@@ -322,9 +322,14 @@ clear_ram:	st	X+, zero
 		ldi	temp1, (1<<CS20)
 		out	TCCR2, temp1
 
-	; startup beeps
+	; Set clock to almost 16MHz -- this should be stable provided we do
+	; not write to the EEPROM or flash unless we revert OSCCAL to 0x9f
 		rcall	wait260ms	; wait a while
+		ldi	temp1, 0xff
+		out	OSCCAL, temp1
+		rcall	wait30ms
 
+	; startup beeps
 		rcall	beep_f1
 		rcall	wait30ms
 		rcall	beep_f2
@@ -354,8 +359,8 @@ i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		cpc	temp2, zero
 		breq	i_rc_puls2		; Loop while pulse length is 0
 		movw	rcpuls_l, YL		; Atomic clear of rc pulse length
-		subi	temp1, low  (STOP_RC_PULS) ; power off received?
-		sbci	temp2, high (STOP_RC_PULS)
+		subi	temp1, low  (STOP_RC_PULS*2) ; power off received?
+		sbci	temp2, high (STOP_RC_PULS*2)
 		brcc	i_rc_puls1		; no - reset counter
 		dec	temp3			; yes - decrement counter
 		brne	i_rc_puls2		; repeat until zero
@@ -418,12 +423,12 @@ falling_edge:
 		sub	i_temp1, i_temp3
 		lds	i_temp3, start_rcpuls_h
 		sbc	i_temp2, i_temp3
-		cpi	i_temp1, low (MAX_RC_PULS)
-		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
+		cpi	i_temp1, low (MAX_RC_PULS*2)
+		ldi	i_temp3, high(MAX_RC_PULS*2)	; test range high
 		cpc	i_temp2, i_temp3
 		brsh	rcpint_fail			; throw away
-		cpi	i_temp1, low (MIN_RC_PULS)
-		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
+		cpi	i_temp1, low (MIN_RC_PULS*2)
+		ldi	i_temp3, high(MIN_RC_PULS*2)	; test range low
 		cpc	i_temp2, i_temp3
 		brlo	rcpint_fail			; throw away
 		cp	rcpuls_l, i_temp1
@@ -525,11 +530,11 @@ beep:		clr	temp1
 		BpFET_on		; BpFET on
 		AnFET_on		; CnFET on
 beep_BpCn10:	in	temp1, TCNT0
-		cpi	temp1, 127		; 32탎 on (was 32)
+		cpi	temp1, 64		; 32탎 on (was 32)
 		brlo	beep_BpCn10
 		BpFET_off		; BpFET off
 		AnFET_off		; CnFET off
-		ldi	temp3, 64		; 2040탎 off (was 8)
+		ldi	temp3, 16		; 2040탎 off (was 8)
 beep_BpCn12:	clr	temp1
 		out	TCNT0, temp1
 beep_BpCn13:	in	temp1, TCNT0
@@ -542,7 +547,7 @@ beep_BpCn13:	in	temp1, TCNT0
 		ret
 
 wait30ms:	ldi	temp2, 15
-beep_BpCn20:	ldi	temp3, 64	; was 8
+beep_BpCn20:	ldi	temp3, 16	; was 8
 beep_BpCn21:	clr	temp1
 		out	TCNT0, temp1
 		out	TIFR, temp1
@@ -557,7 +562,7 @@ beep_BpCn22:	in	temp1, TIFR
 
 	; 128 periods = 261ms silence
 wait260ms:	ldi	temp2, 128
-beep2_BpCn20:	ldi	temp3, 64	; was 8
+beep2_BpCn20:	ldi	temp3, 16	; was 8
 beep2_BpCn21:	clr	temp1
 		out	TCNT0, temp1
 beep2_BpCn22:	in	temp1, TCNT0
@@ -574,8 +579,8 @@ evaluate_rc_puls:
 		ret
 		cbr	flags1, (1<<RC_PULS_UPDATED)
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
-		subi	temp1, low  (STOP_RC_PULS)
-		sbci	temp2, high (STOP_RC_PULS)
+		subi	temp1, low  (STOP_RC_PULS*2)
+		sbci	temp2, high (STOP_RC_PULS*2)
 		brcc	eval_rc_nonzero
 		clr	temp1
 		clr	temp2
@@ -846,7 +851,7 @@ switch_power_off:
 		out	SREG, temp1
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
-wait_if_spike:	ldi	temp1, 4
+wait_if_spike:	ldi	temp1, 8
 wait_if_spike2:	dec	temp1
 		brne	wait_if_spike2
 		ret
