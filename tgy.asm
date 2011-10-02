@@ -127,6 +127,9 @@
 .def	i_temp2		= r15		; interrupt temporary (limited operations)
 .def	i_temp3		= r22		; interrupt temporary
 
+.def	nfet_on		= r21
+.def	nfet_off	= r25
+
 .def	flags0	= r23	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrunpt is pending
 ;	.equ	UB_LOW 		= 1	; set if accu voltage low
@@ -148,7 +151,7 @@
 ;	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
 ;	.equ	EVAL_UART	= 7	; if set, next PWM on should look for uart
 
-.def	flags2	= r25
+;.def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
 ;	.equ	RC_INTERVAL_OK	= 2
@@ -160,8 +163,8 @@
 
 ; here the XYZ registers are placed ( r26-r31)
 
-; XL: Next PWM nFET OFF vector
-; XH: Next PWM nFET ON vector
+; XL: I/O address of PWM nFET port
+; XH: I/O address of PWM nFET port
 ; YL: general temporary
 ; YH: general temporary
 ; ZL: Next PWM interrupt vector (low)
@@ -466,76 +469,38 @@ pwm_on_high:
 		in	i_sreg, SREG
 		dec	tcnt2h
 		brne	pwm_on_again
-		mov	ZL, XH
+		ldi	ZL, pwm_on
 pwm_on_again:	out	SREG, i_sreg
 		reti
 pwm_off_high:
 		in	i_sreg, SREG
 		dec	tcnt2h
 		brne	pwm_off_again
-		mov	ZL, XL
+		ldi	ZL, pwm_off
 pwm_off_again:	out	SREG, i_sreg
-pwm_off:	reti
+		reti
 
-pwm_afet_on:
-		AnFET_on		; This instruction skipped during POWER_OFF
-		mov	ZL, XL
+pwm_on:
+		st	X, nfet_on
+		ldi	ZL, pwm_off
 		cpse	duty_h, zero
-		ldi	ZL, low(pwm_off_high)
+		ldi	ZL, pwm_off_high
 		mov	tcnt2h, duty_h
 		out	TCNT2, duty_l
 		reti
-pwm_afet_off:
-		mov	ZL, XH
+
+pwm_off:
+		ldi	ZL, pwm_on
 		cpse	com_duty_h, zero
-		ldi	ZL, low(pwm_on_high)
+		ldi	ZL, pwm_on_high
 		mov	tcnt2h, com_duty_h
 		in	acsr_save, ACSR
-		sbrs	flags1, FULL_POWER
-		AnFET_off
+		st	X, nfet_off
 		out	TCNT2, com_duty_l
 		reti
 
-pwm_bfet_on:
-		BnFET_on		; This instruction skipped during POWER_OFF
-		mov	ZL, XL
-		cpse	duty_h, zero
-		ldi	ZL, low(pwm_off_high)
-		mov	tcnt2h, duty_h
-		out	TCNT2, duty_l
-		reti
-pwm_bfet_off:
-		mov	ZL, XH
-		cpse	com_duty_h, zero
-		ldi	ZL, low(pwm_on_high)
-		mov	tcnt2h, com_duty_h
-		in	acsr_save, ACSR
-		sbrs	flags1, FULL_POWER
-		BnFET_off
-		out	TCNT2, com_duty_l
-		reti
-
-pwm_cfet_on:
-		CnFET_on		; This instruction skipped during POWER_OFF
-		mov	ZL, XL
-		cpse	duty_h, zero
-		ldi	ZL, low(pwm_off_high)
-		mov	tcnt2h, duty_h
-		out	TCNT2, duty_l
-		reti
-pwm_cfet_off:
-		mov	ZL, XH
-		cpse	com_duty_h, zero
-		ldi	ZL, low(pwm_on_high)
-		mov	tcnt2h, com_duty_h
-		in	acsr_save, ACSR
-		sbrs	flags1, FULL_POWER
-		CnFET_off
-		out	TCNT2, com_duty_l
-		reti
-
-.if high(pwm_cfet_off)
-.error "high(pwm_cfet_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
+.if high(pwm_off)
+.error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
 .endif
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
@@ -830,12 +795,12 @@ set_new_duty25:	cpi	temp2, PWR_RANGE2	; timing longer than PWR_RANGE2?
 		brcs	set_new_duty31		; on carry - not shorter, no restriction
 		ldi	YL, low(PWR_MAX_RPM2)	; low (range2) RPM - set PWR_MAX_RPM2
 		ldi	YH, high(PWR_MAX_RPM2)
-set_new_duty31:	cbr	flags1, (1<<POWER_OFF)+(1<<FULL_POWER)
-		ldi	temp1, low(MAX_POWER)
+set_new_duty31:	ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
 		breq	set_new_duty_full
+		cbr	flags1, (1<<FULL_POWER)
 		cp	YL, zero
 		cpc	YH, zero
 		breq	set_new_duty_zero
@@ -849,6 +814,8 @@ set_new_duty31:	cbr	flags1, (1<<POWER_OFF)+(1<<FULL_POWER)
 		lsl	YL
 		rol	YH
 set_new_duty_set:
+		cbr	flags1, (1<<POWER_OFF)
+set_new_duty_set_off:
 		com	YL			; Save one's complement of both
 		com	temp1			; low bytes for up-counting TCNT2
 		movw	duty_l, YL		; Atomic set of new ON duty for PWM interrupt
@@ -861,18 +828,22 @@ set_new_duty_full:
 set_new_duty_zero:
 		; Power off
 		sbr	flags1, (1<<POWER_OFF)
-		ldi	ZL, low(pwm_off)
-		all_nFETs_off temp3
-		rjmp	set_new_duty_set
+		rcall	set_new_duty_set_off
+		; Fall through to switch_power_off
 
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
-		ldi	XL, low (pwm_off)	; set next off vector to pwm_off
-		ldi	XH, low (pwm_off)	; set next on vector to pwm_off
-		ldi	ZL, low (pwm_off)	; set next interrupt vector to pwm_off
-		ldi	ZH, high(pwm_off)	; should be zero (high byte of vector)
-		all_nFETs_off temp1
-		all_pFETs_off temp1
+		in	temp1, SREG
+		cli
+		all_nFETs_off temp2
+		all_pFETs_off temp2
+		in	nfet_off, AnFET_port
+		in	nfet_on, AnFET_port
+		ldi	XL, AnFET_port+0x20
+		clr	XH
+		ldi	ZL, pwm_off
+		clr	ZH
+		out	SREG, temp1
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
 wait_if_spike:	ldi	temp1, 4
@@ -1186,81 +1157,100 @@ wait_for_high:	sbrs	flags0, OCT1_PENDING
 		ret
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
-com1com2:
-		BpFET_off			; bP off
-		sbrs	flags1, POWER_OFF
-		ApFET_on			; aP on
-		set_comp_phase_b temp1		; Set comparator to phase B
+com1com2:	; Bp off, Ap on
+		set_comp_phase_b temp1
+		.if CnFET_port == BpFET_port
+		BpFET_off_reg nfet_on
+		BpFET_off_reg nfet_off
+		.endif
+		BpFET_off
+		sbrc	flags1, POWER_OFF
+		ret
+		.if CnFET_port == ApFET_port
+		ApFET_on_reg nfet_on
+		ApFET_on_reg nfet_off
+		.endif
+		ApFET_on
 		ret
 
-com2com3:
-		set_comp_phase_c temp1		; Set comparator to phase C
-		ldi	temp1, low(pwm_bfet_off)
-		ldi	temp2, low(pwm_bfet_on)
-		rcall	com_nfet_step
+com2com3:	; Cp off, Bn on
+		set_comp_phase_c temp1
+		cli
+		in	temp1, CnFET_port
 		CnFET_off
-		brie	com2com3_reti		; Skip if interrupts enabled
+		in	nfet_on, BnFET_port
+		sbrc	temp1, CnFET
 		BnFET_on
-com2com3_reti:	reti				; Return and enable interrupts
-
-com3com4:
-		ApFET_off			; aP off
 		sbrs	flags1, POWER_OFF
-		CpFET_on			; cP on
-		set_comp_phase_a temp1		; Set comparator to phase A
+		BnFET_on_reg nfet_on
+		mov	nfet_off, nfet_on
+		sbrs	flags1, FULL_POWER
+		BnFET_off_reg nfet_off
+		ldi	XL, BnFET_port+0x20
+		reti
+
+com3com4:	; Ap off, Cp on
+		set_comp_phase_a temp1
+		.if BnFET_port == ApFET_port
+		ApFET_off_reg nfet_on
+		ApFET_off_reg nfet_off
+		.endif
+		ApFET_off
+		sbrc	flags1, POWER_OFF
+		ret
+		.if BnFET_port == CpFET_port
+		CpFET_on_reg nfet_on
+		CpFET_on_reg nfet_off
+		.endif
+		CpFET_on
 		ret
 
-com4com5:
-		set_comp_phase_b temp1		; Set comparator to phase B
-		ldi	temp1, low(pwm_afet_off)
-		ldi	temp2, low(pwm_afet_on)
-		rcall	com_nfet_step
+com4com5:	; Bn off, An on
+		set_comp_phase_b temp1
+		cli
+		in	temp1, BnFET_port
 		BnFET_off
-		brie	com4com5_reti		; Skip if interrupts enabled
+		in	nfet_on, AnFET_port
+		sbrc	temp1, BnFET
 		AnFET_on
-com4com5_reti:	reti				; Return and enable interrupts
-
-com5com6:
-		CpFET_off			; Cp off
 		sbrs	flags1, POWER_OFF
-		BpFET_on			; Bp on
-		set_comp_phase_c temp1		; Set comparator to phase C
+		anFET_on_reg nfet_on
+		mov	nfet_off, nfet_on
+		sbrs	flags1, FULL_POWER
+		AnFET_off_reg nfet_off
+		ldi	XL, AnFET_port+0x20
+		reti
+
+com5com6:	; Cp off, Bp on
+		set_comp_phase_c temp1
+		.if AnFET_port == CpFET_port
+		CpFET_off_reg nfet_on
+		CpFET_off_reg nfet_off
+		.endif
+		CpFET_off
+		sbrc	flags1, POWER_OFF
+		ret
+		.if AnFET_port == BpFET_port
+		BpFET_on_reg nfet_on
+		BpFET_on_reg nfet_off
+		.endif
+		BpFET_on
 		ret
 
-com6com1:
-		set_comp_phase_a temp1		; Set comparator to phase A
-		ldi	temp1, low(pwm_cfet_off)
-		ldi	temp2, low(pwm_cfet_on)
-		rcall	com_nfet_step
+com6com1:	; An off, Cn on
+		set_comp_phase_a temp1
+		cli
+		in	temp1, AnFET_port
 		AnFET_off
-		brie	com6com1_reti		; Skip if interrupts enabled
+		in	nfet_on, CnFET_port
+		sbrc	temp1, AnFET
 		CnFET_on
-com6com1_reti:	reti				; Return and enable interrupts
-
-com_nfet_step:
-	; Update PWM nFET vectors and return with interrupts disabled
-	; if immediate FET ON switching is to be performed.
 		sbrs	flags1, POWER_OFF
-		rjmp	com_nfet_step1
-		inc	temp2			; Skip FET ON instruction
-		movw	XL, temp1		; Load new vectors
-		mov	ZL, XL			; Set next vector to this FET OFF
-		ret				; Return with interrupts enabled
-com_nfet_step1:	movw	YL, XL			; Back up old ON/OFF vectors
-		cli				; Avoid racing with PWM interrupt
-		movw	XL, temp1		; Load new vectors
-		cp	ZL, YL			; Waiting for old off?
-		brne	com_nfet_step2
-		mov	ZL, XL			; Update vector to this FET OFF
-		ret				; Return with interrupts disabled
-com_nfet_step2:	cp	ZL, YH			; Waiting for old on?
-		brne	com_nfet_step4
-		mov	ZL, XH			; Update vector to this FET ON
-com_nfet_step3:	sbrs	flags1, FULL_POWER	; FET would be on if FULL_POWER
-		reti				; Return with interrupts enabled
-		ret				; Return with interrupts disabled
-com_nfet_step4:	cpi	ZL, low(pwm_off_high)	; Waiting for off high byte?
-		brne	com_nfet_step3		; If not, FET should be off
-		ret				; Return with interrupts disabled
+		CnFET_on_reg nfet_on
+		mov	nfet_off, nfet_on
+		sbrs	flags1, FULL_POWER
+		CnFET_off_reg nfet_off
+		ldi	XL, CnFET_port+0x20
+		reti
 
 .exit

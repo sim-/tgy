@@ -18,10 +18,12 @@
 
 .equ	INIT_PD		= 0
 .equ	DIR_PD		= (1<<AnFET)+(1<<ApFET)
-;.equ	BRAKE_PD	= (1<<AnFET) ; see macro nFET_brake
 
 .equ	USE_ICP		= 0
 .equ	T1ICP		= 0
+
+.equ	AnFET_port	= PORTD
+.equ	ApFET_port	= PORTD
 
 .MACRO rjmp_ext_int0
 	rjmp	ext_int0
@@ -55,6 +57,19 @@
 	cbi PORTD, ApFET
 .ENDMACRO
 
+.MACRO AnFET_on_reg
+	sbr @0, 1<<AnFET
+.ENDMACRO
+.MACRO AnFET_off_reg
+	cbr @0, 1<<AnFET
+.ENDMACRO
+.MACRO ApFET_on_reg
+	sbr @0, 1<<ApFET
+.ENDMACRO
+.MACRO ApFET_off_reg
+	cbr @0, 1<<ApFET
+.ENDMACRO
+
 
 ;*********************
 ; PORT C definitions *
@@ -70,7 +85,10 @@
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= (1<<BnFET)+(1<<BpFET)+(1<<CpFET)
-;.equ	BRAKE_PC	= (1<<BnFET) ; see macro nFET_brake
+
+.equ	BpFET_port	= PORTC
+.equ	BnFET_port	= PORTC
+.equ	CpFET_port	= PORTC
 
 .MACRO BnFET_on
 	sbi PORTC, BnFET
@@ -89,6 +107,25 @@
 .ENDMACRO
 .MACRO CpFET_off
 	cbi PORTC, CpFET
+.ENDMACRO
+
+.MACRO BnFET_on_reg
+	sbr @0, 1<<BnFET
+.ENDMACRO
+.MACRO BnFET_off_reg
+	cbr @0, 1<<BnFET
+.ENDMACRO
+.MACRO BpFET_on_reg
+	sbr @0, 1<<BpFET
+.ENDMACRO
+.MACRO BpFET_off_reg
+	cbr @0, 1<<BpFET
+.ENDMACRO
+.MACRO CpFET_on_reg
+	sbr @0, 1<<CpFET
+.ENDMACRO
+.MACRO CpFET_off_reg
+	cbr @0, 1<<CpFET
 .ENDMACRO
 
 .MACRO comp_init
@@ -125,13 +162,21 @@
 
 .equ	INIT_PB		= 0
 .equ	DIR_PB		= (1<<CnFET)
-;.equ	BRAKE_PB	= (1<<CnFET) ; see macro nFET_brake
+
+.equ	CnFET_port	= PORTB
 
 .MACRO CnFET_on
 	sbi PORTB, CnFET
 .ENDMACRO
 .MACRO CnFET_off
 	cbi PORTB, CnFET
+.ENDMACRO
+
+.MACRO CnFET_on_reg
+	sbr @0, 1<<CnFET
+.ENDMACRO
+.MACRO CnFET_off_reg
+	cbr @0, 1<<CnFET
 .ENDMACRO
 
 

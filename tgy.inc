@@ -16,10 +16,13 @@
 
 .equ	INIT_PD		= 0
 .equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
-.equ	BRAKE_PD	= 0
 
 .equ	USE_ICP		= 0
 .equ	T1ICP		= 0
+
+.equ	ApFET_port	= PORTD
+.equ	BpFET_port	= PORTD
+.equ	CpFET_port	= PORTD
 
 .MACRO rjmp_ext_int0
 	rjmp	ext_int0
@@ -41,23 +44,43 @@
 .ENDMACRO
 
 .MACRO ApFET_on
-	sbi	PORTD,5
+	sbi	PORTD, ApFET
 .ENDMACRO
 .MACRO ApFET_off
-	cbi	PORTD,5
+	cbi	PORTD, ApFET
 .ENDMACRO
 .MACRO BpFET_on
-	sbi	PORTD,4
+	sbi	PORTD, BpFET
 .ENDMACRO
 .MACRO BpFET_off
-	cbi	PORTD,4
+	cbi	PORTD, BpFET
 .ENDMACRO
 .MACRO CpFET_on
-	sbi	PORTD,3
+	sbi	PORTD, CpFET
 .ENDMACRO
 .MACRO CpFET_off
-	cbi	PORTD,3
+	cbi	PORTD, CpFET
 .ENDMACRO
+
+.MACRO ApFET_on_reg
+	sbr	@0, 1<<ApFET
+.ENDMACRO
+.MACRO ApFET_off_reg
+	cbr	@0, 1<<ApFET
+.ENDMACRO
+.MACRO BpFET_on_reg
+	sbr	@0, 1<<BpFET
+.ENDMACRO
+.MACRO BpFET_off_reg
+	cbr	@0, 1<<BpFET
+.ENDMACRO
+.MACRO CpFET_on_reg
+	sbr	@0, 1<<CpFET
+.ENDMACRO
+.MACRO CpFET_off_reg
+	cbr	@0, 1<<CpFET
+.ENDMACRO
+
 .MACRO all_pFETs_off
 	in	@0, PORTD
 	cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
@@ -79,7 +102,6 @@
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0
-.equ	BRAKE_PC	= 0
 
 .MACRO comp_init
 	in	@0, SFIOR
@@ -115,29 +137,52 @@
 
 .equ	INIT_PB		= 0
 .equ	DIR_PB		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-.equ	BRAKE_PB	= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+
+.equ	AnFET_port	= PORTB
+.equ	BnFET_port	= PORTB
+.equ	CnFET_port	= PORTB
 
 .MACRO AnFET_on
-	sbi	PORTB,2
+	sbi	PORTB, AnFET
 .ENDMACRO
 .MACRO AnFET_off
-	cbi	PORTB,2
+	cbi	PORTB, AnFET
 .ENDMACRO
 .MACRO BnFET_on
-	sbi	PORTB,1
+	sbi	PORTB, BnFET
 .ENDMACRO
 .MACRO BnFET_off
-	cbi	PORTB,1
+	cbi	PORTB, BnFET
 .ENDMACRO
 .MACRO CnFET_on
-	sbi	PORTB,0
+	sbi	PORTB, CnFET
 .ENDMACRO
 .MACRO CnFET_off
-	cbi	PORTB,0
+	cbi	PORTB, CnFET
 .ENDMACRO
+
+.MACRO AnFET_on_reg
+	sbr	@0, 1<<AnFET
+.ENDMACRO
+.MACRO AnFET_off_reg
+	cbr	@0, 1<<AnFET
+.ENDMACRO
+.MACRO BnFET_on_reg
+	sbr	@0, 1<<BnFET
+.ENDMACRO
+.MACRO BnFET_off_reg
+	cbr	@0, 1<<BnFET
+.ENDMACRO
+.MACRO CnFET_on_reg
+	sbr	@0, 1<<CnFET
+.ENDMACRO
+.MACRO CnFET_off_reg
+	cbr	@0, 1<<CnFET
+.ENDMACRO
+
 .MACRO nFET_brake
 	in	@0, PORTB
-	sbr	@0, BRAKE_PB
+	sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	out	PORTB, @0
 .ENDMACRO
 .MACRO all_nFETs_off
