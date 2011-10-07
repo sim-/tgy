@@ -48,21 +48,31 @@
 ;
 ; Simon Kirby <sim@simulated.ca>
 ;
-;**** **** **** **** ****
-; Device
+;-- Device ----------------------------------------------------------------
 ;
-;**** **** **** **** ****
 .include "m8def.inc"
 ;
 ; 8K Bytes of In-System Self-Programmable Flash
 ; 512 Bytes EEPROM
 ; 1K Byte Internal SRAM
 ;
-; Normal fuses for internal oscillator at 8 MHz are lfuse=0xa4 hfuse=0xdf,
-; although we set OSCCAL to actually run at about 16 MHz. Boards with all
-; nFETs should probably set lfuse=0x84 to avoid delaying inverted FET off.
-; Boards with external 16MHz resonators can set lfuse=0x9f.
-
+;-- Fuses -----------------------------------------------------------------
+;
+; Old fuses for internal RC oscillator at 8 MHz were lfuse=0xa4 hfuse=0xdf,
+; but since we now set OSCCAL to actually run at about 16 MHz, we'd better
+; set brown-out detection to 4.0V. This code should work without changes on
+; boards with external 16MHz crystals / resonators; just set lfuse=0x3f.
+;
+; Suggested fuses with 4.0V brown-out voltage:
+; Without external crystal: avrdude -U lfuse:w:0x24:m -U hfuse:w:0xd7:m
+;    With external crystal: avrdude -U lfuse:w:0x3f:m -U hfuse:w:0xd7:m
+;
+; Testing fuses with 2.7V brown-out voltage (unsafe at 16MHz):
+; Without external crystal: avrdude -U lfuse:w:0xa4:m -U hfuse:w:0xd7:m
+;    With external crystal: avrdude -U lfuse:w:0xbf:m -U hfuse:w:0xd7:m
+;
+;-- Board -----------------------------------------------------------------
+;
 ; The following only works with avra or avrasm2.
 ; For avrasm32, just comment out all but the include you need.
 .if defined(afro_esc)
