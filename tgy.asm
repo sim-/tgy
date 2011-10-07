@@ -144,7 +144,7 @@
 
 .def	flags0	= r23	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrunpt is pending
-;	.equ	UB_LOW 		= 1	; set if accu voltage low
+	.equ	OCT1B_PENDING	= 1	; if set, output compare interrunpt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 ;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
@@ -253,7 +253,7 @@ uart_data:	.byte	100	; only for debug requirements
 		ijmp	 	; t2ovfl_int
 		rjmp_icp1_int	; icp1_int
 		rjmp t1oca_int
-		nop		; t1ocb_int
+		rjmp t1ocb_int	; t1ocb_int
 		rjmp t1ovfl_int
 		nop		; t0ovfl_int
 		nop		; spi_int
@@ -304,7 +304,7 @@ reset:
 		ldi	temp1, DIR_PD
 		out	DDRD, temp1
 
-	; clear all registers r0 through r26
+	; clear registers r0 through r26
 		ldi	XH, high(27)
 		ldi	XL, low (27)
 clear_regs:	st	-X, zero
@@ -354,7 +354,7 @@ clear_ram:	st	X+, zero
 
 control_start:
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE2)
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
 		out	TIMSK, temp1		; enable TOIE1,OCIE1A & OCIE2 interrupts
 
@@ -459,6 +459,12 @@ rcpint_exit:	out	SREG, i_sreg
 ; timer output compare interrupt
 t1oca_int:	in	i_sreg, SREG
 		cbr	flags0, (1<<OCT1_PENDING) ; signal OCT1 passed
+		out	SREG, i_sreg
+		reti
+;-----bko-----------------------------------------------------------------
+; timer output compare B interrupt
+t1ocb_int:	in	i_sreg, SREG
+		cbr	flags0, (1<<OCT1B_PENDING)
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
@@ -748,7 +754,7 @@ set_OCT1_tot:
 
 		ret
 ;-----bko-----------------------------------------------------------------
-wait_OCT1_before_switch:
+set_com_timing:
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
 		cli
@@ -756,17 +762,10 @@ wait_OCT1_before_switch:
 		in	temp2, TCNT1H
 		add	temp1, YL
 		adc	temp2, YH
-		out	OCR1AH, temp2
-		out	OCR1AL, temp1
+		out	OCR1BH, temp2
+		out	OCR1BL, temp1
 		sei
-		sbr	flags0, (1<<OCT1_PENDING)
-
-	; don't waste time while waiting - do some controls, if indicated
-
-		rcall	evaluate_rc_puls
-
-OCT1_wait:	sbrc	flags0, OCT1_PENDING
-		rjmp	OCT1_wait
+		sbr	flags0, (1<<OCT1B_PENDING)
 		ret
 ;-----bko-----------------------------------------------------------------
 start_timeout:	lds	YL, wt_OCT1_tot_l
@@ -864,7 +863,7 @@ switch_power_off:
 		out	SREG, temp1
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
-wait_if_spike:	ldi	temp1, 8
+wait_if_spike:	ldi	temp1, 12		; 8 is slightly too low
 wait_if_spike2:	dec	temp1
 		brne	wait_if_spike2
 		ret
@@ -1034,7 +1033,6 @@ start_step:
 		rcall	sync_with_poweron
 		rcall	sync_with_poweron
 		mov	temp2, acsr_save	; Interrupt has set acsr_save
-		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
 start_2:	cp	temp2, acsr_save
 		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
 		breq	start_2			; Loop while ACSR unchanged
@@ -1057,10 +1055,7 @@ s6_run1:
 
 run1:
 		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
-
-		rcall	wait_OCT1_before_switch
+		brcs	run_to_start
 		rcall	com1com2
 		rcall	calc_next_timing_and_wait
 
@@ -1069,10 +1064,7 @@ run1:
 
 run2:
 		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
-
-		rcall	wait_OCT1_before_switch
+		brcs	run_to_start
 		rcall	com2com3
 		rcall	calc_next_timing_and_wait
 
@@ -1081,10 +1073,7 @@ run2:
 
 run3:
 		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
-
-		rcall	wait_OCT1_before_switch
+		brcs	run_to_start
 		rcall	com3com4
 		rcall	calc_next_timing_and_wait
 
@@ -1092,10 +1081,7 @@ run3:
 ; out_cA changes from high to low
 run4:
 		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
-
-		rcall	wait_OCT1_before_switch
+		brcs	run_to_start
 		rcall	com4com5
 		rcall	calc_next_timing_and_wait
 
@@ -1104,10 +1090,7 @@ run4:
 
 run5:
 		rcall	wait_for_high
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
-
-		rcall	wait_OCT1_before_switch
+		brcs	run_to_start
 		rcall	com5com6
 		rcall	calc_next_timing_and_wait
 
@@ -1116,10 +1099,7 @@ run5:
 
 run6:
 		rcall	wait_for_low
-		sbrs	flags0, OCT1_PENDING
-		rjmp	run_to_start
-
-		rcall	wait_OCT1_before_switch
+		brcs	run_to_start
 		rcall	com6com1
 		rcall	calc_next_timing_and_wait
 
@@ -1170,24 +1150,48 @@ restart_control:
 
 ;-----bko-----------------------------------------------------------------
 ; *** scan comparator utilities ***
-;
-wait_for_low:	sbrs	flags0, OCT1_PENDING
-		ret
-		sbis	ACSR, ACO		; low ?
-		rjmp	wait_for_low		; .. no - loop, while high
-		rcall	wait_if_spike		; .. yes - look for a spike
-		sbis	ACSR, ACO		; test again
-		rjmp	wait_for_low		; .. is high again, was a spike
+; Now we check the accumulated result and if equal twice, we start the
+; com_timing timer. If the result flips back again while waiting, we
+; jump back and pretend we never saw the false crossing, resetting the
+; timer once more when we see the crossing. This can repeat as many
+; times as necessary until the zero_wt timeout occurs (OCT1A).
+wait_timeout:	sec
 		ret
 
+wait_for_low:	sbrs	flags0, OCT1_PENDING
+		rjmp	wait_timeout
+		in	acsr_save, ACSR
+		sbrs	acsr_save, ACO
+		rjmp	wait_for_low
+		rcall	wait_if_spike
+wait_for_low1:	in	acsr_save, ACSR
+		sbrs	acsr_save, ACO
+		rjmp	wait_for_low
+		rcall	set_com_timing	; Start commutation wait timer
+wait_for_low2:	sbrs	acsr_save, ACO	; Now check PWM-updated value only
+		rjmp	wait_for_low	; Jump back if we got a false crossing
+		sbrc	flags0, OCT1B_PENDING
+		rjmp	wait_for_low2	; Wait for commutation time
+		clc
+wait_for_low3:	ret
+
 wait_for_high:	sbrs	flags0, OCT1_PENDING
-		ret
-		sbic	ACSR, ACO		; high ?
-		rjmp	wait_for_high		; .. no - loop, while low
-		rcall	wait_if_spike		; .. yes - look for a spike
-		sbic	ACSR, ACO		; test again
-		rjmp	wait_for_high		; .. is low again, was a spike
-		ret
+		rjmp	wait_timeout
+		in	acsr_save, ACSR
+		sbrc	acsr_save, ACO
+		rjmp	wait_for_high
+		rcall	wait_if_spike
+wait_for_high1:	in	acsr_save, ACSR
+		sbrc	acsr_save, ACO
+		rjmp	wait_for_high
+		rcall	set_com_timing	; Start commutation wait timer
+wait_for_high2:	sbrc	acsr_save, ACO	; Now check PWM-updated value only
+		rjmp	wait_for_high	; Jump back if we got a false crossing
+		sbrc	flags0, OCT1B_PENDING
+		rjmp	wait_for_high2	; Wait for commutation time
+		clc
+wait_for_high3:	ret
+
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
 com1com2:	; Bp off, Ap on
