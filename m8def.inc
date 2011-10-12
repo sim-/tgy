@@ -37,7 +37,8 @@
 ;* ...                         ;otherwise do something else
 ;*************************************************************************
 
-.ifndef _M8DEF_INC_
+#ifndef _M8DEF_INC_
+#ifndef _M8ADEF_INC_
 #define _M8DEF_INC_
 
 
@@ -733,6 +734,7 @@
 
 ;.pragma AVRPART CORE INSTRUCTIONS_NOT_SUPPORTED break
 
-.endif  /* _M8DEF_INC_ */
+#endif  /* _M8ADEF_INC_ */
+#endif  /* _M8DEF_INC_ */
 
 ; ***** END OF FILE ******************************************************
