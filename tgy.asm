@@ -81,6 +81,8 @@
 .include "bs.inc"		; HobbyKing BlueSeries *UNTESTED* (INT0 PPM)
 .elif defined(bs_nfet_esc)
 .include "bs_nfet.inc"		; HobbyKing BlueSeries with all nFETs (INT0 PPM)
+.elif defined(tp25a_esc)
+.include "tp25a.inc"		; TowerPro 25A/HobbyKing 18A "type 2" *UNTESTED* (INT0 PPM)
 .else
 .include "tgy.inc"		; TowerPro/Turnigy Basic/Plush (INT0 PPM)
 .endif
