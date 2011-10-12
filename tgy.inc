@@ -1,7 +1,10 @@
 ;***********************************************************
-;* tp-18a                                                  *
-;* Mai.2007
+;* TowerPro 18A / Turnigy Plush 18A/25A "type 2" boards    *
+;* with pFETs on PORTD, nFETs on PORTB                     *
+;* based on tp-18a from Bernhard's 18a_tpro_ppm_r05.zip    *
+;* Mai.2007                                                *
 ;* http://home.versanet.de/~b-konze/                       *
+;* http://home.versanet.de/~b-konze/blc_18a/blc_18a.htm    *
 ;***********************************************************
 
 ;*********************
