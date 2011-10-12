@@ -1,10 +1,12 @@
 ;***********************************************************
-;* tp-25a / HK-18A "type 2" boards			   *
+;* TowerPro 17A / 25A / HK-18A "type 1" boards             *
+;* with all FETs on PORTD                                  *
 ;* based on bl-17a.inc from Bernhard's 17a410_ppm_r06.zip  *
-;* http://home.versanet.de/~b-konze/			   *
+;* http://home.versanet.de/~b-konze/                       *
+;* http://home.versanet.de/~b-konze/blc_18a/blc_18a.htm    *
 ;***********************************************************
 
-; Untested! Please report if successful :)
+; Untested port to this tree. Please report if successful :)
 
 ;*********************
 ; PORT D definitions *
