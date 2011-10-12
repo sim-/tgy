@@ -318,8 +318,13 @@ clear_ram:	st	X+, zero
 		cpi	XL, uart_data+1
 		brlo	clear_ram
 
-	; power off (sys_control is zero)
-		rcall	switch_power_off
+	; Set first PWM interrupt vector (used by set_new_duty -> switch_power_off)
+		ldi	XL, CnFET_port+0x20
+		clr	XH
+	; Set PWM interrupt vector
+		ldi	ZL, low (pwm_off)
+		clr	ZH
+	; Set PWM timers
 		rcall	set_new_duty
 
 	; timer0: clk/8 for beep control and waiting
@@ -353,6 +358,9 @@ clear_ram:	st	X+, zero
 		GRN_on
 
 control_start:
+	; power off (sys_control is zero)
+		rcall	switch_power_off	; Also mirrors nFET port for PWM interrupt
+
 	; init registers and interrupts
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
@@ -360,7 +368,7 @@ control_start:
 
 		sei				; enable all interrupts
 
-; init rc-puls
+	; init rc-puls
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
 		clr	YL
@@ -529,46 +537,56 @@ pwm_off:
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp4, 200
 		ldi	temp2, 80
+		BpFET_on
+		AnFET_on
 		rjmp	beep
 
 beep_f2:	ldi	temp4, 180
 		ldi	temp2, 100
+		CpFET_on
+		BnFET_on
 		rjmp	beep
 
 beep_f3:	ldi	temp4, 160
 		ldi	temp2, 120
+		ApFET_on
+		CnFET_on
 		rjmp	beep
 
 beep_f4:	ldi	temp4, 140
 		ldi	temp2, 140
+		CpFET_on
+		AnFET_on
 		rjmp	beep
 
-beep:		clr	temp1
-		out	TCNT0, temp1
-		BpFET_on		; BpFET on
-		AnFET_on		; CnFET on
+; Interrupts must be disabled before entry
+beep:		in	i_temp1, PORTB		; Save ON state
+		in	i_temp2, PORTC
+		in	i_temp3, PORTD
+beep_on:	out	PORTB, i_temp1		; Restore ON state
+		out	PORTC, i_temp2
+		out	PORTD, i_temp3
+		out	TCNT0, zero
 beep_BpCn10:	in	temp1, TCNT0
 		cpi	temp1, 32		; 32µs on (was 32)
 		brlo	beep_BpCn10
-		BpFET_off		; BpFET off
-		AnFET_off		; CnFET off
+		all_nFETs_off YL
+		all_pFETs_off YL
 		ldi	temp3, 16		; 2040µs off (was 8)
-beep_BpCn12:	clr	temp1
-		out	TCNT0, temp1
+beep_BpCn12:	out	TCNT0, zero
 beep_BpCn13:	in	temp1, TCNT0
 		cp	temp1, temp4
 		brlo	beep_BpCn13
 		dec	temp3
 		brne	beep_BpCn12
 		dec	temp2
-		brne	beep
+		brne	beep_on
 		ret
 
 wait30ms:	ldi	temp2, 15
 beep_BpCn20:	ldi	temp3, 16	; was 8
-beep_BpCn21:	clr	temp1
-		out	TCNT0, temp1
-		out	TIFR, temp1
+beep_BpCn21:	out	TCNT0, zero
+		out	TIFR, zero
 beep_BpCn22:	in	temp1, TIFR
 		sbrs	temp1, TOV0
 		rjmp	beep_BpCn22
@@ -581,8 +599,7 @@ beep_BpCn22:	in	temp1, TIFR
 	; 128 periods = 261ms silence
 wait260ms:	ldi	temp2, 128
 beep2_BpCn20:	ldi	temp3, 16	; was 8
-beep2_BpCn21:	clr	temp1
-		out	TCNT0, temp1
+beep2_BpCn21:	out	TCNT0, zero
 beep2_BpCn22:	in	temp1, TCNT0
 		cpi	temp1, 200
 		brlo	beep2_BpCn22
@@ -854,12 +871,8 @@ switch_power_off:
 		cli
 		all_nFETs_off temp2
 		all_pFETs_off temp2
-		in	nfet_off, AnFET_port
-		in	nfet_on, AnFET_port
-		ldi	XL, AnFET_port+0x20
-		clr	XH
-		ldi	ZL, pwm_off
-		clr	ZH
+		ld	nfet_on, X
+		mov	nfet_off, nfet_on
 		out	SREG, temp1
 		ret				; motor is off
 ;-----bko-----------------------------------------------------------------
