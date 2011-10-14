@@ -490,12 +490,22 @@ t1ovfl_int:	in	i_sreg, SREG
 ; We try to avoid clobbering (and thus needing to save/restore) flags;
 ; in, out, mov, ldi, etc. do not modify any flags, while dec does.
 ;
-; ACSR is saved at the very end of the ON cycle, but since the nFET takes
-; at least a microseconds to turn off and the AVR buffers ACO for a few
-; cycles, we do it a bit later than turning off the drive pin. We try to
-; reload TCNT2 as the very last step so as to reduce PWM dead areas
+; The comparator (ACSR) is saved at the very end of the ON cycle, but
+; since the nFET takes at least half a microsecond to turn off and the
+; AVR buffers ACO for a few cycles, we do it after turnign off the drive
+; pin. For low duty cycles (with a longer off period), testing shows that
+; waiting an extra 0.5us - 0.75us (8-12 cycles at 16MHz) actually helps
+; to improve zero-crossing detection accuracy significantly, perhaps
+; because the driven-low phase has had a chance to finish swinging down.
+;
+; We reload TCNT2 as the very last step so as to reduce PWM dead areas
 ; between the reti and the next interrupt vector execution, which still
-; takes a good 4 (reti) + 4 (interrupt call) + 2 (ijmp) cycles.
+; takes a good 4 (reti) + 4 (interrupt call) + 2 (ijmp) cycles. We also
+; try to keep the fet switch off as close to this as possible to avoid a
+; significant bump at FULL_POWER.
+;
+; The pwm_*_high entry points are only called when the particular on/off
+; cycle is longer than 8 bits. This is tracked in tcnt2h.
 
 pwm_on_high:
 		in	i_sreg, SREG
@@ -522,14 +532,22 @@ pwm_on:
 		reti
 
 pwm_off:
-		ldi	ZL, pwm_on
-		cpse	com_duty_h, zero
-		ldi	ZL, pwm_on_high
-		mov	tcnt2h, com_duty_h
-		in	acsr_save, ACSR
-		st	X, nfet_off
-		out	TCNT2, com_duty_l
+		cpse	com_duty_h, zero	; 1 cycle if not zero, 2 if zero
+		rjmp	pwm_off_long		; 2 cycles
+		ldi	ZL, pwm_on		; 1 cycle
+		in	acsr_save, ACSR		; 1 cycle
+		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
+		out	TCNT2, com_duty_l	; 4 cycles
 		reti
+pwm_off_long:	ldi	ZL, pwm_on_high		; 1 cycle
+		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
+		mov	tcnt2h, com_duty_h	; 1 cycle
+		rcall	pwm_wait		; 7 cycles
+		in	acsr_save, ACSR		; 1 cycle
+		out	TCNT2, com_duty_l	; 1 cycle
+		reti				; 4 cycles
+pwm_wait:					; 3 cycles for rcall
+		ret				; 4 cycles (total 7)
 
 .if high(pwm_off)
 .error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
