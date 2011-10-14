@@ -43,7 +43,7 @@
 ; using a tcnt2h register to simulate the high byte, and so can operate at
 ; any frequency with the resolution of the clock. POWER_RANGE set to 400
 ; gives approximately 18kHz PWM output frequency due to cycles used in the
-; interrupt before reloading TCNT2. This should allow compatibilty with 8MHz
+; interrupt before reloading TCNT2. This should allow compatibility with 8MHz
 ; or 16MHz main clocks with minor adjustments.
 ;
 ; Simon Kirby <sim@simulated.ca>
@@ -152,8 +152,8 @@
 .def	nfet_off	= r25
 
 .def	flags0	= r23	; state flags
-	.equ	OCT1_PENDING	= 0	; if set, output compare interrunpt is pending
-	.equ	OCT1B_PENDING	= 1	; if set, output compare interrunpt B is pending
+	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
+	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 ;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
@@ -286,14 +286,6 @@ reset:
 		out	SPH, temp1
 		ldi	temp1, low(RAMEND)
 		out 	SPL, temp1
-; oscillator calibration byte is written into the uppermost position
-; of the eeprom - by the script 1n1p.e2s an ponyprog
-;CLEARBUFFER
-;LOAD-PROG 1n1p.hex
-;PAUSE "Connect and powerup the circuit, are you ready?"
-;READ-CALIBRATION 0x21FF DATA 3     # <EEProm 8Mhz
-;ERASE-ALL
-;WRITE&VERIFY-ALL
 
 	; portB - all FETs off
 		ldi	temp1, INIT_PB		; PORTB initially holds 0x00
@@ -623,7 +615,7 @@ evaluate_rc_puls:
 		rjmp	set_new_duty
 		cbr	flags1, (1<<RC_PULS_UPDATED)
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
-		lsr	temp2			; Halve microsecond input
+		lsr	temp2			; Halve half-microsecond input
 		ror	temp1
 		subi	temp1, low  (STOP_RC_PULS)
 		sbci	temp2, high (STOP_RC_PULS)
@@ -848,7 +840,7 @@ set_new_duty31:	ldi	temp1, low(MAX_POWER)
 		cpc	YH, zero
 		breq	set_new_duty_zero
 		; Not off and not full power
-		; Halve PWM frequency when starting
+		; Halve PWM frequency when starting (helps hard drive startup)
 		lds	temp3, goodies
 		cpi	temp3, ENOUGH_GOODIES
 		brcc	set_new_duty_set
