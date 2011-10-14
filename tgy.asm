@@ -91,11 +91,18 @@
 .equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
 .equ	RCP_TOT		= 16	; Number of timer1 overflows before considering rc pulse lost
 
+.if defined(ultrapwm)
+.equ	MIN_RC_PULS	= 50	; Experimental support for http://www.xaircraft.com/wiki/UltraPWM/en
+.equ	MAX_RC_PULS	= 1400	; which says motors should start at 200us,
+.equ	STOP_RC_PULS	= 200	; but does not define min/max pulse width.
+.equ	POWER_RANGE	= 1000	; Note: 1000 steps enters audible PWM range.
+.else
 .equ	MIN_RC_PULS	= 800	; Less than this is illegal pulse length
 .equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
-
 .equ	POWER_RANGE	= 800	; Number of PWM steps (if adjusted, see scaling in evaluate_rc_puls)
+.endif
+
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
