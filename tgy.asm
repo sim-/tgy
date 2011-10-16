@@ -1249,8 +1249,9 @@ com2com3:	; Cp off, Bn on
 		cli
 		in	temp1, CnFET_port
 		CnFET_off
+		in	temp2, CnFET_port
 		in	nfet_on, BnFET_port
-		sbrc	temp1, CnFET
+		cpse	temp1, temp2
 		BnFET_on
 		sbrs	flags1, POWER_OFF
 		BnFET_on_reg nfet_on
@@ -1281,11 +1282,12 @@ com4com5:	; Bn off, An on
 		cli
 		in	temp1, BnFET_port
 		BnFET_off
+		in	temp2, BnFET_port
 		in	nfet_on, AnFET_port
-		sbrc	temp1, BnFET
+		cpse	temp1, temp2
 		AnFET_on
 		sbrs	flags1, POWER_OFF
-		anFET_on_reg nfet_on
+		AnFET_on_reg nfet_on
 		mov	nfet_off, nfet_on
 		sbrs	flags1, FULL_POWER
 		AnFET_off_reg nfet_off
@@ -1313,8 +1315,9 @@ com6com1:	; An off, Cn on
 		cli
 		in	temp1, AnFET_port
 		AnFET_off
+		in	temp2, AnFET_port
 		in	nfet_on, CnFET_port
-		sbrc	temp1, AnFET
+		cpse	temp1, temp2
 		CnFET_on
 		sbrs	flags1, POWER_OFF
 		CnFET_on_reg nfet_on
