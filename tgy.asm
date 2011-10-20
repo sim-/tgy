@@ -977,17 +977,13 @@ FETs_off_wt:	dec	temp1
 ; state 1 = B(p-on) + C(n-choppered) - comparator A evaluated
 ; out_cA changes from low to high
 start1:		rcall	start_step
-		brcs	start1_9
+		brcs	start1_com2
 ; do the special 120° switch
 		sts	goodies, zero
 		rcall	com1com2
 		rcall	com2com3
-		rcall	com3com4
-
-		rcall	start_timeout
-		rjmp	start4
-start1_9:
-		rcall	com1com2
+		rjmp	start3_com4
+start1_com2:	rcall	com1com2
 		rcall	start_timeout
 
 ; state 2 = A(p-on) + C(n-choppered) - comparator B evaluated
@@ -1001,7 +997,7 @@ start2:		rcall	start_step
 ; out_cC changes from low to high
 
 start3:		rcall	start_step
-		rcall	com3com4
+start3_com4:	rcall	com3com4
 		rcall	start_timeout
 
 ; state 4 = C(p-on) + B(n-choppered) - comparator A evaluated
