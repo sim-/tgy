@@ -14,12 +14,20 @@ program_dragon_%: %.hex
 program_dapa_%: %.hex
 	avrdude -c dapa -p m8 -U flash:w:$<:i
 
+program_uisp_%: %.hex
+	uisp -dprog=dapa --erase --upload --verify -v if=$<
+
 program: program_dragon_tgy
 
 program_dapa: program_dapa_tgy
+
+program_uisp: program_uisp_tgy
 
 read:
 	avrdude -c dragon_isp -p m8 -P usb -U flash:r:flash.hex:i
 
 readeeprom:
 	avrdude -c dragon_isp -p m8 -P usb -U eeprom:r:eeprom.hex:i
+
+terminal_dapa:
+	avrdude -c dapa -p m8 -t
