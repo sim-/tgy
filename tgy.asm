@@ -91,19 +91,21 @@
 
 .equ	MOT_BRAKE   	= 0	; Enable brake
 .equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
-.equ	RCP_TOT		= 16	; Number of timer1 overflows before considering rc pulse lost
+.equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
 .if defined(ultrapwm)
 .equ	MIN_RC_PULS	= 50	; Experimental support for http://www.xaircraft.com/wiki/UltraPWM/en
-.equ	MAX_RC_PULS	= 1400	; which says motors should start at 200us,
-.equ	STOP_RC_PULS	= 200	; but does not define min/max pulse width.
-.equ	POWER_RANGE	= 1000	; Note: 1000 steps enters audible PWM range.
+.equ	START_RC_PULS	= 200	; which says motors should start at 200us,
+.equ	FULL_RC_PULS	= 1200	; but does not define min/max pulse width.
+.equ	MAX_RC_PULS	= 1400	; Note: 1000 PWM steps enters audible range
 .else
-.equ	MIN_RC_PULS	= 800	; Less than this is illegal pulse length
-.equ	MAX_RC_PULS	= 2200	; More than this is illegal pulse length
-.equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
-.equ	POWER_RANGE	= 800	; Number of PWM steps (if adjusted, see scaling in evaluate_rc_puls)
+.equ	MIN_RC_PULS	= 800	; Throw away any pulses shorter than this
+.equ	START_RC_PULS	= 1060	; Start motor at or below this pulse length
+.equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
+.equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
 .endif
+
+.equ	POWER_RANGE	= FULL_RC_PULS - START_RC_PULS
 
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	MAX_POWER	= (POWER_RANGE-1)
@@ -382,8 +384,8 @@ i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		cpc	temp2, zero
 		breq	i_rc_puls2		; Loop while pulse length is 0
 		movw	rcpuls_l, YL		; Atomic clear of rc pulse length
-		subi	temp1, low  (STOP_RC_PULS*2) ; power off received?
-		sbci	temp2, high (STOP_RC_PULS*2)
+		subi	temp1, low  (START_RC_PULS*2) ; power off received?
+		sbci	temp2, high (START_RC_PULS*2)
 		brcc	i_rc_puls1		; no - reset counter
 		dec	temp3			; yes - decrement counter
 		brne	i_rc_puls2		; repeat until zero
@@ -494,7 +496,7 @@ t1ovfl_int:	in	i_sreg, SREG
 ;
 ; The comparator (ACSR) is saved at the very end of the ON cycle, but
 ; since the nFET takes at least half a microsecond to turn off and the
-; AVR buffers ACO for a few cycles, we do it after turnign off the drive
+; AVR buffers ACO for a few cycles, we do it after turning off the drive
 ; pin. For low duty cycles (with a longer off period), testing shows that
 ; waiting an extra 0.5us - 0.75us (8-12 cycles at 16MHz) actually helps
 ; to improve zero-crossing detection accuracy significantly, perhaps
@@ -637,8 +639,8 @@ evaluate_rc_puls:
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		lsr	temp2			; Halve half-microsecond input
 		ror	temp1
-		subi	temp1, low  (STOP_RC_PULS)
-		sbci	temp2, high (STOP_RC_PULS)
+		subi	temp1, low  (START_RC_PULS)
+		sbci	temp2, high (START_RC_PULS)
 		brcc	eval_rc_nonzero
 		clr	temp1
 		clr	temp2
