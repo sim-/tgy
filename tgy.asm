@@ -89,6 +89,10 @@
 .include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PPM)
 .endif
 
+.equ	TIME_ACCUMULATE	= 0	; Accumulate 4 commutations timing method
+.equ	TIME_HALFADD	= 0	; Update half timing method
+.equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
+
 .equ	MOT_BRAKE   	= 0	; Enable brake
 .equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
@@ -110,17 +114,19 @@
 .equ	MIN_DUTY	= 12	; Minimum duty before starting when stopped
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
-.equ	PWR_RANGE_RUN	= 0x20	; 1024 microseconds per commutation
-.equ	PWR_RANGE1	= 0x80	; 4096 microseconds per commutation
-.equ	PWR_RANGE2	= 0x40	; 2048 microseconds per commutation
+.equ	TIMING_MIN	= 0x8000 ; 8192ms per commutation
+.equ	TIMING_RUN	= 0x1000 ; 1024ms per commutation
+.equ	TIMING_RANGE1	= 0x4000 ; 4096ms per commutation
+.equ	TIMING_RANGE2	= 0x2000 ; 2048ms per commutation
+.equ	TIMING_MAX	= 0x0050 ; 20us per commutation
 
 .equ	PWR_MIN_START	= (POWER_RANGE/8) ; Power limit until running mode
 .equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit until running mode
-.equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than PWR_RANGE1
-.equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than PWR_RANGE2
+.equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
+.equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
-.equ	timeoutSTART	= 65535	; 8192 microseconds per commutation
-.equ	timeoutMIN	= 42000	; 5250 microseconds per commutation
+.equ	timeoutSTART	= 48000 ; 48ms per commutation
+.equ	timeoutMIN	= 36000	; 36ms per commutation
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 
@@ -202,18 +208,28 @@
 
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
+last_tcnt1_x:	.byte	1
 timing_l:	.byte	1	; holds time of 4 commutations
 timing_h:	.byte	1
 timing_x:	.byte	1
+timing_count:	.byte	1
 
-wt_comp_scan_l:	.byte	1	; time from switch to comparator scan
+wt_comp_scan_l:	.byte	1	; time from switch to comparator scan (blanking time)
 wt_comp_scan_h:	.byte	1
+wt_comp_scan_x:	.byte	1
 com_timing_l:	.byte	1	; time from zero-crossing to switch of the appropriate FET
 com_timing_h:	.byte	1
-wt_OCT1_tot_l:	.byte	1	; OCT1 waiting time
+com_timing_x:	.byte	1
+wt_OCT1_tot_l:	.byte	1	; time for each startup commutation
 wt_OCT1_tot_h:	.byte	1
-zero_wt_l:	.byte	1
+wt_OCT1_tot_x:	.byte	1
+zero_wt_l:	.byte	1	; time to wait for zero-crossing while running
 zero_wt_h:	.byte	1
+zero_wt_x:	.byte	1
+
+ocr1ax:		.byte	1	; 3rd byte of OCR1A
+ocr1bx:		.byte	1	; 3rd byte of OCR1B
+tcnt1x:		.byte	1	; 3rd byte of TCNT1
 
 start_rcpuls_l:	.byte	1
 start_rcpuls_h:	.byte	1
@@ -336,8 +352,9 @@ clear_ram:	st	X+, zero
 		ldi	temp1, (1<<CS01)
 		out	TCCR0, temp1
 
-	; timer1: clk/8 for commutation control, RC pulse measurement
-		ldi	temp1, (1<<CS11)+T1ICP
+	; timer1: clk/1 for commutation control, RC pulse measurement
+	; (this doesn't have to be 16 MHz, but with 24-bit timing, it doesn't really hurt)
+		ldi	temp1, (1<<CS10)+T1ICP
 		out	TCCR1B, temp1
 
 	; timer2: clk/1 for output PWM
@@ -446,14 +463,24 @@ falling_edge:
 		sub	i_temp1, i_temp3
 		lds	i_temp3, start_rcpuls_h
 		sbc	i_temp2, i_temp3
-		cpi	i_temp1, low (MAX_RC_PULS*2)
-		ldi	i_temp3, high(MAX_RC_PULS*2)	; test range high
+
+		swap	i_temp1			; Divide by 16 (MHz -> us)
+		swap	i_temp2
+		ldi	i_temp3, 0x0f
+		and	i_temp1, i_temp3
+		eor	i_temp1, i_temp2
+		and	i_temp2, i_temp3
+		eor	i_temp1, i_temp2
+
+		cpi	i_temp1, low (MAX_RC_PULS)
+		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
 		cpc	i_temp2, i_temp3
 		brsh	rcpint_fail			; throw away
-		cpi	i_temp1, low (MIN_RC_PULS*2)
-		ldi	i_temp3, high(MIN_RC_PULS*2)	; test range low
+		cpi	i_temp1, low (MIN_RC_PULS)
+		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
 		cpc	i_temp2, i_temp3
 		brlo	rcpint_fail			; throw away
+
 		cp	rcpuls_l, i_temp1
 		cpc	rcpuls_h, i_temp2
 		breq	rcpint_same
@@ -469,21 +496,34 @@ rcpint_exit:	out	SREG, i_sreg
 ;-----bko-----------------------------------------------------------------
 ; timer output compare interrupt
 t1oca_int:	in	i_sreg, SREG
-		cbr	flags0, (1<<OCT1_PENDING) ; signal OCT1 passed
+		lds	i_temp1, ocr1ax
+		subi	i_temp1, 1
+		brcc	t1oca_int1
+		cbr	flags0, (1<<OCT1_PENDING)	; signal OCT1A passed
+t1oca_int1:	sts	ocr1ax, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
 ; timer output compare B interrupt
 t1ocb_int:	in	i_sreg, SREG
-		cbr	flags0, (1<<OCT1B_PENDING)
+		lds	i_temp1, ocr1bx
+		subi	i_temp1, 1
+		brcc	t1ocb_int1
+		cbr	flags0, (1<<OCT1B_PENDING)	; signal OCT1B passed
+t1ocb_int1:	sts	ocr1bx, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; timer1 overflow interrupt (happens every 65536µs)
+; timer1 overflow interrupt (happens every 4096µs)
 t1ovfl_int:	in	i_sreg, SREG
+		lds	i_temp1, tcnt1x
+		inc	i_temp1
+		sts	tcnt1x, i_temp1
+		andi	i_temp1, 15			; Every 16 overflows
+		brne	t1ovfl_int1
 		cpse	rcpuls_timeout, zero
 		dec	rcpuls_timeout
-		out	SREG, i_sreg
+t1ovfl_int1:	out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
 ; timer2 overflow compare interrupt (output PWM) -- the interrupt vector
@@ -635,8 +675,6 @@ evaluate_rc_puls:
 		rjmp	set_new_duty
 		cbr	flags1, (1<<RC_PULS_UPDATED)
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
-		lsr	temp2			; Halve half-microsecond input
-		ror	temp1
 		subi	temp1, low  (START_RC_PULS)
 		sbci	temp2, high (START_RC_PULS)
 		brcc	eval_rc_nonzero
@@ -658,119 +696,158 @@ eval_rc_not_full:
 ;		ret
 ;-----bko-----------------------------------------------------------------
 set_all_timings:
-		ldi	YL, low  (timeoutSTART)
-		ldi	YH, high (timeoutSTART)
-		sts	wt_OCT1_tot_l, YL
-		sts	wt_OCT1_tot_h, YH
-		ldi	temp3, 0xff
-		ldi	temp4, 0x1f
-		sts	wt_comp_scan_l, temp3
-		sts	wt_comp_scan_h, temp4
-		sts	com_timing_l, temp3
-		sts	com_timing_h, temp4
-
-set_timing_v:	ldi	temp4, 0x01
-		mov	temp5, temp4
+		sts	wt_OCT1_tot_l, zero	; start_timeout will init these
+		sts	wt_OCT1_tot_h, zero
+		sts	wt_OCT1_tot_x, zero
+		sts	timing_count, zero
+		; Other timing variables will be set by update_timing during
+		; startup before they will be used in running mode and thus
+		; do not need to be initialized here.
+set_timing_v:	ldi	YH, byte3(TIMING_MIN*16-1)
+		mov	temp5, YH
 		sts	timing_x, temp5
-		ldi	temp4, 0xff
-		sts	timing_h, temp4
-		ldi	temp3, 0xff
-		sts	timing_l, temp3
+		ldi	YH, byte2(TIMING_MIN*16-1)
+		sts	timing_h, YH
+		ldi	YL, byte1(TIMING_MIN*16-1)
+		sts	timing_l, YL
 
 		ret
 ;-----bko-----------------------------------------------------------------
-update_timing:	cli
+update_timing:	adiw	YL, 6			; Compensate for timer increment during in-add-out
+		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
 		add	YL, temp1
 		adc	YH, temp2
 		out	OCR1AH, YH
 		out	OCR1AL, YL
+		sts	ocr1ax, temp5
+		lds	temp4, tcnt1x
 		sei
 		sbr	flags0, (1<<OCT1_PENDING)
+		lds	temp3, tcnt1x		; Check tcnt1x again after interrupts re-enabled
+		cp	temp3, temp4		; ...same as tcnt1x when interrupts were disabled?
+		breq	update_timing1
+		clr	temp1			; High byte just wrapped, clear low bytes
+		clr	temp2
+update_timing1:
 
+.if TIME_ACCUMULATE
+		lds	temp4, timing_count
+		cpi	temp4, 4
+		brsh	update_timing2
+		inc	temp4
+		sts	timing_count, temp4
+		ret
+update_timing2:
+.endif
 	; calculate this commutation time
-		lds	temp3, last_tcnt1_l
-		lds	temp4, last_tcnt1_h
+		lds	YL, last_tcnt1_l
+		lds	YH, last_tcnt1_h
+		lds	temp5, last_tcnt1_x
 		sts	last_tcnt1_l, temp1
 		sts	last_tcnt1_h, temp2
-		sub	temp1, temp3
-		sbc	temp2, temp4
+		sts	last_tcnt1_x, temp3
+		sub	temp1, YL
+		sbc	temp2, YH
+		sbc	temp3, temp5
 
 	; calculate next waiting times - timing(-l-h-x) holds the time of 4 commutations
-		lds	temp3, timing_l
-		lds	temp4, timing_h
+
+.if TIME_ACCUMULATE
+	; Accumulation method: Wait for 4 commutations, and that's all.
+		movw	YL, temp1		; Copy new timing to YL:YH:temp5
+		mov	temp5, temp3
+		sts	timing_count, zero
+.else
+		lds	YL, timing_l		; Load old timing into YL:YH:temp5
+		lds	YH, timing_h
 		lds	temp5, timing_x
 
-		sts	zero_wt_l, temp3	; save for zero crossing timeout
-		sts	zero_wt_h, temp4
-		tst	temp5
-		breq	update_t00
-		ldi	YL, 0xff
-		sts	zero_wt_l, YL		; save for zero crossing timeout
-		sts	zero_wt_h, YL
-update_t00:
-		movw	YL, temp3		; copy timing to Y
-		lsr	temp5			; build a quarter
+.if TIME_HALFADD
+	; Half method: New timing is sum of half of old and twice of last commutation time
+		lsr	temp5
+		ror	YH
+		ror	YL
+		lsl	temp1
+		rol	temp2
+		rol	temp3
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp5, temp3
+.elif TIME_QUARTERADD
+	; Quarter method: Subtract quart from old timing, add new commutation time
+		lsr	temp5			; build a quater
 		ror	YH
 		ror	YL
 		lsr	temp5
-		ror	YH			; temp5 no longer needed (should be 0)
+		ror	YH
 		ror	YL
-
-		lds	temp5, timing_x		; reload original timing_x
-
-		sub	temp3, YL		; subtract quarter from timing
-		sbc	temp4, YH
-		sbc	temp5, zero
-
-		add	temp3, temp1		; .. and add the new time
-		adc	temp4, temp2
-		adc	temp5, zero
+		sub	temp1, YL		; subtract old quarter from new timing
+		sbc	temp2, YH
+		sbc	temp3, temp5
+		lds	YL, timing_l
+		lds	YH, timing_h
+		lds	temp5, timing_x
+		add	YL, temp1		; add the new timing difference
+		adc	YH, temp2
+		adc	temp5, temp3
+.endif
+.endif
 
 	; limit RPM to 120.000
-		cpi	temp3, 0x4c		; 0x14c = 120.000 RPM
-		ldi	temp1, 0x1
-		cpc	temp4, temp1
-		cpc	temp5, zero
+		cpi	YL, byte1(TIMING_MAX*16)
+		ldi	temp4, byte2(TIMING_MAX*16)
+		cpc	YH, temp4
+		ldi	temp4, byte3(TIMING_MAX*16)
+		cpc	temp5, temp4
 		brcc	update_t90
 
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
 
-update_t90:	sts	timing_l, temp3
-		sts	timing_h, temp4
+update_t90:	sts	timing_l, YL
+		sts	timing_h, YH
 		sts	timing_x, temp5
-		ldi	temp2, 2
-		cp	temp5, temp2		; limit range to 0x1ffff
+
+		sts	zero_wt_l, YL		; save zero crossing timeout
+		sts	zero_wt_h, YH
+		sts	zero_wt_x, temp5
+
+		ldi	temp4, byte3(TIMING_MIN*16)
+		cp	temp5, temp4
 		brcs	update_t99
 		rcall	set_timing_v
-
 update_t99:
-		lsr	temp5			; a 16th is the next wait before scan
-		ror	temp4
-		ror	temp3
+		lsr	temp5			; shift back to timing for one commutation
+		ror	YH
+		ror	YL
 		lsr	temp5
-		ror	temp4
-		ror	temp3
+		ror	YH
+		ror	YL
+
+		lsr	temp5			; a quarter is the next wait before scan
+		ror	YH
+		ror	YL
 		lsr	temp5
-		ror	temp4
-		ror	temp3
-		lsr	temp5
-		ror	temp4
-		ror	temp3
-		sts	wt_comp_scan_l, temp3
-		sts	wt_comp_scan_h, temp4
+		ror	YH
+		ror	YL
+
+		sts	wt_comp_scan_l, YL
+		sts	wt_comp_scan_h, YH
+		sts	wt_comp_scan_x, temp5
 
 	; use the same value for commutation timing (15°)
-		sts	com_timing_l, temp3
-		sts	com_timing_h, temp4
+		sts	com_timing_l, YL
+		sts	com_timing_h, YH
+		sts	com_timing_x, temp5
 
 		ret
 ;-----bko-----------------------------------------------------------------
 calc_next_timing_and_wait:
 		lds	YL, wt_comp_scan_l	; holds wait-before-scan value
 		lds	YH, wt_comp_scan_h
+		lds	temp5, wt_comp_scan_x
 		rcall	update_timing
 		rcall	evaluate_rc_puls
 
@@ -778,15 +855,18 @@ wait_OCT1_tot:	sbrc	flags0, OCT1_PENDING
 		rjmp	wait_OCT1_tot
 
 set_OCT1_tot:
-		lds	YH, zero_wt_h
 		lds	YL, zero_wt_l
+		lds	YH, zero_wt_h
+		lds	temp5, zero_wt_x
+		adiw	YL, 6			; Compensate for timer increment during in-add-out
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
-		add	temp1, YL
-		adc	temp2, YH
-		out	OCR1AH, temp2
-		out	OCR1AL, temp1
+		add	YL, temp1
+		adc	YH, temp2
+		out	OCR1AH, YH
+		out	OCR1AL, YL
+		sts	ocr1ax, temp5
 		sei
 		sbr	flags0, (1<<OCT1_PENDING)
 
@@ -795,31 +875,44 @@ set_OCT1_tot:
 set_com_timing:
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
+		lds	temp5, com_timing_x
+		adiw	YL, 6			; Compensate for timer increment during in-add-out
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
-		add	temp1, YL
-		adc	temp2, YH
-		out	OCR1BH, temp2
-		out	OCR1BL, temp1
+		add	YL, temp1
+		adc	YH, temp2
+		out	OCR1BH, YH
+		out	OCR1BL, YL
+		sts	ocr1bx, temp5
 		sei
 		sbr	flags0, (1<<OCT1B_PENDING)
 		ret
 ;-----bko-----------------------------------------------------------------
-start_timeout:	lds	YL, wt_OCT1_tot_l
-		lds	YH, wt_OCT1_tot_h
-		rcall	update_timing
-
-		lds	YH, wt_OCT1_tot_h
-		in	temp1, TCNT1L
-		andi	temp1, 0x0f
+start_timeout:
+		lds	YL, wt_OCT1_tot_l	; Load the start commutation
+		lds	YH, wt_OCT1_tot_h	; timeout into YL:YH:temp5 and
+		lds	temp5, wt_OCT1_tot_x	; subtract a "random" amount
+		in	temp1, TCNT0
+		andi	temp1, 0x1f
 		sub	YH, temp1
-		cpi	YH, high (timeoutMIN)
-		brcc	set_tot2
-		ldi	YH, high (timeoutSTART)
-set_tot2:
+		sbc	temp5, zero
+		brcs	start_timeout1
+		cpi	YL, byte1(timeoutMIN*16)
+		ldi	temp1, byte2(timeoutMIN*16)
+		cpc	YH, temp1
+		ldi	temp1, byte3(timeoutMIN*16)
+		cpc	temp5, temp1
+		brcc	start_timeout2
+start_timeout1:	ldi	YL, byte1(timeoutSTART*16)
+		ldi	YH, byte2(timeoutSTART*16)
+		ldi	temp1, byte3(timeoutSTART*16)
+		mov	temp5, temp1
+start_timeout2:	sts	wt_OCT1_tot_l, YL
 		sts	wt_OCT1_tot_h, YH
+		sts	wt_OCT1_tot_x, temp5
 
+		rcall	update_timing		; Loads YL:YH:temp5 into OCR1A
 		rcall	evaluate_rc_puls
 ;		rcall	evaluate_uart
 		ret
@@ -830,23 +923,26 @@ set_new_duty:	lds	YL, rc_duty_l
 		cpc	YH, sys_control_h
 		brcs	set_new_duty10
 		movw	YL, sys_control_l	; Limit duty to sys_control
-set_new_duty10:	lds	temp2, timing_h
-		cpi	temp2, PWR_RANGE1	; timing longer than PWR_RANGE1?
-		lds	temp1, timing_x
-		cpc	temp1, zero
+set_new_duty10:	lds	temp1, timing_h
+		lds	temp2, timing_x
+		cpi	temp1, byte2(TIMING_RANGE1*16)	; timing longer than TIMING_RANGE1?
+		ldi	temp3, byte3(TIMING_RANGE1*16)
+		cpc	temp2, temp3
 		brcs	set_new_duty25		; on carry - test next range
 		cpi	YL, low(PWR_MAX_RPM1)	; higher than range1 power max ?
-		ldi	temp1, high(PWR_MAX_RPM1)
-		cpc	YH, temp1
+		ldi	temp4, high(PWR_MAX_RPM1)
+		cpc	YH, temp4
 		brcs	set_new_duty31		; on carry - not longer, no restriction
 		ldi	YL, low(PWR_MAX_RPM1)	; low (range1) RPM - set PWR_MAX_RPM1
 		ldi	YH, high(PWR_MAX_RPM1)
 		rjmp	set_new_duty31
-set_new_duty25:	cpi	temp2, PWR_RANGE2	; timing longer than PWR_RANGE2?
+set_new_duty25:	cpi	temp1, byte2(TIMING_RANGE2*16)	; timing longer than TIMING_RANGE2?
+		ldi	temp3, byte3(TIMING_RANGE2*16)
+		cpc	temp2, temp3
 		brcs	set_new_duty31		; on carry - not longer, no restriction
 		cpi	YL, low(PWR_MAX_RPM2)	; higher than range2 power max ?
-		ldi	temp1, high(PWR_MAX_RPM2)
-		cpc	YH, temp1
+		ldi	temp4, high(PWR_MAX_RPM2)
+		cpc	YH, temp4
 		brcs	set_new_duty31		; on carry - not shorter, no restriction
 		ldi	YL, low(PWR_MAX_RPM2)	; low (range2) RPM - set PWR_MAX_RPM2
 		ldi	YH, high(PWR_MAX_RPM2)
@@ -1045,9 +1141,10 @@ s6_rcp_ok:
 		; for timing to transition immediately to running mode so
 		; that we don't lose timing in the start loop.
 		lds	temp1, timing_h		; get actual RPM reference high
-		cpi	temp1, PWR_RANGE_RUN
+		cpi	temp1, byte2(TIMING_RUN*16)
 		lds	temp1, timing_x
-		cpc	temp1, zero
+		ldi	temp2, byte3(TIMING_RUN*16)
+		cpc	temp1, temp2
 		brcs	s6_run1
 
 		movw	YL, sys_control_l
@@ -1146,8 +1243,8 @@ run6:
 		breq	run_to_start
 
 		lds	temp1, timing_x
-		cpse	temp1, zero		; higher than 610 RPM if zero
-		rjmp	start1
+		cpi	temp1, byte3(TIMING_MIN*16)
+		brsh	run_to_start
 
 		lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
