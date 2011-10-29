@@ -915,7 +915,8 @@ wait_for_poweroff:
 ;-----bko-----------------------------------------------------------------
 motor_brake:
 .if MOT_BRAKE == 1
-		clr	sys_control
+		clr	sys_control_l
+		clr	sys_control_h
 		all_nFETs_off temp1
 		all_pFETs_off temp1
 		in	temp2, TCNT1L
@@ -928,7 +929,7 @@ brake_off_cycle:
 		cpi	temp1, low(MIN_DUTY)
 		lds	temp1, rc_duty_h
 		ldi	temp2, high(MIN_DUTY)
-		cpc	temp1, temp1
+		cpc	temp1, temp2
 		brcs	motor_brake
 		all_nFETs_off temp1
 .endif	; MOT_BRAKE == 1
@@ -945,7 +946,7 @@ wait_for_power_on:
 		cpi	temp1, low(MIN_DUTY)
 		lds	temp1, rc_duty_h
 		ldi	temp2, high(MIN_DUTY)
-		cpc	temp1, temp1
+		cpc	temp1, temp2
 		brcs	wait_for_power_on
 		ldi	temp1, RCP_TOT - 1	; allow some racing with t1ovfl_int
 		cp	rcpuls_timeout, temp1
