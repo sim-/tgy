@@ -393,8 +393,6 @@ i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		rcall	beep_f4			; signal: rcpuls ready
 		rcall	beep_f4
 		rcall	beep_f4
-		sei				; enable all interrupts
-
 		rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
@@ -827,8 +825,8 @@ set_tot2:
 		ret
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
-		cp	YL, sys_control_l
 		lds	YH, rc_duty_h
+		cp	YL, sys_control_l
 		cpc	YH, sys_control_h
 		brcs	set_new_duty10
 		movw	YL, sys_control_l	; Limit duty to sys_control
@@ -939,6 +937,9 @@ brake_off_cycle:
 ; **** startup loop ****
 init_startup:
 		rcall	switch_power_off
+		sei
+		clr	rcpuls_l		; Clear any erroneous pulse length
+		clr	rcpuls_h		; from while interrupts were disabled
 wait_for_power_on:
 		rcall	motor_brake
 		rcall	evaluate_rc_puls
@@ -958,6 +959,7 @@ wait_for_power_on:
 FETs_off_wt:	dec	temp1
 		brne	FETs_off_wt
 
+start_from_running:
 		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
 		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
 		movw	sys_control_l, YL	; align to a timing harmonic
@@ -1166,19 +1168,16 @@ run6_1:		movw	YL, sys_control_l
 		movw	sys_control_l, YL
 run6_2:		rjmp	run1
 
-run_to_start:	rjmp	init_startup
+run_to_start:	rcall   switch_power_off
+		rjmp	start_from_running
 
 restart_control:
 		cli				; disable all interrupts
 		rcall	switch_power_off
-		clr	sys_control_l
-		clr	sys_control_h
-		rcall	set_new_duty
 		rcall	wait30ms
 		rcall	beep_f3
 		rcall	beep_f2
 		rcall	wait30ms
-		sei
 		rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
