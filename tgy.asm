@@ -695,24 +695,6 @@ eval_rc_not_full:
 ;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
 ;		ret
 ;-----bko-----------------------------------------------------------------
-set_all_timings:
-		sts	wt_OCT1_tot_l, zero	; start_timeout will init these
-		sts	wt_OCT1_tot_h, zero
-		sts	wt_OCT1_tot_x, zero
-		sts	timing_count, zero
-		; Other timing variables will be set by update_timing during
-		; startup before they will be used in running mode and thus
-		; do not need to be initialized here.
-set_timing_v:	ldi	YH, byte3(TIMING_MIN*16-1)
-		mov	temp5, YH
-		sts	timing_x, temp5
-		ldi	YH, byte2(TIMING_MIN*16-1)
-		sts	timing_h, YH
-		ldi	YL, byte1(TIMING_MIN*16-1)
-		sts	timing_l, YL
-
-		ret
-;-----bko-----------------------------------------------------------------
 update_timing:	adiw	YL, 6			; Compensate for timer increment during in-add-out
 		cli
 		in	temp1, TCNT1L
@@ -794,19 +776,25 @@ update_timing2:
 		adc	temp5, temp3
 .endif
 .endif
-
-	; limit RPM to 120.000
+	; Limit maximum RPM (fastest timing)
 		cpi	YL, byte1(TIMING_MAX*16)
 		ldi	temp4, byte2(TIMING_MAX*16)
 		cpc	YH, temp4
 		ldi	temp4, byte3(TIMING_MAX*16)
 		cpc	temp5, temp4
 		brcc	update_t90
-
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
-
-update_t90:	sts	timing_l, YL
+update_t90:
+	; Limit minimum RPM (slowest timing)
+		ldi	temp4, byte3(TIMING_MIN*16)
+		cp	temp5, temp4
+		brcs	update_t99
+		mov	temp5, temp4
+		ldi	YH, byte2(TIMING_MIN*16)
+		ldi	YL, byte1(TIMING_MIN*16)
+update_t99:
+		sts	timing_l, YL		; save new timing
 		sts	timing_h, YH
 		sts	timing_x, temp5
 
@@ -814,11 +802,6 @@ update_t90:	sts	timing_l, YL
 		sts	zero_wt_h, YH
 		sts	zero_wt_x, temp5
 
-		ldi	temp4, byte3(TIMING_MIN*16)
-		cp	temp5, temp4
-		brcs	update_t99
-		rcall	set_timing_v
-update_t99:
 		lsr	temp5			; shift back to timing for one commutation
 		ror	YH
 		ror	YL
@@ -1064,8 +1047,7 @@ start_from_running:
 
 		RED_off
 
-		rcall	set_all_timings
-		rcall	start_timeout		; Clears POWER_OFF, sets duty
+		rcall	start_timeout		; Clears POWER_OFF, sets duty, bounds timing
 
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
