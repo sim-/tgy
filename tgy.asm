@@ -401,8 +401,8 @@ i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 		cpc	temp2, zero
 		breq	i_rc_puls2		; Loop while pulse length is 0
 		movw	rcpuls_l, YL		; Atomic clear of rc pulse length
-		subi	temp1, low  (START_RC_PULS*2) ; power off received?
-		sbci	temp2, high (START_RC_PULS*2)
+		subi	temp1, low  (START_RC_PULS) ; power off received?
+		sbci	temp2, high (START_RC_PULS)
 		brcc	i_rc_puls1		; no - reset counter
 		dec	temp3			; yes - decrement counter
 		brne	i_rc_puls2		; repeat until zero
