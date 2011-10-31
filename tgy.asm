@@ -235,6 +235,8 @@ start_rcpuls_l:	.byte	1
 start_rcpuls_h:	.byte	1
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
+timing_duty_l:	.byte	1	; duty cycle limit based on timing
+timing_duty_h:	.byte	1
 
 ;duty_offset:	.byte	1
 goodies:	.byte	1
@@ -802,6 +804,30 @@ update_t99:
 		sts	zero_wt_h, YH
 		sts	zero_wt_x, temp5
 
+	; Calculate a hopefully sane duty cycle limit from this timing,
+	; to prevent excessive current if high duty is requested when the
+	; current duty is low. This is the best we can do without a current
+	; sensor. The actual current will depend on motor KV and voltage,
+	; so this is just an approximation. It would be nice if we could
+	; do this with math instead of two constants, but we need a divide.
+
+		ldi	temp1, low(MAX_POWER)
+		ldi	temp2, high(MAX_POWER)
+		cpi	YH, byte2(TIMING_RANGE2*16)
+		ldi	temp4, byte3(TIMING_RANGE2*16)
+		cpc	temp5, temp4
+		brcs	update_timing6
+		ldi	temp1, low(PWR_MAX_RPM2)
+		ldi	temp2, high(PWR_MAX_RPM2)
+		cpi	YH, byte2(TIMING_RANGE1*16)
+		ldi	temp4, byte3(TIMING_RANGE1*16)
+		cpc	temp5, temp4
+		brcs	update_timing6
+		ldi	temp1, low(PWR_MAX_RPM1)
+		ldi	temp2, high(PWR_MAX_RPM1)
+update_timing6:	sts	timing_duty_l, temp1	; Save new duty limit by timing
+		sts	timing_duty_h, temp2
+
 		lsr	temp5			; shift back to timing for one commutation
 		ror	YH
 		ror	YL
@@ -896,40 +922,23 @@ start_timeout2:	sts	wt_OCT1_tot_l, YL
 		sts	wt_OCT1_tot_x, temp5
 
 		rcall	update_timing		; Loads YL:YH:temp5 into OCR1A
-		rcall	evaluate_rc_puls
+		rcall	evaluate_rc_puls	; Calls set_new_duty
 ;		rcall	evaluate_uart
 		ret
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
-		cp	YL, sys_control_l
-		cpc	YH, sys_control_h
+		lds	temp1, timing_duty_l
+		lds	temp2, timing_duty_h
+		cp	YL, temp1
+		cpc	YH, temp2
 		brcs	set_new_duty10
+		movw	YL, temp1		; Limit duty to timing_duty
+set_new_duty10:	cp	YL, sys_control_l
+		cpc	YH, sys_control_h
+		brcs	set_new_duty11
 		movw	YL, sys_control_l	; Limit duty to sys_control
-set_new_duty10:	lds	temp1, timing_h
-		lds	temp2, timing_x
-		cpi	temp1, byte2(TIMING_RANGE1*16)	; timing longer than TIMING_RANGE1?
-		ldi	temp3, byte3(TIMING_RANGE1*16)
-		cpc	temp2, temp3
-		brcs	set_new_duty25		; on carry - test next range
-		cpi	YL, low(PWR_MAX_RPM1)	; higher than range1 power max ?
-		ldi	temp4, high(PWR_MAX_RPM1)
-		cpc	YH, temp4
-		brcs	set_new_duty31		; on carry - not longer, no restriction
-		ldi	YL, low(PWR_MAX_RPM1)	; low (range1) RPM - set PWR_MAX_RPM1
-		ldi	YH, high(PWR_MAX_RPM1)
-		rjmp	set_new_duty31
-set_new_duty25:	cpi	temp1, byte2(TIMING_RANGE2*16)	; timing longer than TIMING_RANGE2?
-		ldi	temp3, byte3(TIMING_RANGE2*16)
-		cpc	temp2, temp3
-		brcs	set_new_duty31		; on carry - not longer, no restriction
-		cpi	YL, low(PWR_MAX_RPM2)	; higher than range2 power max ?
-		ldi	temp4, high(PWR_MAX_RPM2)
-		cpc	YH, temp4
-		brcs	set_new_duty31		; on carry - not shorter, no restriction
-		ldi	YL, low(PWR_MAX_RPM2)	; low (range2) RPM - set PWR_MAX_RPM2
-		ldi	YH, high(PWR_MAX_RPM2)
-set_new_duty31:	ldi	temp1, low(MAX_POWER)
+set_new_duty11:	ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
