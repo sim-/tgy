@@ -136,8 +136,8 @@
 .def	i_sreg		= r1		; status register save in interrupts
 .def	duty_l		= r2		; on duty cycle low, one's complement
 .def	duty_h		= r3		; on duty cycle high
-.def	com_duty_l 	= r4		; off duty cycle low, one's complement
-.def	com_duty_h	= r5		; off duty cycle high
+.def	off_duty_l	= r4		; off duty cycle low, one's complement
+.def	off_duty_h	= r5		; off duty cycle high
 .def	rcpuls_l	= r6
 .def	rcpuls_h	= r7
 .def	tcnt2h		= r8
@@ -574,19 +574,19 @@ pwm_on:
 		reti
 
 pwm_off:
-		cpse	com_duty_h, zero	; 1 cycle if not zero, 2 if zero
+		cpse	off_duty_h, zero	; 1 cycle if not zero, 2 if zero
 		rjmp	pwm_off_long		; 2 cycles
 		ldi	ZL, pwm_on		; 1 cycle
 		in	acsr_save, ACSR		; 1 cycle
 		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
-		out	TCNT2, com_duty_l	; 4 cycles
+		out	TCNT2, off_duty_l	; 4 cycles
 		reti
 pwm_off_long:	ldi	ZL, pwm_on_high		; 1 cycle
 		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
-		mov	tcnt2h, com_duty_h	; 1 cycle
+		mov	tcnt2h, off_duty_h	; 1 cycle
 		rcall	pwm_wait		; 7 cycles
 		in	acsr_save, ACSR		; 1 cycle
-		out	TCNT2, com_duty_l	; 1 cycle
+		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
 pwm_wait:					; 3 cycles for rcall
 		ret				; 4 cycles (total 7)
@@ -953,7 +953,7 @@ set_new_duty_set_off:
 		com	YL			; Save one's complement of both
 		com	temp1			; low bytes for up-counting TCNT2
 		movw	duty_l, YL		; Atomic set of new ON duty for PWM interrupt
-		movw	com_duty_l, temp1	; Atomic set of new OFF duty for PWM interrupt
+		movw	off_duty_l, temp1	; Atomic set of new OFF duty for PWM interrupt
 		ret
 set_new_duty_full:
 		; Full power
