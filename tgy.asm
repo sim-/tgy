@@ -130,6 +130,10 @@
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 
+.equ	T0CLK		= (1<<CS01)	; clk/8 == 2Mhz
+.equ	T1CLK		= (1<<CS10)	; clk/1 == 16MHz
+.equ	T2CLK		= (1<<CS20)	; clk/1 == 16MHz
+
 ;**** **** **** **** ****
 ; Register Definitions
 .def	zero		= r0		; stays at 0
@@ -301,13 +305,23 @@ uart_data:	.byte	100	; only for debug requirements
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
-reset:
-		clr	zero
+reset:		clr	r0
+		out	SREG, r0		; Clear interrupts and flags
 
-		ldi	temp1, high(RAMEND)	; stack = RAMEND
-		out	SPH, temp1
-		ldi	temp1, low(RAMEND)
-		out 	SPL, temp1
+	; Set up stack
+		ldi	ZH, high(RAMEND)
+		ldi	ZL, low (RAMEND)
+		out	SPH, ZH
+		out	SPL, ZL
+	; clear RAM and all registers
+clear_loop:	st	-Z, r0
+		cpi	ZL, SRAM_START
+		cpc	ZH, r0
+		brne	clear_loop1
+		ldi	ZL, 30			; Start clearing registers
+clear_loop1:	cp	ZL, r0
+		cpc	ZH, r0
+		brne	clear_loop
 
 	; portB - all FETs off
 		ldi	temp1, INIT_PB		; PORTB initially holds 0x00
@@ -327,41 +341,15 @@ reset:
 		ldi	temp1, DIR_PD
 		out	DDRD, temp1
 
-	; clear registers r0 through r26
-		ldi	XH, high(27)
-		ldi	XL, low (27)
-clear_regs:	st	-X, zero
-		tst	XL
-		brne	clear_regs
-
-	; clear RAM
-		ldi	XH, high(SRAM_START)
-		ldi	XL, low (SRAM_START)
-clear_ram:	st	X+, zero
-		cpi	XL, uart_data+1
-		brlo	clear_ram
-
-	; Set first PWM interrupt vector (used by set_new_duty -> switch_power_off)
-		ldi	XL, CnFET_port+0x20
-		clr	XH
-	; Set PWM interrupt vector
-		ldi	ZL, low (pwm_off)
-		clr	ZH
-	; Set PWM timers
-		rcall	set_new_duty
-
-	; timer0: clk/8 for beep control and waiting
-		ldi	temp1, (1<<CS01)
+	; Start timers except output PWM
+		ldi	temp1, T0CLK		; timer0: beep control, delays
 		out	TCCR0, temp1
+		ldi	temp1, T1CLK+T1ICP	; timer1: commutation timing,
+		out	TCCR1B, temp1		; RC pulse measurement
+		out	TCCR2, zero		; timer2: PWM, stopped
 
-	; timer1: clk/1 for commutation control, RC pulse measurement
-	; (this doesn't have to be 16 MHz, but with 24-bit timing, it doesn't really hurt)
-		ldi	temp1, (1<<CS10)+T1ICP
-		out	TCCR1B, temp1
-
-	; timer2: clk/1 for output PWM
-		ldi	temp1, (1<<CS20)
-		out	TCCR2, temp1
+	; Set PWM interrupt vector
+		ldi	ZL, low(pwm_off)	; Set PWM interrupt vector
 
 	; Set clock to almost 16MHz -- this should be stable provided we do
 	; not write to the EEPROM or flash unless we revert OSCCAL to 0x9f
@@ -382,9 +370,6 @@ clear_ram:	st	X+, zero
 		GRN_on
 
 control_start:
-	; power off (sys_control is zero)
-		rcall	switch_power_off	; Also mirrors nFET port for PWM interrupt
-
 	; init registers and interrupts
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
@@ -960,19 +945,14 @@ set_new_duty_full:
 set_new_duty_zero:
 		; Power off
 		sbr	flags1, (1<<POWER_OFF)
-		rcall	set_new_duty_set_off
-		; Fall through to switch_power_off
-
+		mov	nfet_on, nfet_off	; Set nfet_off to OFF for this commutation cycle
+		rjmp	set_new_duty_set_off
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
-		in	temp1, SREG
-		cli
-		all_nFETs_off temp2
-		all_pFETs_off temp2
-		ld	nfet_on, X
-		mov	nfet_off, nfet_on
-		out	SREG, temp1
-		ret				; motor is off
+		out	TCCR2, zero		; Disable PWM
+		all_pFETs_off temp1
+		all_nFETs_off temp1
+		ret
 ;-----bko-----------------------------------------------------------------
 wait_if_spike:	ldi	temp1, 12		; 8 is slightly too low
 wait_if_spike2:	dec	temp1
@@ -988,37 +968,16 @@ wait_for_poweroff:
 		breq	wait_for_poweroff
 		ret
 ;-----bko-----------------------------------------------------------------
-motor_brake:
-.if MOT_BRAKE == 1
-		clr	sys_control_l
-		clr	sys_control_h
-		all_nFETs_off temp1
-		all_pFETs_off temp1
-		in	temp2, TCNT1L
-		sbrc	temp2, 6
-		rjmp	brake_off_cycle
-		nFET_brake temp1
-brake_off_cycle:
-		rcall	evaluate_rc_puls
-		lds	temp1, rc_duty_l
-		cpi	temp1, low(MIN_DUTY)
-		lds	temp1, rc_duty_h
-		ldi	temp2, high(MIN_DUTY)
-		cpc	temp1, temp2
-		brcs	motor_brake
-		all_nFETs_off temp1
-.endif	; MOT_BRAKE == 1
-		ret
-
-;-----bko-----------------------------------------------------------------
 ; **** startup loop ****
 init_startup:
-		rcall	switch_power_off
+		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		sei
 		clr	rcpuls_l		; Clear any erroneous pulse length
 		clr	rcpuls_h		; from while interrupts were disabled
 wait_for_power_on:
-		rcall	motor_brake
+.if MOT_BRAKE
+		nFET_brake temp1
+.endif
 		rcall	evaluate_rc_puls
 		lds	temp1, rc_duty_l
 		cpi	temp1, low(MIN_DUTY)
@@ -1030,6 +989,7 @@ wait_for_power_on:
 		cp	rcpuls_timeout, temp1
 		brcs	wait_for_power_on
 
+		all_nFETs_off temp1
 		comp_init temp1			; init comparator
 
 		ldi	temp1, 27		; wait about 5mikosec
@@ -1049,6 +1009,9 @@ start_from_running:
 
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
+
+		ldi	temp1, T2CLK
+		out	TCCR2, temp1		; Enable PWM (ZL and XL have been set)
 
 	; fall through start1
 
@@ -1222,6 +1185,13 @@ run6:
 		cpc	sys_control_h, zero
 		breq	run_to_start
 
+.if MOT_BRAKE
+		ldi	temp1, 0xff
+		cp	duty_l, temp1
+		cpc	duty_h, zero
+		breq	run_to_brake
+.endif
+
 		lds	temp1, timing_x
 		cpi	temp1, byte3(TIMING_MIN*16)
 		brsh	run_to_start
@@ -1255,7 +1225,7 @@ restart_control:
 		rcall	beep_f3
 		rcall	beep_f2
 		rcall	wait30ms
-		rjmp	init_startup
+run_to_brake:	rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
 ; *** scan comparator utilities ***

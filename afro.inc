@@ -33,14 +33,11 @@
 	out	TIMSK, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
-	in	@0, TCCR1B
-	sbr	@0, (1<<ICES1) ; disable icp1_int
+	ldi	@0, T1CLK+T1ICP+ICES1
 	out	TCCR1B, @0
 .ENDMACRO
-
 .MACRO rcp_int_falling_edge
-	in	@0, TCCR1B
-	cbr	@0, (1<<ICES1)
+	ldi	@0, T1CLK+T1ICP
 	out	TCCR1B, @0
 .ENDMACRO
 
