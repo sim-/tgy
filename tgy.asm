@@ -93,8 +93,8 @@
 .equ	TIME_HALFADD	= 0	; Update half timing method
 .equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
 
-.equ	MOT_BRAKE   	= 0	; Enable brake
-.equ	RC_PULS 	= 1	; Enable PPM ("RC pulse") mode
+.equ	MOT_BRAKE	= 0	; Enable brake
+.equ	RC_PULS		= 1	; Enable PPM ("RC pulse") mode
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
 .if defined(ultrapwm)
@@ -141,7 +141,7 @@
 .def	rcpuls_l	= r6
 .def	rcpuls_h	= r7
 .def	tcnt2h		= r8
-;.def		 	= r9
+.def	temp5		= r9		; aux temporary (limited operations)
 .def	uart_cnt	= r10
 .def	rcpuls_timeout	= r11
 .def	sys_control_l	= r12		; duty limit low (word register aligned)
@@ -152,7 +152,6 @@
 .def	temp2		= r17		; main temporary (H)
 .def	temp3		= r18		; main temporary (L)
 .def	temp4		= r19		; main temporary (H)
-.def	temp5		= r9		; aux temporary (limited operations)
 
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r15		; interrupt temporary (limited operations)
@@ -168,7 +167,6 @@
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 ;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
 ;	.equ	A_FET		= 5	; if set, A-FET state is to be changed
-	     ; if neither 1 nor 2 is set, B-FET state is to be changed
 ;	.equ	I_FET_ON	= 6	; if set, fets off
 ;	.equ	I_ON_CYCLE	= 7	; if set, current on cycle is active (optimized as MSB)
 
@@ -276,12 +274,14 @@ uart_data:	.byte	100	; only for debug requirements
 ;**** **** **** **** ****
 
 ;-----bko-----------------------------------------------------------------
-; reset and interrupt jump table
+; Reset and interrupt jump table
+; When multiple interrupts are pending, the vectors are executed from top
+; (ext_int0) to bottom.
 		rjmp reset
 		rjmp_ext_int0	; ext_int0
 		nop		; ext_int1
 		nop		; t2oc_int
-		ijmp	 	; t2ovfl_int
+		ijmp		; t2ovfl_int
 		rjmp_icp1_int	; icp1_int
 		rjmp t1oca_int
 		rjmp t1ocb_int	; t1ocb_int
@@ -1156,9 +1156,9 @@ start_step:
 		rcall	sync_with_poweron
 		rcall	sync_with_poweron
 		mov	temp2, acsr_save	; Interrupt has set acsr_save
-start_2:	cp	temp2, acsr_save
+start_step2:	cp	temp2, acsr_save
 		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
-		breq	start_2			; Loop while ACSR unchanged
+		breq	start_step2		; Loop while ACSR unchanged
 		clc
 		sbrs	acsr_save, ACO		; Copy ACO to carry flag
 		sec
@@ -1256,7 +1256,7 @@ run6_1:		movw	YL, sys_control_l
 		movw	sys_control_l, YL
 run6_2:		rjmp	run1
 
-run_to_start:	rcall   switch_power_off
+run_to_start:	rcall	switch_power_off
 		rjmp	start_from_running
 
 restart_control:
