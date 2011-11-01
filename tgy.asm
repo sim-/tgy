@@ -697,24 +697,10 @@ eval_rc_not_full:
 ;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
 ;		ret
 ;-----bko-----------------------------------------------------------------
-update_timing:	adiw	YL, 6			; Compensate for timer increment during in-add-out
-		cli
-		in	temp1, TCNT1L
-		in	temp2, TCNT1H
-		add	YL, temp1
-		adc	YH, temp2
-		out	OCR1AH, YH
-		out	OCR1AL, YL
-		sts	ocr1ax, temp5
-		lds	temp4, tcnt1x
-		sei
-		sbr	flags0, (1<<OCT1_PENDING)
-		lds	temp3, tcnt1x		; Check tcnt1x again after interrupts re-enabled
-		cp	temp3, temp4		; ...same as tcnt1x when interrupts were disabled?
-		breq	update_timing1
-		clr	temp1			; High byte just wrapped, clear low bytes
-		clr	temp2
-update_timing1:
+update_timing:	lds	temp3, tcnt1x
+		rcall	set_ocr1a		; returns TCNT1L/H in temp1, temp2
+		sbrs	temp2, 7		; Unless highest bit of TCNT1H is set,
+		lds	temp3, tcnt1x		; load possibly-updated extended byte.
 
 .if TIME_ACCUMULATE
 		lds	temp4, timing_count
@@ -784,18 +770,18 @@ update_timing2:
 		cpc	YH, temp4
 		ldi	temp4, byte3(TIMING_MAX*16)
 		cpc	temp5, temp4
-		brcc	update_t90
+		brcc	update_timing3
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
-update_t90:
+update_timing3:
 	; Limit minimum RPM (slowest timing)
 		ldi	temp4, byte3(TIMING_MIN*16)
 		cp	temp5, temp4
-		brcs	update_t99
+		brcs	update_timing4
 		mov	temp5, temp4
 		ldi	YH, byte2(TIMING_MIN*16)
 		ldi	YL, byte1(TIMING_MIN*16)
-update_t99:
+update_timing4:
 		sts	timing_l, YL		; save new timing
 		sts	timing_h, YH
 		sts	timing_x, temp5
@@ -867,7 +853,8 @@ set_OCT1_tot:
 		lds	YL, zero_wt_l
 		lds	YH, zero_wt_h
 		lds	temp5, zero_wt_x
-		adiw	YL, 6			; Compensate for timer increment during in-add-out
+set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
+		ldi	temp4, 1<<OCF1A
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
@@ -875,17 +862,18 @@ set_OCT1_tot:
 		adc	YH, temp2
 		out	OCR1AH, YH
 		out	OCR1AL, YL
+		out	TIFR, temp4		; Clear any pending OCF1A interrupt (7 cycles from TCNT1 read)
 		sts	ocr1ax, temp5
-		sei
 		sbr	flags0, (1<<OCT1_PENDING)
-
-		ret
+		sei				; We could use reti here, but that's
+		ret				; 4 more cycles of interrupt latency
 ;-----bko-----------------------------------------------------------------
 set_com_timing:
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
 		lds	temp5, com_timing_x
-		adiw	YL, 6			; Compensate for timer increment during in-add-out
+		adiw	YL, 7			; Compensate for cycles during in-add-out before OCF1B clear
+		ldi	temp4, 1<<OCF1B
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
@@ -893,9 +881,10 @@ set_com_timing:
 		adc	YH, temp2
 		out	OCR1BH, YH
 		out	OCR1BL, YL
+		out	TIFR, temp4		; Clear any pending OCF1B interrupt (7 cycles from TCNT1 read)
 		sts	ocr1bx, temp5
-		sei
 		sbr	flags0, (1<<OCT1B_PENDING)
+		sei
 		ret
 ;-----bko-----------------------------------------------------------------
 start_timeout:
