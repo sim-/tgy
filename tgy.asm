@@ -98,12 +98,10 @@
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
 .if defined(ultrapwm)
-.equ	MIN_RC_PULS	= 50	; Experimental support for http://www.xaircraft.com/wiki/UltraPWM/en
-.equ	START_RC_PULS	= 200	; which says motors should start at 200us,
-.equ	FULL_RC_PULS	= 1200	; but does not define min/max pulse width.
-.equ	MAX_RC_PULS	= 1400	; Note: 1000 PWM steps enters audible range
-.else
-.equ	MIN_RC_PULS	= 800	; Throw away any pulses shorter than this
+.equ	START_RC_PULS	= 200	; Experimental support for http://www.xaircraft.com/wiki/UltraPWM/en
+.equ	FULL_RC_PULS	= 1200	; which says motors should start at 200us,
+.equ	MAX_RC_PULS	= 1400	; but does not define min/max pulse width.
+.else				; Note: 1000 PWM steps enters audible range
 .equ	START_RC_PULS	= 1060	; Start motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
@@ -158,10 +156,9 @@
 .def	temp4		= r19		; main temporary (H)
 
 .def	i_temp1		= r20		; interrupt temporary
-.def	i_temp2		= r15		; interrupt temporary (limited operations)
-.def	i_temp3		= r22		; interrupt temporary
+.def	i_temp2		= r21		; interrupt temporary
 
-.def	nfet_on		= r21
+.def	nfet_on		= r22
 .def	nfet_off	= r25
 
 .def	flags0	= r23	; state flags
@@ -178,7 +175,7 @@
 	.equ	POWER_OFF	= 0	; switch fets on disabled
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 ;	.equ	CALC_NEXT_OCT1	= 2	; calculate OCT1 offset, when wait_OCT1_before_switch is called
-	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
+;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 ;	.equ	EVAL_RC_PULS	= 4	; if set, new rc puls is evaluated, while waiting for OCT1
 ;	.equ	EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
 ;	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
@@ -235,6 +232,7 @@ tcnt1x:		.byte	1	; 3rd byte of TCNT1
 
 start_rcpuls_l:	.byte	1
 start_rcpuls_h:	.byte	1
+start_rcpuls_x:	.byte	1
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 timing_duty_l:	.byte	1	; duty cycle limit based on timing
@@ -380,12 +378,12 @@ control_start:
 	; init rc-puls
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
-		clr	YL
-		clr	YH
+		ldi	YL, 0xff
+		ldi	YH, 0xff
 i_rc_puls1:	ldi	temp3, 10		; wait for this count of receiving power off
 i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
-		cp	temp1, zero
-		cpc	temp2, zero
+		cp	temp1, YL
+		cpc	temp2, YH
 		breq	i_rc_puls2		; Loop while pulse length is 0
 		movw	rcpuls_l, YL		; Atomic clear of rc pulse length
 		subi	temp1, low  (START_RC_PULS) ; power off received?
@@ -406,79 +404,76 @@ i_rc_puls2:	movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
 ; (see "Accessing 16-bit registers" in the Atmel documentation)
 .if USE_ICP
 ; icp1 = rc pulse input, if enabled
-icp1_int:	in	i_temp3, TCCR1B
-		in	i_sreg, SREG
-
-; get captured timer values
-		in	i_temp1, ICR1L
+icp1_int:	in	i_temp1, ICR1L		; get captured timer values
 		in	i_temp2, ICR1H
-
-; evaluate edge of this interrupt
-		sbrs	i_temp3, ICES1
-
+		in	i_sreg, TCCR1B		; abuse i_sreg to hold value
+		sbrs	i_sreg, ICES1		; evaluate edge of this interrupt
 .else
 ;-----bko-----------------------------------------------------------------
-ext_int0:
-		in	i_temp3, PIND
-		in	i_sreg, SREG
-
-; get timer1 values
-		in	i_temp1, TCNT1L
+ext_int0:	in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
-
-; evaluate edge of this interrupt
-		sbrs	i_temp3, rcp_in
+		sbis	PIND, rcp_in		; evaluate edge of this interrupt
 .endif
-
 		rjmp	falling_edge		; bit is clear = falling edge
-; rc impuls is at high state
-		rcp_int_falling_edge i_temp3	; set next int to falling edge
-; save pulse start time
-		sts	start_rcpuls_l, i_temp1
+rising_edge:					; Flags not saved here!
+		sts	start_rcpuls_l, i_temp1	; Save pulse start time
+		rcp_int_falling_edge i_temp1	; Set next int to falling edge
 		sts	start_rcpuls_h, i_temp2
-		rjmp	rcpint_exit
-
-rcpint_fail:	cpse	rcpuls_timeout, zero
-		dec	rcpuls_timeout
-		rjmp	rcpint_exit
-
-; rc impuls is at low state
+		lds	i_temp1, tcnt1x
+		sts	start_rcpuls_x, i_temp1
+		sbrc	i_temp2, 7
+		reti
+		in	i_temp2, TIFR
+		sbrs	i_temp2, TOV1
+		reti
+		in	i_sreg, SREG
+		inc	i_temp1			; Compensate for postponed tcnt1x update
+		sts	start_rcpuls_x, i_temp1
+		out	SREG, i_sreg
+		reti
 falling_edge:
-		rcp_int_rising_edge i_temp3	; set next int to rising edge
-; calculate pulse length
-		lds	i_temp3, start_rcpuls_l
-		sub	i_temp1, i_temp3
-		lds	i_temp3, start_rcpuls_h
-		sbc	i_temp2, i_temp3
+		in	i_sreg, SREG
+		rcp_int_rising_edge XH		; Set next int to rising edge
+		lds	XH, tcnt1x		; We borrow XH and ZH (normally 0)
+		sbrc	i_temp2, 7		; as additional registers and
+		rjmp	falling_edge1		; clear them before returning.
+		in	ZH, TIFR
+		sbrc	ZH, TOV1
+		inc	XH			; Compensate for postponed tcnt1x update
+falling_edge1:	lds	ZH, start_rcpuls_l
+		sub	i_temp1, ZH
+		lds	ZH, start_rcpuls_h
+		sbc	i_temp2, ZH
+		lds	ZH, start_rcpuls_x
+		sbc	XH, ZH
+
+.if byte3(MAX_RC_PULS*16)
+.error "MAX_RC_PULS too high: adjust it or the pulse length checking code"
+.endif
+		cpi	i_temp1, byte1(MAX_RC_PULS*16)
+		ldi	ZH, byte2(MAX_RC_PULS*16)
+		cpc	i_temp2, ZH
+		ldi	ZH, 0			; Return ZH to 0; clr clobbers flags
+		cpc	XH, ZH
+		ldi	XH, 0			; Return XH to 0
+		brsh	rcpint_fail		; throw away (too long pulse)
 
 		swap	i_temp1			; Divide by 16 (MHz -> us)
 		swap	i_temp2
-		ldi	i_temp3, 0x0f
-		and	i_temp1, i_temp3
+		andi	i_temp1, 0x0f
 		eor	i_temp1, i_temp2
-		and	i_temp2, i_temp3
+		andi	i_temp2, 0x0f
 		eor	i_temp1, i_temp2
 
-		cpi	i_temp1, low (MAX_RC_PULS)
-		ldi	i_temp3, high(MAX_RC_PULS)	; test range high
-		cpc	i_temp2, i_temp3
-		brsh	rcpint_fail			; throw away
-		cpi	i_temp1, low (MIN_RC_PULS)
-		ldi	i_temp3, high(MIN_RC_PULS)	; test range low
-		cpc	i_temp2, i_temp3
-		brlo	rcpint_fail			; throw away
-
-		cp	rcpuls_l, i_temp1
-		cpc	rcpuls_h, i_temp2
-		breq	rcpint_same
-		mov	rcpuls_l, i_temp1
-		mov	rcpuls_h, i_temp2
-		sbr	flags1, (1<<RC_PULS_UPDATED)
-rcpint_same:	mov	i_temp1, rcpuls_timeout
+		movw	rcpuls_l, i_temp1
+		mov	i_temp1, rcpuls_timeout
 		cpi	i_temp1, RCP_TOT
 		adc	rcpuls_timeout, zero	; increment if not at RCP_TOT
 rcpint_exit:	out	SREG, i_sreg
 		reti
+rcpint_fail:	cpse	rcpuls_timeout, zero
+		dec	rcpuls_timeout
+		rjmp	rcpint_exit
 
 ;-----bko-----------------------------------------------------------------
 ; timer output compare interrupt
@@ -610,10 +605,10 @@ beep_f4:	ldi	temp4, 140
 ; Interrupts must be disabled before entry
 beep:		in	i_temp1, PORTB		; Save ON state
 		in	i_temp2, PORTC
-		in	i_temp3, PORTD
+		in	YH, PORTD
 beep_on:	out	PORTB, i_temp1		; Restore ON state
 		out	PORTC, i_temp2
-		out	PORTD, i_temp3
+		out	PORTD, YH
 		out	TCNT0, zero
 beep_BpCn10:	in	temp1, TCNT0
 		cpi	temp1, 32		; 32µs on (was 32)
@@ -658,10 +653,13 @@ beep2_BpCn22:	in	temp1, TCNT0
 		ret
 ;-----bko-----------------------------------------------------------------
 evaluate_rc_puls:
-		sbrs	flags1, RC_PULS_UPDATED
-		rjmp	set_new_duty
-		cbr	flags1, (1<<RC_PULS_UPDATED)
+		ldi	YL, 0xff
+		ldi	YH, 0xff
 		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
+		cp	temp1, YL
+		cpc	temp2, YH
+		breq	eval_rc_same
+		movw	rcpuls_l, YL		; Atomic wipe of rc pulse length
 		subi	temp1, low  (START_RC_PULS)
 		sbci	temp2, high (START_RC_PULS)
 		brcc	eval_rc_nonzero
@@ -677,7 +675,7 @@ eval_rc_nonzero:
 eval_rc_not_full:
 		sts	rc_duty_l, temp1
 		sts	rc_duty_h, temp2
-		rjmp	set_new_duty
+eval_rc_same:	rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
 ;evaluate_uart:	cbr	flags1, (1<<EVAL_UART)
 ;		ret
@@ -972,18 +970,21 @@ wait_for_poweroff:
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		sei
-		clr	rcpuls_l		; Clear any erroneous pulse length
-		clr	rcpuls_h		; from while interrupts were disabled
+		; RC pulse interrupt likely happens here
+		ldi	YL, 0xff		; Clear any erroneous pulse length
+		ldi	YH, 0xff		; from when interrupts were disabled
+		movw	rcpuls_l, YL
+
 wait_for_power_on:
 .if MOT_BRAKE
 		nFET_brake temp1
 .endif
 		rcall	evaluate_rc_puls
 		lds	temp1, rc_duty_l
+		lds	temp2, rc_duty_h
 		cpi	temp1, low(MIN_DUTY)
-		lds	temp1, rc_duty_h
-		ldi	temp2, high(MIN_DUTY)
-		cpc	temp1, temp2
+		ldi	temp3, high(MIN_DUTY)
+		cpc	temp2, temp3
 		brcs	wait_for_power_on
 		ldi	temp1, RCP_TOT - 1	; allow some racing with t1ovfl_int
 		cp	rcpuls_timeout, temp1
