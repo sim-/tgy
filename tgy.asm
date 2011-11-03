@@ -577,17 +577,18 @@ pwm_off:
 		ldi	ZL, pwm_on		; 1 cycle
 		in	acsr_save, ACSR		; 1 cycle
 		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
-		out	TCNT2, off_duty_l	; 4 cycles
-		reti
+		out	TCNT2, off_duty_l	; 1 cycle
+		reti				; 4 cycles
 pwm_off_long:	ldi	ZL, pwm_on_high		; 1 cycle
 		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
 		mov	tcnt2h, off_duty_h	; 1 cycle
-		rcall	pwm_wait		; 7 cycles
+		rcall	pwm_wait		; 8 cycles
 		in	acsr_save, ACSR		; 1 cycle
 		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
 pwm_wait:					; 3 cycles for rcall
-		ret				; 4 cycles (total 7)
+		wdr				; 1 cycle
+		ret				; 4 cycles (total 8)
 
 .if high(pwm_off)
 .error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
