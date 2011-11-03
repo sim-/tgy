@@ -156,12 +156,12 @@
 ;.equ			= 5 (sck stk200 interface)
 ;.equ			= 4	(miso stk200 interface)
 ;.equ			= 3	(mosi stk200 interface)
-;.equ			= 2
+.equ	GND_PIN		= 2	; Seems to be grounded on this board
 ;.equ			= 1
 .equ	CnFET		= 0
 
 .equ	INIT_PB		= 0
-.equ	DIR_PB		= 1<<CnFET
+.equ	DIR_PB		= (1<<CnFET)
 
 .equ	CnFET_port	= PORTB
 
