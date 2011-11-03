@@ -356,18 +356,34 @@ clear_loop1:	cp	ZL, r0
 		out	OSCCAL, temp1
 		rcall	wait30ms
 
-	; startup beeps
-		rcall	beep_f1
+	; Check reset cause
+		in	acsr_save, MCUCSR
+		out	MCUCSR, zero
+
+		sbrs	acsr_save, PORF		; Power-on reset
+		rjmp	init_no_porf
+		rcall	beep_f1			; Usual startup beeps
 		rcall	wait30ms
 		rcall	beep_f2
 		rcall	wait30ms
 		rcall	beep_f3
-		rcall	wait30ms
+		rjmp	control_start
+
+init_no_porf:	sbrs	acsr_save, BORF		; Brown-out reset
+		rjmp	init_no_borf
+		rcall	beep_f3			; "dead cellphone"
+		rcall	beep_f1
+
+init_no_borf:	sbrs	acsr_save, EXTRF	; External reset
+		rjmp	control_start
+		rcall	beep_f4			; Single beep
+
+control_start:
+		rcall	wait260ms
 
 		; status led on
 		GRN_on
 
-control_start:
 	; init registers and interrupts
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
