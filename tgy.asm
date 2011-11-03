@@ -1322,7 +1322,8 @@ com2com3:	; Cp off, Bn on
 		sbrs	flags1, FULL_POWER
 		BnFET_off_reg nfet_off
 		ldi	XL, BnFET_port+0x20
-		reti
+		sei
+		ret
 
 com3com4:	; Ap off, Cp on
 		set_comp_phase_a temp1
@@ -1355,7 +1356,8 @@ com4com5:	; Bn off, An on
 		sbrs	flags1, FULL_POWER
 		AnFET_off_reg nfet_off
 		ldi	XL, AnFET_port+0x20
-		reti
+		sei
+		ret
 
 com5com6:	; Cp off, Bp on
 		set_comp_phase_c temp1
@@ -1388,6 +1390,7 @@ com6com1:	; An off, Cn on
 		sbrs	flags1, FULL_POWER
 		CnFET_off_reg nfet_off
 		ldi	XL, CnFET_port+0x20
-		reti
+		sei
+		ret
 
 .exit
