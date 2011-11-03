@@ -94,7 +94,7 @@
 .equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
 
 .equ	MOT_BRAKE	= 0	; Enable brake
-.equ	RC_PULS_REVERSE	= 1	; Enable RC-car style forward/reverse throttle
+.equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
