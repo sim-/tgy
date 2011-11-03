@@ -1,6 +1,7 @@
 ;***************************************************************
 ;* For HK Blue Series with n- and p-Channel FETs (old version) *
-;* IMPORTANT: Set fuses to internal 8MHz clock		       *
+;* Fuses should be set to -U lfuse:w:0x3f:m -U hfuse:w:0xd7:m  *
+;* or similar (even intrc will work now)                       *
 ;* 09/2011						       *
 ;* https://github.com/sim-/tgy				       *
 ;***************************************************************
