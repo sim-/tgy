@@ -93,9 +93,11 @@
 .equ	TIME_HALFADD	= 0	; Update half timing method
 .equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
 
-.equ	MOT_BRAKE	= 0	; Enable brake
+.equ	MOTOR_BRAKE	= 0	; Enable brake
+.equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
+
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
 .if defined(ultrapwm)
@@ -114,7 +116,7 @@
 
 .if	RC_PULS_REVERSE
 .equ	NEUTRAL_RC_PULS	= FULL_RC_PULS + START_RC_PULS	; Doubled
-.equ	RCP_DEADBAND	= 63	; Do not start until this much above or below neutral
+.equ	RCP_DEADBAND	= 100	; Do not start until this much above or below neutral
 .else
 .equ	NEUTRAL_RC_PULS	= START_RC_PULS
 .equ	RCP_DEADBAND	= 0
@@ -189,9 +191,9 @@
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
 ;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
-;	.equ	EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
-	.equ	PROGRAM_REVERSE	= 6	; if set, flip commutation direction
-	.equ	RC_REVERSE	= 7	; if set, RC pulse is in reverse zone
+;	.equ    EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
+;	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
+	.equ	REVERSE		= 7	; if set, do reverse commutation
 
 ;.def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
@@ -705,15 +707,24 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		andi	YH, 0x0f
 		eor	YL, YH
 .endif
-		cbr	flags1, (1<<RC_REVERSE)
+.if MOTOR_REVERSE
+		sbr	flags1, (1<<REVERSE)
+.else
+		cbr	flags1, (1<<REVERSE)
+.endif
 		lds	temp1, neutral_l
 		lds	temp2, neutral_h
 		sub	YL, temp1
 		sbc	YH, temp2
 		brcc	puls_plus
 .if RC_PULS_REVERSE
-		sbr	flags1, (1<<RC_REVERSE)
-		adiw	YL, RCP_DEADBAND
+.if MOTOR_REVERSE
+		cbr	flags1, (1<<REVERSE)
+.else
+		sbr	flags1, (1<<REVERSE)
+.endif
+		subi	YL, -low(RCP_DEADBAND)
+		sbci	YH, -1 - high(RCP_DEADBAND)
 		brpl	puls_zero
 		com	YH
 		neg	YL
@@ -725,7 +736,8 @@ puls_zero:	clr	YL
 		rjmp	puls_not_full
 puls_plus:
 .if RCP_DEADBAND
-		sbiw	YL, RCP_DEADBAND
+		subi	YL, low(RCP_DEADBAND)
+		sbci	YH, high(RCP_DEADBAND)
 		brmi	puls_zero
 .endif
 puls_not_zero:	adiw	YL, MIN_DUTY
@@ -1034,7 +1046,7 @@ init_startup:
 		sei
 		; RC pulse interrupt likely happens here
 		cbr	flags1, (1<<EVAL_RC)	; Ignore any broken pulse from when interrupts were off
-.if MOT_BRAKE
+.if MOTOR_BRAKE
 		nFET_brake temp1
 .endif
 wait_for_power_on:
@@ -1078,9 +1090,10 @@ start_from_running:
 ;-----bko-----------------------------------------------------------------
 ; **** start control loop ****
 
-; state 1 = B(p-on) + C(n-choppered) - comparator A evaluated
-; out_cA changes from low to high
-start1:		rcall	start_step
+start1:		sbrs	flags1, REVERSE
+		rjmp	start_reverse
+
+start_forward:	rcall	start_step
 		brcs	start1_com2
 ; do the special 120° switch
 		sts	goodies, zero
@@ -1090,40 +1103,56 @@ start1:		rcall	start_step
 start1_com2:	rcall	com1com2
 		rcall	start_timeout
 
-; state 2 = A(p-on) + C(n-choppered) - comparator B evaluated
-; out_cB changes from high to low
-
-start2:		rcall	start_step
+		rcall	start_step
 		rcall	com2com3
 		rcall	start_timeout
 
-; state 3 = A(p-on) + B(n-choppered) - comparator C evaluated
-; out_cC changes from low to high
-
-start3:		rcall	start_step
+		rcall	start_step
 start3_com4:	rcall	com3com4
 		rcall	start_timeout
 
-; state 4 = C(p-on) + B(n-choppered) - comparator A evaluated
-; out_cA changes from high to low
-
-start4:		rcall	start_step
+		rcall	start_step
 		rcall	com4com5
 		rcall	start_timeout
 
-; state 5 = C(p-on) + A(n-choppered) - comparator B evaluated
-; out_cB changes from low to high
-
-start5:		rcall	start_step
+		rcall	start_step
 		rcall	com5com6
 		rcall	start_timeout
 
-; state 6 = B(p-on) + A(n-choppered) - comparator C evaluated
-; out_cC changes from high to low
-
-start6:		rcall	start_step
+		rcall	start_step
 		rcall	com6com1
+		rjmp	start6
 
+start_reverse:	rcall	start_step
+		brcc	start1_com6
+; do the special 120° switch
+		sts	goodies, zero
+		rcall	com1com6
+		rcall	com6com5
+		rjmp	start3_rcom4
+start1_com6:	rcall	com1com6
+		rcall	start_timeout
+
+		rcall	start_step
+		rcall	com6com5
+		rcall	start_timeout
+
+		rcall	start_step
+start3_rcom4:	rcall	com5com4
+		rcall	start_timeout
+
+		rcall	start_step
+		rcall	com4com3
+		rcall	start_timeout
+
+		rcall	start_step
+		rcall	com3com2
+		rcall	start_timeout
+
+		rcall	start_step
+		rcall	com2com1
+
+start6:
 		sbrc	flags1, POWER_OFF	; Check if power turned off
 		rjmp	init_startup
 
@@ -1189,59 +1218,76 @@ s6_run1:
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
 
-; run 1 = B(p-on) + C(n-choppered) - comparator A evaluated
-; out_cA changes from low to high
+run1:		sbrs	flags1, REVERSE
+		rjmp	run_reverse
 
-run1:
+run_forward:
 		rcall	wait_for_high
 		brcs	run_to_start
 		rcall	com1com2
 		rcall	calc_next_timing_and_wait
 
-; run 2 = A(p-on) + C(n-choppered) - comparator B evaluated
-; out_cB changes from high to low
-
-run2:
 		rcall	wait_for_low
 		brcs	run_to_start
 		rcall	com2com3
 		rcall	calc_next_timing_and_wait
 
-; run 3 = A(p-on) + B(n-choppered) - comparator C evaluated
-; out_cC changes from low to high
-
-run3:
 		rcall	wait_for_high
 		brcs	run_to_start
 		rcall	com3com4
 		rcall	calc_next_timing_and_wait
 
-; run 4 = C(p-on) + B(n-choppered) - comparator A evaluated
-; out_cA changes from high to low
-run4:
 		rcall	wait_for_low
 		brcs	run_to_start
 		rcall	com4com5
 		rcall	calc_next_timing_and_wait
 
-; run 5 = C(p-on) + A(n-choppered) - comparator B evaluated
-; out_cB changes from low to high
-
-run5:
 		rcall	wait_for_high
 		brcs	run_to_start
 		rcall	com5com6
 		rcall	calc_next_timing_and_wait
 
-; run 6 = B(p-on) + A(n-choppered) - comparator C evaluated
-; out_cC changes from high to low
-
-run6:
 		rcall	wait_for_low
 		brcs	run_to_start
 		rcall	com6com1
 		rcall	calc_next_timing_and_wait
+		rjmp	run6
 
+run_to_start:	rcall	switch_power_off
+		rjmp	start_from_running
+
+run_reverse:
+		rcall	wait_for_low
+		brcs	run_to_start
+		rcall	com1com6
+		rcall	calc_next_timing_and_wait
+
+		rcall	wait_for_high
+		brcs	run_to_start
+		rcall	com6com5
+		rcall	calc_next_timing_and_wait
+
+		rcall	wait_for_low
+		brcs	run_to_start
+		rcall	com5com4
+		rcall	calc_next_timing_and_wait
+
+		rcall	wait_for_high
+		brcs	run_to_start
+		rcall	com4com3
+		rcall	calc_next_timing_and_wait
+
+		rcall	wait_for_low
+		brcs	run_to_start
+		rcall	com3com2
+		rcall	calc_next_timing_and_wait
+
+		rcall	wait_for_high
+		brcs	run_to_start
+		rcall	com2com1
+		rcall	calc_next_timing_and_wait
+
+run6:
 		tst	rc_timeout
 		breq	restart_control
 
@@ -1249,7 +1295,7 @@ run6:
 		cpc	sys_control_h, zero
 		breq	run_to_start
 
-.if MOT_BRAKE
+.if MOTOR_BRAKE
 		ldi	temp1, 0xff
 		cp	duty_l, temp1
 		cpc	duty_h, zero
@@ -1289,9 +1335,6 @@ run6_2:
 		movw	sys_control_l, YL
 .endif
 run6_3:		rjmp	run1
-
-run_to_start:	rcall	switch_power_off
-		rjmp	start_from_running
 
 restart_control:
 		cli				; disable all interrupts
@@ -1370,6 +1413,22 @@ com1com2:	; Bp off, Ap on
 		ApFET_on
 		ret
 
+com2com1:	; Bp on, Ap off
+		set_comp_phase_a temp1
+		.if CnFET_port == ApFET_port
+		ApFET_off_reg nfet_on
+		ApFET_off_reg nfet_off
+		.endif
+		ApFET_off
+		sbrc	flags1, POWER_OFF
+		ret
+		.if CnFET_port == BpFET_port
+		BpFET_on_reg nfet_on
+		BpFET_on_reg nfet_off
+		.endif
+		BpFET_on
+		ret
+
 com2com3:	; Cp off, Bn on
 		set_comp_phase_c temp1
 		cli
@@ -1388,6 +1447,24 @@ com2com3:	; Cp off, Bn on
 		sei
 		ret
 
+com3com2:	; Cp on, Bn off
+		set_comp_phase_b temp1
+		cli
+		in	temp1, BnFET_port
+		BnFET_off
+		in	temp2, BnFET_port
+		in	nfet_on, CnFET_port
+		cpse	temp1, temp2
+		CnFET_on
+		sbrs	flags1, POWER_OFF
+		CnFET_on_reg nfet_on
+		mov	nfet_off, nfet_on
+		sbrs	flags1, FULL_POWER
+		CnFET_off_reg nfet_off
+		ldi	XL, CnFET_port+0x20
+		sei
+		ret
+
 com3com4:	; Ap off, Cp on
 		set_comp_phase_a temp1
 		.if BnFET_port == ApFET_port
@@ -1402,6 +1479,22 @@ com3com4:	; Ap off, Cp on
 		CpFET_on_reg nfet_off
 		.endif
 		CpFET_on
+		ret
+
+com4com3:	; Ap on, Cp off
+		set_comp_phase_c temp1
+		.if BnFET_port == CpFET_port
+		CpFET_off_reg nfet_on
+		CpFET_off_reg nfet_off
+		.endif
+		CpFET_off
+		sbrc	flags1, POWER_OFF
+		ret
+		.if BnFET_port == ApFET_port
+		ApFET_on_reg nfet_on
+		ApFET_on_reg nfet_off
+		.endif
+		ApFET_on
 		ret
 
 com4com5:	; Bn off, An on
@@ -1422,6 +1515,24 @@ com4com5:	; Bn off, An on
 		sei
 		ret
 
+com5com4:	; Bn on, An off
+		set_comp_phase_a temp1
+		cli
+		in	temp1, AnFET_port
+		AnFET_off
+		in	temp2, AnFET_port
+		in	nfet_on, BnFET_port
+		cpse	temp1, temp2
+		BnFET_on
+		sbrs	flags1, POWER_OFF
+		BnFET_on_reg nfet_on
+		mov	nfet_off, nfet_on
+		sbrs	flags1, FULL_POWER
+		BnFET_off_reg nfet_off
+		ldi	XL, BnFET_port+0x20
+		sei
+		ret
+
 com5com6:	; Cp off, Bp on
 		set_comp_phase_c temp1
 		.if AnFET_port == CpFET_port
@@ -1436,6 +1547,22 @@ com5com6:	; Cp off, Bp on
 		BpFET_on_reg nfet_off
 		.endif
 		BpFET_on
+		ret
+
+com6com5:	; Cp on, Bp off
+		set_comp_phase_b temp1
+		.if AnFET_port == BpFET_port
+		BpFET_off_reg nfet_on
+		BpFET_off_reg nfet_off
+		.endif
+		BpFET_off
+		sbrc	flags1, POWER_OFF
+		ret
+		.if AnFET_port == CpFET_port
+		CpFET_on_reg nfet_on
+		CpFET_on_reg nfet_off
+		.endif
+		CpFET_on
 		ret
 
 com6com1:	; An off, Cn on
@@ -1453,6 +1580,24 @@ com6com1:	; An off, Cn on
 		sbrs	flags1, FULL_POWER
 		CnFET_off_reg nfet_off
 		ldi	XL, CnFET_port+0x20
+		sei
+		ret
+
+com1com6:	; An on, Cn off
+		set_comp_phase_c temp1
+		cli
+		in	temp1, CnFET_port
+		CnFET_off
+		in	temp2, CnFET_port
+		in	nfet_on, AnFET_port
+		cpse	temp1, temp2
+		AnFET_on
+		sbrs	flags1, POWER_OFF
+		AnFET_on_reg nfet_on
+		mov	nfet_off, nfet_on
+		sbrs	flags1, FULL_POWER
+		AnFET_off_reg nfet_off
+		ldi	XL, AnFET_port+0x20
 		sei
 		ret
 
