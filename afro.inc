@@ -33,11 +33,11 @@
 	out	TIMSK, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
-	ldi	@0, T1CLK+T1ICP+ICES1
+	ldi	@0, T1CLK+T1ICP
 	out	TCCR1B, @0
 .ENDMACRO
 .MACRO rcp_int_falling_edge
-	ldi	@0, T1CLK+T1ICP
+	ldi	@0, (T1CLK+T1ICP) & ~(1<<ICES1)
 	out	TCCR1B, @0
 .ENDMACRO
 
