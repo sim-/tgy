@@ -708,9 +708,9 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		eor	YL, YH
 .endif
 .if MOTOR_REVERSE
-		sbr	flags1, (1<<REVERSE)
-.else
 		cbr	flags1, (1<<REVERSE)
+.else
+		sbr	flags1, (1<<REVERSE)
 .endif
 		lds	temp1, neutral_l
 		lds	temp2, neutral_h
@@ -719,9 +719,9 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		brcc	puls_plus
 .if RC_PULS_REVERSE
 .if MOTOR_REVERSE
-		cbr	flags1, (1<<REVERSE)
-.else
 		sbr	flags1, (1<<REVERSE)
+.else
+		cbr	flags1, (1<<REVERSE)
 .endif
 		subi	YL, -low(RCP_DEADBAND)
 		sbci	YH, -1 - high(RCP_DEADBAND)
