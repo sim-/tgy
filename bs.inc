@@ -2,8 +2,8 @@
 ;* For HK Blue Series with n- and p-Channel FETs (old version) *
 ;* Fuses should be set to -U lfuse:w:0x3f:m -U hfuse:w:0xd7:m  *
 ;* or similar (even intrc will work now)                       *
-;* 09/2011						       *
-;* https://github.com/sim-/tgy				       *
+;* 09/2011                                                     *
+;* https://github.com/sim-/tgy                                 *
 ;***************************************************************
 
 
@@ -11,7 +11,7 @@
 ; PORT D definitions *
 ;*********************
 ;.equ			= 7
-;.equ	c_comp		= 6
+;.equ			= 6
 .equ	AnFET		= 5
 .equ	ApFET		= 4
 ;.equ			= 3
@@ -33,16 +33,16 @@
 	nop
 .ENDMACRO
 .MACRO rcp_int_enable
-	ldi @0, (1<<INT0) ; enable ext0int
+	ldi @0, (1<<INT0)	; enable ext0int
 	out	GICR, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
 	ldi	@0, (1<<ISC01)+(1<<ISC00)
-	out	MCUCR, @0 ; set next int0 to rising edge
+	out	MCUCR, @0	; set next int0 to rising edge
 .ENDMACRO
 .MACRO rcp_int_falling_edge
 	ldi @0, (1<<ISC01)
-	out MCUCR, @0 ; set next int0 to falling edge
+	out MCUCR, @0		; set next int0 to falling edge
 .ENDMACRO
 
 .MACRO AnFET_on
@@ -81,8 +81,8 @@
 .equ	BnFET		= 4
 .equ	CpFET		= 3
 ;.equ	accu_adc	= 2	; ADC2 -> not used
-;.equ	AnREF		= 1 ; ADC1 -> not used
-.equ	mux_c		= 0 ; ADC0
+;.equ	AnREF		= 1	; ADC1 -> not used
+.equ	mux_c		= 0	; ADC0
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= (1<<BnFET)+(1<<BpFET)+(1<<CpFET)
@@ -131,20 +131,20 @@
 
 .MACRO comp_init
 	in @0, SFIOR
-	sbr @0, (1<<ACME) ; switch to comparator multiplexed
+	sbr @0, 1<<ACME		; switch to comparator multiplexed
 	out SFIOR, @0
-	cbi ADCSRA, ADEN ; disable ADC
+	cbi ADCSRA, ADEN	; disable ADC
 .ENDMACRO
 .MACRO set_comp_phase_a
-	ldi @0, mux_a ; set comparator multiplexer to phase A
+	ldi @0, mux_a		; set comparator multiplexer to phase A
 	out ADMUX, @0
 .ENDMACRO
 .MACRO set_comp_phase_b
-	ldi @0, mux_b ; set comparator multiplexer to phase B
+	ldi @0, mux_b		; set comparator multiplexer to phase B
 	out ADMUX, @0
 .ENDMACRO
 .MACRO set_comp_phase_c
-	ldi @0, mux_c ; set comparator multiplexer to phase C
+	ldi @0, mux_c		; set comparator multiplexer to phase C
 	out ADMUX, @0
 .ENDMACRO
 
@@ -154,7 +154,7 @@
 ;*********************
 ;.equ			= 7
 ;.equ			= 6
-;.equ			= 5 (sck stk200 interface)
+;.equ			= 5	(sck stk200 interface)
 ;.equ			= 4	(miso stk200 interface)
 ;.equ			= 3	(mosi stk200 interface)
 ;.equ			= 2

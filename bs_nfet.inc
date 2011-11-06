@@ -33,16 +33,16 @@
 	nop
 .ENDMACRO
 .MACRO rcp_int_enable
-	ldi @0, (1<<INT0) ; enable ext0int
+	ldi @0, (1<<INT0)	; enable ext0int
 	out	GICR, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
 	ldi	@0, (1<<ISC01)+(1<<ISC00)
-	out	MCUCR, @0 ; set next int0 to rising edge
+	out	MCUCR, @0	; set next int0 to rising edge
 .ENDMACRO
 .MACRO rcp_int_falling_edge
 	ldi @0, (1<<ISC01)
-	out MCUCR, @0 ; set next int0 to falling edge
+	out MCUCR, @0		; set next int0 to falling edge
 .ENDMACRO
 
 .MACRO AnFET_on
@@ -81,8 +81,8 @@
 .equ	BnFET		= 4
 .equ	CpFET		= 3
 ;.equ	accu_adc	= 2	; ADC2 -> not used
-;.equ	AnREF		= 1 ; ADC1 -> not used
-.equ	mux_c		= 0 ; ADC0
+;.equ	AnREF		= 1	; ADC1 -> not used
+.equ	mux_c		= 0	; ADC0
 
 .equ	INIT_PC		= (1<<BpFET)+(1<<CpFET)
 .equ	DIR_PC		= (1<<BnFET)+(1<<BpFET)+(1<<CpFET)
@@ -91,17 +91,17 @@
 .equ	BnFET_port	= PORTC
 .equ	CpFET_port	= PORTC
 
-.MACRO BpFET_on
-	cbi PORTC, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	sbi PORTC, BpFET
-.ENDMACRO
 .MACRO BnFET_on
 	sbi PORTC, BnFET
 .ENDMACRO
 .MACRO BnFET_off
 	cbi PORTC, BnFET
+.ENDMACRO
+.MACRO BpFET_on
+	cbi PORTC, BpFET
+.ENDMACRO
+.MACRO BpFET_off
+	sbi PORTC, BpFET
 .ENDMACRO
 .MACRO CpFET_on
 	cbi PORTC, CpFET
@@ -110,17 +110,17 @@
 	sbi PORTC, CpFET
 .ENDMACRO
 
-.MACRO BpFET_on_reg
-	cbr @0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	sbr @0, 1<<BpFET
-.ENDMACRO
 .MACRO BnFET_on_reg
 	sbr @0, 1<<BnFET
 .ENDMACRO
 .MACRO BnFET_off_reg
 	cbr @0, 1<<BnFET
+.ENDMACRO
+.MACRO BpFET_on_reg
+	cbr @0, 1<<BpFET
+.ENDMACRO
+.MACRO BpFET_off_reg
+	sbr @0, 1<<BpFET
 .ENDMACRO
 .MACRO CpFET_on_reg
 	cbr @0, 1<<CpFET
@@ -136,15 +136,15 @@
 	cbi ADCSRA, ADEN	; disable ADC
 .ENDMACRO
 .MACRO set_comp_phase_a
-	ldi @0, mux_a ; set comparator multiplexer to phase A
+	ldi @0, mux_a		; set comparator multiplexer to phase A
 	out ADMUX, @0
 .ENDMACRO
 .MACRO set_comp_phase_b
-	ldi @0, mux_b ; set comparator multiplexer to phase B
+	ldi @0, mux_b		; set comparator multiplexer to phase B
 	out ADMUX, @0
 .ENDMACRO
 .MACRO set_comp_phase_c
-	ldi @0, mux_c ; set comparator multiplexer to phase C
+	ldi @0, mux_c		; set comparator multiplexer to phase C
 	out ADMUX, @0
 .ENDMACRO
 
@@ -154,7 +154,7 @@
 ;*********************
 ;.equ			= 7
 ;.equ			= 6
-;.equ			= 5 (sck stk200 interface)
+;.equ			= 5	(sck stk200 interface)
 ;.equ			= 4	(miso stk200 interface)
 ;.equ			= 3	(mosi stk200 interface)
 .equ	GND_PIN		= 2	; Seems to be grounded on this board
