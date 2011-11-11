@@ -708,9 +708,9 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		eor	YL, YH
 .endif
 .if MOTOR_REVERSE
-		cbr	flags1, (1<<REVERSE)
-.else
 		sbr	flags1, (1<<REVERSE)
+.else
+		cbr	flags1, (1<<REVERSE)
 .endif
 		lds	temp1, neutral_l
 		lds	temp2, neutral_h
@@ -719,9 +719,9 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		brcc	puls_plus
 .if RC_PULS_REVERSE
 .if MOTOR_REVERSE
-		sbr	flags1, (1<<REVERSE)
-.else
 		cbr	flags1, (1<<REVERSE)
+.else
+		sbr	flags1, (1<<REVERSE)
 .endif
 		subi	YL, -low(RCP_DEADBAND)
 		sbci	YH, -1 - high(RCP_DEADBAND)
@@ -1090,7 +1090,7 @@ start_from_running:
 ;-----bko-----------------------------------------------------------------
 ; **** start control loop ****
 
-start1:		sbrs	flags1, REVERSE
+start1:		sbrc	flags1, REVERSE
 		rjmp	start_reverse
 
 start_forward:	rcall	start_step
@@ -1218,7 +1218,7 @@ s6_run1:
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
 
-run1:		sbrs	flags1, REVERSE
+run1:		sbrc	flags1, REVERSE
 		rjmp	run_reverse
 
 run_forward:
