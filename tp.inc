@@ -132,6 +132,11 @@
 	out	PORTD, @0
 .ENDMACRO
 
+.MACRO nFET_brake
+	in	@0, PORTD
+	sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+	out	PORTD, @0
+.ENDMACRO
 .MACRO all_nFETs_off
 	in	@0, PORTD
 	cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
