@@ -101,29 +101,29 @@
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
 .if defined(ultrapwm)
-.equ	START_RC_PULS	= 200	; Experimental support for http://www.xaircraft.com/wiki/UltraPWM/en
+.equ	STOP_RC_PULS	= 200	; Support for http://www.xaircraft.com/wiki/UltraPWM/en
 .equ	FULL_RC_PULS	= 1200	; which says motors should start at 200us,
 .equ	MAX_RC_PULS	= 1400	; but does not define min/max pulse width.
 .elif RC_PULS_REVERSE
-.equ	START_RC_PULS	= 1000	; Start motor at or below this pulse length
+.equ	STOP_RC_PULS	= 1000	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1900	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
 .else
-.equ	START_RC_PULS	= 1060	; Start motor at or below this pulse length
+.equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
 .endif
 
 .if	RC_PULS_REVERSE
-.equ	NEUTRAL_RC_PULS	= FULL_RC_PULS + START_RC_PULS	; Doubled
+.equ	NEUTRAL_RC_PULS	= FULL_RC_PULS + STOP_RC_PULS	; Doubled
 .equ	RCP_DEADBAND	= 100	; Do not start until this much above or below neutral
 .else
-.equ	NEUTRAL_RC_PULS	= START_RC_PULS
+.equ	NEUTRAL_RC_PULS	= STOP_RC_PULS
 .equ	RCP_DEADBAND	= 0
 .endif
 
 .equ	MIN_DUTY	= 63	; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
-.equ	POWER_RANGE	= FULL_RC_PULS - START_RC_PULS - RCP_DEADBAND + MIN_DUTY
+.equ	POWER_RANGE	= FULL_RC_PULS - STOP_RC_PULS - RCP_DEADBAND + MIN_DUTY
 .equ	MAX_POWER	= (POWER_RANGE-1)
 
 .equ	TIMING_MIN	= 0x8000 ; 8192us per commutation
