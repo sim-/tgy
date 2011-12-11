@@ -78,13 +78,13 @@
 .if defined(afro_esc)
 .include "afro.inc"		; AfroESC (ICP PPM)
 .elif defined(bs_esc)
-.include "bs.inc"		; HobbyKing BlueSeries / Mystery *UNTESTED* (INT0 PPM)
+.include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PPM)
 .elif defined(bs_nfet_esc)
 .include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PPM)
 .elif defined(tp_esc)
-.include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" *UNTESTED* (INT0 PPM)
+.include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PPM)
 .elif defined(tp_nfet_esc)
-.include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" *UNTESTED* (INT0 PPM)
+.include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" (INT0 PPM)
 .else
 .include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PPM)
 .endif

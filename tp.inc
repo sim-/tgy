@@ -6,8 +6,6 @@
 ;* http://home.versanet.de/~b-konze/blc_18a/blc_18a.htm    *
 ;***********************************************************
 
-; Untested port to this tree. Please report if successful :)
-
 ;*********************
 ; PORT D definitions *
 ;*********************
