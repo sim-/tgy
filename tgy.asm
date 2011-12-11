@@ -81,6 +81,8 @@
 .include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PPM)
 .elif defined(bs_nfet_esc)
 .include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PPM)
+.elif defined(rct50a_esc)
+.include "rct50a.inc"		; RCTimer 50A with all nFETs (INT0 PPM)
 .elif defined(tp_esc)
 .include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PPM)
 .elif defined(tp_nfet_esc)
