@@ -24,22 +24,13 @@ program_dapa: program_dapa_tgy
 program_uisp: program_uisp_tgy
 
 read:
-	avrdude -c dragon_isp -p m8 -P usb -U flash:r:flash.hex:i
+	avrdude -c dragon_isp -p m8 -P usb -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
 read_dapa:
-	avrdude -c dapa -p m8 -U flash:r:flash.hex:i
+	avrdude -c dapa -p m8 -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
 read_uisp:
 	uisp -dprog=dapa --download -v of=flash.hex
-
-readeeprom:
-	avrdude -c dragon_isp -p m8 -P usb -U eeprom:r:eeprom.hex:i
-
-readeeprom_dapa:
-	avrdude -c dapa -p m8 -U eeprom:r:eeprom.hex:i
-
-readeeprom_uisp:
-	uisp -dprog=dapa --download --segment=eeprom -v of=eeprom.hex
 
 terminal_dapa:
 	avrdude -c dapa -p m8 -t
