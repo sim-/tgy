@@ -757,8 +757,9 @@ evaluate_rc_i2c:
 	; Stub for now
 		ret
 ;-----bko-----------------------------------------------------------------
-update_timing:	lds	temp3, tcnt1x
-		rcall	set_ocr1a		; returns TCNT1L/H in temp1, temp2
+update_timing:
+		lds	temp3, tcnt1x
+		rcall	set_ocr1a		; Returns TCNT1L/H in temp1, temp2
 		sbrs	temp2, 7		; Unless highest bit of TCNT1H is set,
 		lds	temp3, tcnt1x		; load possibly-updated extended byte.
 
@@ -888,12 +889,11 @@ update_timing6:	sts	timing_duty_l, temp1	; Save new duty limit by timing
 		ror	YH
 		ror	YL
 
-		sts	wt_comp_scan_l, YL
+		sts	wt_comp_scan_l, YL	; save zero-cross blanking wait time (15°)
 		sts	wt_comp_scan_h, YH
 		sts	wt_comp_scan_x, temp5
 
-	; use the same value for commutation timing (15°)
-		sts	com_timing_l, YL
+		sts	com_timing_l, YL	; use the same value for commutation timing (15°)
 		sts	com_timing_h, YH
 		sts	com_timing_x, temp5
 
@@ -912,12 +912,11 @@ wait_OCT1_tot:	sbrc	flags1, EVAL_RC
 		sbrc	flags0, OCT1_PENDING
 		rjmp	wait_OCT1_tot
 
-set_OCT1_tot:
 		lds	YL, zero_wt_l
 		lds	YH, zero_wt_h
 		lds	temp5, zero_wt_x
 set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
-		ldi	temp4, 1<<OCF1A
+		ldi	temp4, (1<<OCF1A)
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
@@ -1431,7 +1430,7 @@ com2com1:	; Bp on, Ap off
 		BpFET_on
 		ret
 
-com2com3:	; Cp off, Bn on
+com2com3:	; Cn off, Bn on
 		set_comp_phase_c temp1
 		cli
 		in	temp1, CnFET_port
@@ -1449,7 +1448,7 @@ com2com3:	; Cp off, Bn on
 		sei
 		ret
 
-com3com2:	; Cp on, Bn off
+com3com2:	; Cn on, Bn off
 		set_comp_phase_b temp1
 		cli
 		in	temp1, BnFET_port
