@@ -193,7 +193,7 @@
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
 ;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
-	.equ	LOW_SPEED	= 5	; if set, speed is slow enough to do PWM-aligned comparator checks
+;	.equ    EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
 	.equ    STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
 
@@ -840,12 +840,11 @@ update_timing3:
 	; With higher KV motors or high voltage, we need to make
 	; sure we don't call sync_with_poweron with fast timing,
 	; or we might miss.
-		sbr	flags1, (1<<LOW_SPEED)
 		cpi	YH, byte2(TIMING_RUN*16)
 		ldi	temp4, byte3(TIMING_RUN*16)
 		cpc	temp5, temp4
 		brcc	update_timing4
-		cbr	flags1, (1<<STARTUP)+(1<<LOW_SPEED)
+		cbr	flags1, (1<<STARTUP)
 update_timing4:
 	; Limit minimum RPM (slowest timing)
 		ldi	temp4, byte3(TIMING_MIN*16)
@@ -1142,7 +1141,7 @@ run1:		sbrc	flags1, REVERSE
 		rjmp	run_reverse
 
 run_forward:	rcall	wait_for_high
-		sbrs	flags1, LOW_SPEED
+		sbrs	flags1, STARTUP
 		rjmp	run_com1com2
 		sbrs	acsr_save, ACO
 		rjmp	run_com1com2
@@ -1172,7 +1171,7 @@ run_to_start:	rcall	switch_power_off
 		rjmp	start_from_running
 
 run_reverse:	rcall	wait_for_low
-		sbrs	flags1, LOW_SPEED
+		sbrs	flags1, STARTUP
 		rjmp	run_com1com6
 		sbrc	acsr_save, ACO
 		rjmp	run_com1com6
@@ -1281,7 +1280,7 @@ wait_for_high:	rcall	calc_next_timing_and_wait
 		mov	temp4, acsr_save
 		sbr	temp4, (1<<ACO)
 ;-----bko-----------------------------------------------------------------
-wait_for_edge:	sbrc	flags1, LOW_SPEED
+wait_for_edge:	sbrc	flags1, STARTUP
 		rjmp	wait_startup
 wait_for_edge1:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
