@@ -553,6 +553,10 @@ t1ovfl_int1:	out	SREG, i_sreg
 ; waiting an extra 0.5us - 0.75us (8-12 cycles at 16MHz) actually helps
 ; to improve zero-crossing detection accuracy significantly, perhaps
 ; because the driven-low phase has had a chance to finish swinging down.
+; However, some tiny boards such as 10A or less may have very low gate
+; charge/capacitance, and so can turn off faster. We used to wait 8/9
+; cycles, but now we wait 5 cycles (5/16ths of a microsecond), which
+; still helps on ~30A boards without breaking 10A boards.
 ;
 ; We reload TCNT2 as the very last step so as to reduce PWM dead areas
 ; between the reti and the next interrupt vector execution, which still
@@ -597,14 +601,12 @@ pwm_off:
 		reti				; 4 cycles
 pwm_off_long:	ldi	ZL, pwm_on_high		; 1 cycle
 		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
+		st	X, nfet_off		; 2 cycles (still off)
+		st	X, nfet_off		; 2 cycles (just wasting cycles)
 		mov	tcnt2h, off_duty_h	; 1 cycle
-		rcall	pwm_wait		; 8 cycles
-		in	acsr_save, ACSR		; 1 cycle
+		in	acsr_save, ACSR		; 1 cycle (5 cycles after off)
 		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
-pwm_wait:					; 3 cycles for rcall
-		wdr				; 1 cycle
-		ret				; 4 cycles (total 8)
 
 .if high(pwm_off)
 .error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
