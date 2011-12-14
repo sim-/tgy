@@ -194,7 +194,7 @@
 ;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
 ;	.equ    EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
-;	.equ	EVAL_RPM	= 6	; if set, next PWM on should look for current
+	.equ    STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
 
 ;.def	flags2	= r25
@@ -789,7 +789,6 @@ update_timing2:
 	; Accumulation method: Wait for 4 commutations, and that's all.
 		movw	YL, temp1		; Copy new timing to YL:YH:temp5
 		mov	temp5, temp3
-		sts	timing_count, zero
 .else
 		lds	YL, timing_l		; Load old timing into YL:YH:temp5
 		lds	YH, timing_h
@@ -834,15 +833,28 @@ update_timing2:
 		brcc	update_timing3
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
+		rjmp	update_timing4
 update_timing3:
+	; With higher KV motors or high voltage, we need to make
+	; sure we don't call sync_with_poweron with fast timing,
+	; or we might miss.
+		cpi	YH, byte2(TIMING_RUN*16)
+		ldi	temp4, byte3(TIMING_RUN*16)
+		cpc	temp5, temp4
+		brcc	update_timing4
+		cbr	flags1, (1<<STARTUP)
+update_timing4:
 	; Limit minimum RPM (slowest timing)
 		ldi	temp4, byte3(TIMING_MIN*16)
 		cp	temp5, temp4
-		brcs	update_timing4
+		brcs	update_timing5
 		mov	temp5, temp4
 		ldi	YH, byte2(TIMING_MIN*16)
 		ldi	YL, byte1(TIMING_MIN*16)
-update_timing4:
+update_timing5:
+.if TIME_ACCUMULATE
+		sts	timing_count, zero
+.endif
 		sts	timing_l, YL		; save new timing
 		sts	timing_h, YH
 		sts	timing_x, temp5
@@ -902,6 +914,9 @@ update_timing6:	sts	timing_duty_l, temp1	; Save new duty limit by timing
 		rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
 calc_next_timing_and_wait:
+		sbrc	flags1, STARTUP
+		rjmp	start_timeout
+
 		lds	YL, wt_comp_scan_l	; holds wait-before-scan value
 		lds	YH, wt_comp_scan_h
 		lds	temp5, wt_comp_scan_x
@@ -930,12 +945,12 @@ set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
 		sei				; We could use reti here, but that's
 		ret				; 4 more cycles of interrupt latency
 ;-----bko-----------------------------------------------------------------
-set_com_timing:
+set_com_timing:					; Does not clobber temp4
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
 		lds	temp5, com_timing_x
-		adiw	YL, 7			; Compensate for cycles during in-add-out before OCF1B clear
-		ldi	temp4, 1<<OCF1B
+set_ocr1b:	adiw	YL, 7			; Compensate for cycles during in-add-out before OCF1B clear
+		ldi	temp3, (1<<OCF1B)
 		cli
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
@@ -943,10 +958,17 @@ set_com_timing:
 		adc	YH, temp2
 		out	OCR1BH, YH
 		out	OCR1BL, YL
-		out	TIFR, temp4		; Clear any pending OCF1B interrupt (7 cycles from TCNT1 read)
+		out	TIFR, temp3		; Clear any pending OCF1B interrupt (7 cycles from TCNT1 read)
 		sts	ocr1bx, temp5
 		sbr	flags0, (1<<OCT1B_PENDING)
 		sei
+		ret
+;-----bko-----------------------------------------------------------------
+start_timeout_start:
+		ldi	YL, byte1(timeoutSTART*16)
+		ldi	YH, byte2(timeoutSTART*16)
+		ldi	temp1, byte3(timeoutSTART*16)
+		mov	temp5, temp1
 		ret
 ;-----bko-----------------------------------------------------------------
 start_timeout:
@@ -964,14 +986,11 @@ start_timeout:
 		ldi	temp1, byte3(timeoutMIN*16)
 		cpc	temp5, temp1
 		brcc	start_timeout2
-start_timeout1:	ldi	YL, byte1(timeoutSTART*16)
-		ldi	YH, byte2(timeoutSTART*16)
-		ldi	temp1, byte3(timeoutSTART*16)
-		mov	temp5, temp1
-start_timeout2:	sts	wt_OCT1_tot_l, YL
-		sts	wt_OCT1_tot_h, YH
+start_timeout1:	rcall	start_timeout_start
+start_timeout2:	sts	wt_OCT1_tot_l, YL	; Return with YL:YH:temp5 set
+		sts	wt_OCT1_tot_h, YH	; to new wt_OCT1_tot value
 		sts	wt_OCT1_tot_x, temp5
-		rjmp	update_timing		; Loads YL:YH:temp5 into OCR1A
+		rjmp	update_timing
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
@@ -985,7 +1004,27 @@ set_new_duty10:	cp	YL, sys_control_l
 		cpc	YH, sys_control_h
 		brcs	set_new_duty11
 		movw	YL, sys_control_l	; Limit duty to sys_control
-set_new_duty11:	ldi	temp1, low(MAX_POWER)
+set_new_duty11:
+.if SLOW_THROTTLE
+		; If sys_control is higher than twice the current duty,
+		; limit it to that. This means that a steady-state duty
+		; cycle can double at any time, but any larger change will
+		; be rate-limited.
+		ldi	temp1, low(PWR_MIN_START)
+		cp	YL, temp1
+		ldi	temp2, high(PWR_MIN_START)
+		cpc	YH, temp2
+		brcs	set_new_duty12
+		movw	temp1, YL		; temp1:temp2 >= PWR_MIN_START
+set_new_duty12:	lsl	temp1
+		rol	temp2
+		cp	sys_control_l, temp1
+		cpc	sys_control_h, temp2
+		brcs	set_new_duty13
+		movw	sys_control_l, temp1
+set_new_duty13:
+.endif
+		ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
@@ -1018,7 +1057,6 @@ set_new_duty_full:
 set_new_duty_zero:
 		; Power off
 		sbr	flags1, (1<<POWER_OFF)
-		mov	nfet_on, nfet_off	; Set nfet_off to OFF for this commutation cycle
 		rjmp	set_new_duty_set_off
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
@@ -1033,12 +1071,13 @@ wait_if_spike2:	dec	temp1
 		ret
 ;-----bko-----------------------------------------------------------------
 sync_with_poweron:
-		ldi	temp1, 0xff
-		mov	acsr_save, temp1	; ACSR will never be 0xff
+		ldi	temp1, (1<<ACD)
+		or	acsr_save, temp1	; ACD will always be enabled
 wait_for_poweroff:
-		cp	acsr_save, temp1
-		sbrc	flags0, OCT1_PENDING
-		breq	wait_for_poweroff
+		sbrc	flags1, EVAL_RC
+		rcall	evaluate_rc
+		sbrc	acsr_save, ACD
+		rjmp	wait_for_poweroff
 		ret
 ;-----bko-----------------------------------------------------------------
 ; **** startup loop ****
@@ -1062,23 +1101,30 @@ wait_for_power_on:
 		cp	rc_timeout, temp1
 		brcs	wait_for_power_on
 
-		all_nFETs_off temp1
+start_from_running:
+		rcall	switch_power_off
 		comp_init temp1			; init comparator
+		RED_off
 
 		ldi	temp1, 27		; wait about 5mikosec
 FETs_off_wt:	dec	temp1
 		brne	FETs_off_wt
 
-start_from_running:
 		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
 		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
 		movw	sys_control_l, YL	; align to a timing harmonic
 
 		sts	goodies, zero
-
-		RED_off
-
-		rcall	start_timeout		; Clears POWER_OFF, sets duty, bounds timing
+		sbr	flags1, (1<<STARTUP)
+		ldi	temp1, 4
+		sts	timing_count, temp1
+		rcall	start_timeout_start
+		rcall	update_timing		; Clears POWER_OFF, sets duty, sets last_tcnt1
+		rcall	start_timeout_start
+		sts	timing_l, YL		; Reset timing to timeoutSTART
+		sts	timing_h, YH
+		sts	timing_x, temp1
+		sts	timing_count, zero
 
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
@@ -1086,256 +1132,111 @@ start_from_running:
 		ldi	temp1, T2CLK
 		out	TCCR2, temp1		; Enable PWM (ZL and XL have been set)
 
-	; fall through start1
-
-;-----bko-----------------------------------------------------------------
-; **** start control loop ****
-
-start1:		sbrc	flags1, REVERSE
-		rjmp	start_reverse
-
-start_forward:	rcall	start_step
-		brcs	start1_com2
-; do the special 120° switch
-		sts	goodies, zero
-		rcall	com1com2
-		rcall	com2com3
-		rjmp	start3_com4
-start1_com2:	rcall	com1com2
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com2com3
-		rcall	start_timeout
-
-		rcall	start_step
-start3_com4:	rcall	com3com4
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com4com5
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com5com6
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com6com1
-		rjmp	start6
-
-start_reverse:	rcall	start_step
-		brcc	start1_com6
-; do the special 120° switch
-		sts	goodies, zero
-		rcall	com1com6
-		rcall	com6com5
-		rjmp	start3_rcom4
-start1_com6:	rcall	com1com6
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com6com5
-		rcall	start_timeout
-
-		rcall	start_step
-start3_rcom4:	rcall	com5com4
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com4com3
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com3com2
-		rcall	start_timeout
-
-		rcall	start_step
-		rcall	com2com1
-
-start6:
-		sbrc	flags1, POWER_OFF	; Check if power turned off
-		rjmp	init_startup
-
-		tst	rc_timeout		; Check for RC timeout
-		brne	s6_rcp_ok
-		rjmp	restart_control
-s6_rcp_ok:
-		; For low KV motors or with low voltage, we need a check
-		; for a lot of start cycles without timeout so that we can
-		; transition to running mode even if timing never becomes
-		; fast enough.
-		lds	temp1, goodies
-		cpi	temp1, ENOUGH_GOODIES
-		brcc	s6_run1
-		inc	temp1
-		sts	goodies, temp1
-		; With higher KV motors or high voltage, we need a check
-		; for timing to transition immediately to running mode so
-		; that we don't lose timing in the start loop.
-		lds	temp1, timing_h		; get actual RPM reference high
-		cpi	temp1, byte2(TIMING_RUN*16)
-		lds	temp1, timing_x
-		ldi	temp2, byte3(TIMING_RUN*16)
-		cpc	temp1, temp2
-		brcs	s6_run1
-
-		movw	YL, sys_control_l
-		cpi	YL, low (PWR_MAX_START)
-		ldi	temp1, high(PWR_MAX_START)
-		cpc	YH, temp1
-		brcc	s6_start1
-		; Build up sys_control to MAX_POWER in steps.
-		; This only limits initial start ramp-up; once running,
-		; this should stay at MAX_POWER unless timing is lost.
-		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 15) / 16
-		movw	sys_control_l, YL
-
-s6_start1:	rcall	start_timeout
-		rjmp	start1			; go back to state 1
-
-start_step:
-		rcall	sync_with_poweron
-		sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		rcall	sync_with_poweron
-		mov	temp4, acsr_save	; Interrupt has set acsr_save
-start_step2:	sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc		; evaluate_rc does not clobber temp4
-		cp	temp4, acsr_save
-		sbrc	flags0, OCT1_PENDING	; Exit loop if timeout
-		breq	start_step2		; Loop while ACSR unchanged
-		clc
-		sbrs	acsr_save, ACO		; Copy ACO to carry flag
-		sec
-		sbrs	flags0, OCT1_PENDING
-		sts	goodies, zero		; Clear goodies if timeout
-		ret
-
-s6_run1:
-		rcall	calc_next_timing_and_wait
-	; running state begins
-
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
 
 run1:		sbrc	flags1, REVERSE
 		rjmp	run_reverse
 
-run_forward:
-		rcall	wait_for_high
-		brcs	run_to_start
-		rcall	com1com2
-		rcall	calc_next_timing_and_wait
-
-		rcall	wait_for_low
-		brcs	run_to_start
+run_forward:	rcall	wait_for_high
+		sbrs	flags1, STARTUP
+		rjmp	run_com1com2
+		sbrs	acsr_save, ACO
+		rjmp	run_com1com2
+		push	flags1
+		sbr	flags1, (1<<POWER_OFF)
+		rcall	com1com2		; Do the special 120 degree advance
+		pop	flags1
 		rcall	com2com3
-		rcall	calc_next_timing_and_wait
-
-		rcall	wait_for_high
-		brcs	run_to_start
 		rcall	com3com4
-		rcall	calc_next_timing_and_wait
-
+		rcall	sync_with_poweron
+		rcall	sync_with_poweron
+		rjmp	run_com4com5
+run_com1com2:	rcall	com1com2
 		rcall	wait_for_low
-		brcs	run_to_start
-		rcall	com4com5
-		rcall	calc_next_timing_and_wait
-
+		rcall	com2com3
 		rcall	wait_for_high
-		brcs	run_to_start
+		rcall	com3com4
+run_com4com5:	rcall	wait_for_low
+		rcall	com4com5
+		rcall	wait_for_high
 		rcall	com5com6
-		rcall	calc_next_timing_and_wait
-
 		rcall	wait_for_low
-		brcs	run_to_start
 		rcall	com6com1
-		rcall	calc_next_timing_and_wait
 		rjmp	run6
 
 run_to_start:	rcall	switch_power_off
 		rjmp	start_from_running
 
-run_reverse:
-		rcall	wait_for_low
-		brcs	run_to_start
-		rcall	com1com6
-		rcall	calc_next_timing_and_wait
-
-		rcall	wait_for_high
-		brcs	run_to_start
+run_reverse:	rcall	wait_for_low
+		sbrs	flags1, STARTUP
+		rjmp	run_com1com6
+		sbrc	acsr_save, ACO
+		rjmp	run_com1com6
+		push	flags1
+		sbr	flags1, (1<<POWER_OFF)
+		rcall	com1com6		; Do the special 120 degree advance
+		pop	flags1
 		rcall	com6com5
-		rcall	calc_next_timing_and_wait
-
-		rcall	wait_for_low
-		brcs	run_to_start
 		rcall	com5com4
-		rcall	calc_next_timing_and_wait
-
+		rjmp	run_com4com3
+run_com1com6:	rcall	com1com6
 		rcall	wait_for_high
-		brcs	run_to_start
-		rcall	com4com3
-		rcall	calc_next_timing_and_wait
-
+		rcall	com6com5
 		rcall	wait_for_low
-		brcs	run_to_start
+		rcall	com5com4
+run_com4com3:	rcall	wait_for_high
+		rcall	com4com3
+		rcall	wait_for_low
 		rcall	com3com2
-		rcall	calc_next_timing_and_wait
-
 		rcall	wait_for_high
-		brcs	run_to_start
 		rcall	com2com1
-		rcall	calc_next_timing_and_wait
-
 run6:
 		tst	rc_timeout
 		breq	restart_control
 
+.if MOTOR_BRAKE
+		; Brake immediately whenever power is off
+		sbrc	flags1, POWER_OFF
+		rjmp	run_to_brake
+.else
+		; If timing is too slow and power is off, return to init_startup
+		lds	temp1, timing_x
+		cpi	temp1, byte3(TIMING_MIN*16)
+		sbrc	flags1, POWER_OFF
+		brsh	run_to_brake
+.endif
 		cp	sys_control_l, zero
 		cpc	sys_control_h, zero
 		breq	run_to_start
 
-.if MOTOR_BRAKE
-		ldi	temp1, 0xff
-		cp	duty_l, temp1
-		cpc	duty_h, zero
-		breq	run_to_brake
-.endif
-
-		lds	temp1, timing_x
-		cpi	temp1, byte3(TIMING_MIN*16)
-		brsh	run_to_start
-
+		movw	YL, sys_control_l
 		lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
-		brcc	run6_1
+		brcc	run6_2
 		inc	temp1
 		sts	goodies, temp1
-		rjmp	run1
+		; Build up sys_control to PWR_MAX_START in steps.
+		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 15) / 16
+		ldi	temp1, low (PWR_MAX_START)
+		ldi	temp2, high(PWR_MAX_START)
+		rjmp	run6_3
 
-run6_1:		movw	YL, sys_control_l
-		cpi	YL, low (MAX_POWER)
-		ldi	temp1, high(MAX_POWER)
-		cpc	YH, temp1
-		brcc	run6_2
+run6_2:	;	cbr	flags1, (1<<STARTUP)
 		; Build up sys_control to MAX_POWER in steps.
-		; This only limits initial start ramp-up; once running,
-		; this should stay at MAX_POWER unless timing is lost.
-		adiw	YL, (POWER_RANGE + 15) / 16
-		movw	sys_control_l, YL
-run6_2:
-.if SLOW_THROTTLE
-		lds	YL, rc_duty_l
-		lds	YH, rc_duty_h
-		lsl	YL
-		rol	YH
-		cp	sys_control_l, YL
-		cpc	sys_control_h, YH
-		brcs	run6_3
-		movw	sys_control_l, YL
-.endif
-run6_3:		rjmp	run1
+		; If SLOW_THROTTLE is disabled, this only limits
+		; initial start ramp-up; once running, sys_control
+		; will stay at MAX_POWER unless timing is lost.
+		adiw	YL, (POWER_RANGE + 31) / 32
+		ldi	temp1, low (MAX_POWER)
+		ldi	temp2, high(MAX_POWER)
+run6_3:		cp	YL, temp1
+		cpc	YH, temp2
+		brcs	run6_4
+		movw	sys_control_l, temp1
+		rjmp	run1
+run6_4:		movw	sys_control_l, YL
+		rjmp	run1
 
 restart_control:
 		cli				; disable all interrupts
@@ -1353,49 +1254,51 @@ run_to_brake:	rjmp	init_startup
 ; jump back and pretend we never saw the false crossing, resetting the
 ; timer once more when we see the crossing. This can repeat as many
 ; times as necessary until the zero_wt timeout occurs (OCT1A).
-wait_timeout:	sec
+wait_startup:	rcall	sync_with_poweron
+		rcall	sync_with_poweron
+		mov	temp4, acsr_save
+wait_startup1:	sbrs	flags0, OCT1_PENDING
+		rjmp	wait_timeout
+		sbrc	flags1, EVAL_RC
+		rcall	evaluate_rc
+		cp	temp4, acsr_save
+		breq	wait_startup1
 		ret
-
-wait_for_low:	sbrs	flags0, OCT1_PENDING
+;-----bko-----------------------------------------------------------------
+wait_timeout:	sts	goodies, zero
+		sbr	flags1, (1<<STARTUP)
+		ret
+;-----bko-----------------------------------------------------------------
+wait_for_low:	rcall	calc_next_timing_and_wait
+		mov	temp4, acsr_save
+		cbr	temp4, (1<<ACO)
+		rjmp	wait_for_edge
+;-----bko-----------------------------------------------------------------
+wait_for_high:	rcall	calc_next_timing_and_wait
+		mov	temp4, acsr_save
+		sbr	temp4, (1<<ACO)
+;-----bko-----------------------------------------------------------------
+wait_for_edge:	sbrc	flags1, STARTUP
+		rjmp	wait_startup
+wait_for_edge1:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbis	ACSR, ACO
-		rjmp	wait_for_low
+		rcall	evaluate_rc		; Must not clobber temp4
+		in	acsr_save, ACSR
+		cp	acsr_save, temp4
+		breq	wait_for_edge1
 		rcall	wait_if_spike
-wait_for_low1:	in	acsr_save, ACSR
-		sbrs	acsr_save, ACO
-		rjmp	wait_for_low
-		rcall	set_com_timing	; Start commutation wait timer
-wait_for_low2:	sbrc	flags1, EVAL_RC
+		in	acsr_save, ACSR		; Check again after spike wait
+		cp	acsr_save, temp4
+		breq	wait_for_edge1
+		rcall	set_com_timing		; Start commutation wait timer
+wait_for_edge2:	sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
-		sbrs	acsr_save, ACO	; Now check PWM-updated value only
-		rjmp	wait_for_low	; Jump back if we got a false crossing
+		cp	acsr_save, temp4	; Now check PWM-updated value only
+		breq	wait_for_edge1		; Jump back if we got a false crossing
 		sbrc	flags0, OCT1B_PENDING
-		rjmp	wait_for_low2	; Wait for commutation time
-		clc
-wait_for_low3:	ret
-
-wait_for_high:	sbrs	flags0, OCT1_PENDING
-		rjmp	wait_timeout
-		sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbic	ACSR, ACO
-		rjmp	wait_for_high
-		rcall	wait_if_spike
-wait_for_high1:	in	acsr_save, ACSR
-		sbrc	acsr_save, ACO
-		rjmp	wait_for_high
-		rcall	set_com_timing	; Start commutation wait timer
-wait_for_high2:	sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbrc	acsr_save, ACO	; Now check PWM-updated value only
-		rjmp	wait_for_high	; Jump back if we got a false crossing
-		sbrc	flags0, OCT1B_PENDING
-		rjmp	wait_for_high2	; Wait for commutation time
-		clc
-wait_for_high3:	ret
-
+		rjmp	wait_for_edge2		; Wait for commutation time
+		ret
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
 com1com2:	; Bp off, Ap on
