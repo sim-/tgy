@@ -1224,7 +1224,7 @@ run6:
 		ldi	temp2, high(PWR_MAX_START)
 		rjmp	run6_3
 
-run6_2:	;	cbr	flags1, (1<<STARTUP)
+run6_2:		cbr	flags1, (1<<STARTUP)
 		; Build up sys_control to MAX_POWER in steps.
 		; If SLOW_THROTTLE is disabled, this only limits
 		; initial start ramp-up; once running, sys_control
