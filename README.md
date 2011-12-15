@@ -39,7 +39,7 @@ Supported (Tested) Hardware
 - tgy:
     - Original TowerPro 18A
     - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (rebranded Hobbywing)
-    - RCTimer 10A, 18A, 20A, 30A (18A, 20A, 30A are same board more/less FETs)
+    - RCTimer 10A, 18A, 20A, 30A (18A, 20A, 30A are same board with more or less FETs)
     - Hobby King SS 15-18A
 - tp_nfet:
     - Newer TowerPro 25A
@@ -47,7 +47,7 @@ Supported (Tested) Hardware
 
 Notes
 -----
-- If it breaks, you to keep both pieces!
+- If it breaks, you get to keep both pieces!
 - Use at your own risk, and always test first without propellers!
 - Newer Turnigy Plush seems to have switched to SiLabs C8051F334, d'oh!
 - If your cheap ESC has 6 pads and an AVR, it's probably compatible;
