@@ -156,13 +156,7 @@ With the board powered from the current-limited supply, try to read
 the stock firmware (flash) _and_ EEPROM from the AVR, to use as a backup.
 Most are locked and will still appear to read, but the files will contain
 just a series of repeating/increasing digits. If you do manage to get
-something, consider yourself lucky! If you have any errors, check the
-connections to and voltage at the chip. Sometimes, a weak power or signal
-connection can temporarily work and then fail part-way through
-programming, giving verification errors. This can happen particularly if
-the target chip is powered weakly by the programmer itself, which then
-back-feeds to the rest of the circuit and tries to charge the capacitor,
-etc.
+something, consider yourself lucky!
 
 Write down the stock fuse values, and check that they are sane. Most AVR
 programmers have a menu for this, but with avrdude or uisp, Google "AVR
@@ -173,11 +167,18 @@ the rest of the fuse values as shipped, and write down the new values.
 
 Flash the desired target .hex file to the AVR, then set the fuses, if
 anything needed changing. You can leave the EEPROM unchanged or erased
-for now. When successful, hook up a motor without propeller at this
-point, and reset the power. You should hear three increasing beeps. If
-not, or if you hear only some beeps, the FET pinout may be incorrect or
-one or more FETs may be broken. Repetitive clicking can also indicate
-that the pinout is incorrect and causing continuous brown-out resets.
+for now. If you have any errors, check the connections to and voltage at
+the chip. Sometimes, a weak power or signal connection can temporarily
+work and then fail part-way through programming, giving verification
+errors. This can happen particularly if the target chip is powered weakly
+by the programmer itself, which then back-feeds to the rest of the
+circuit and tries to charge the capacitor, etc.
+
+Once programming is successful, hook up a small motor without propeller
+and reset the power. You should hear three increasing beeps. If not, or
+if you hear only some beeps, the FET pinout may be incorrect or one or
+more FETs may be broken. Repetitive clicking can also indicate that the
+pinout is incorrect and causing continuous brown-out resets.
 
 Now, if you attach a valid PPM servo pulse with low-enough pulse length,
 you should hear a forth beep indicating that the ESC is armed. If not,
