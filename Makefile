@@ -6,7 +6,12 @@ all: tgy.hex
 
 test: all_targets
 
-all_targets: afro.hex bs_nfet.hex bs.hex rct50a.hex tp.hex tp_nfet.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex bs_nfet.hex bs.hex rct50a.hex tp.hex tp_nfet.hex tgy6a.hex tgy.hex
+
+all_targets: $(ALL_TARGETS)
+
+clean:
+	rm -f $(ALL_TARGETS)
 
 program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
