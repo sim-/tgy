@@ -87,6 +87,8 @@
 .include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PPM)
 .elif defined(tp_nfet_esc)
 .include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" (INT0 PPM)
+.elif defined(tgy6a_esc)
+.include "tgy6a.inc"		; Turnigy Plush 6A (INT0 PPM)
 .else
 .include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PPM)
 .endif
