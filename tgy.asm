@@ -1067,7 +1067,7 @@ switch_power_off:
 		all_nFETs_off temp1
 		ret
 ;-----bko-----------------------------------------------------------------
-wait_if_spike:	ldi	temp1, 12		; 8 is slightly too low
+wait_if_spike:	ldi	temp1, 16		; 8 is slightly too low
 wait_if_spike2:	dec	temp1
 		brne	wait_if_spike2
 		ret
@@ -1293,14 +1293,20 @@ wait_for_edge1:	sbrs	flags0, OCT1_PENDING
 		in	acsr_save, ACSR		; Check again after spike wait
 		cp	acsr_save, temp4
 		breq	wait_for_edge1
+		rcall	wait_if_spike
+		in	acsr_save, ACSR		; Check again after spike wait
+		cp	acsr_save, temp4
+		breq	wait_for_edge1
 		rcall	set_com_timing		; Start commutation wait timer
 wait_for_edge2:	sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
 		cp	acsr_save, temp4	; Now check PWM-updated value only
-		breq	wait_for_edge1		; Jump back if we got a false crossing
+		breq	wait_for_edge3		; Enable startup mode and jump back if we got a false crossing
 		sbrc	flags0, OCT1B_PENDING
 		rjmp	wait_for_edge2		; Wait for commutation time
 		ret
+wait_for_edge3:	sbr	flags1, (1<<STARTUP)
+		rjmp	wait_for_edge1
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
 com1com2:	; Bp off, Ap on
