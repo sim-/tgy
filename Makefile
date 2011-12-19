@@ -13,6 +13,11 @@ all_targets: $(ALL_TARGETS)
 clean:
 	rm -f $(ALL_TARGETS)
 
+binary_zip: $(ALL_TARGETS)
+	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`.zip"; \
+	git archive -9 -o "$$TARGET" HEAD && \
+	zip -9 "$$TARGET" $(ALL_TARGETS) && ls -l "$$TARGET"
+
 program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
 
