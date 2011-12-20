@@ -39,12 +39,12 @@
 ;
 ; WARNING: This does not check temperature or voltage ADC inputs.
 ;
-; NOTE: This version is using hardware 16-bit capable PWM mode on timer2,
-; using a tcnt2h register to simulate the high byte, and so can operate at
-; any frequency with the resolution of the clock. POWER_RANGE set to 400
-; gives approximately 18kHz PWM output frequency due to cycles used in the
-; interrupt before reloading TCNT2. This should allow compatibility with 8MHz
-; or 16MHz main clocks with minor adjustments.
+; NOTE: We do 16-bit PWM on timer2 at the full CPU clock rate, using tcnt2h
+; to simulate the high byte. An input FULL to STOP range of 800 plus a
+; MIN_DUTY of 63 (a POWER_RANGE of 863) gives 800 unique PWM steps at an
+; about 18kHz on a 16MHz CPU clock. The output frequency is slightly lower
+; than F_CPU / POWER_RANGE due to cycles used in the interrupt before
+; reloading TCNT2.
 ;
 ; Simon Kirby <sim@simulated.ca>
 ;
@@ -103,6 +103,7 @@
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
+.equ	CPU_MHZ		= F_CPU / 1000000
 
 .if defined(ultrapwm)
 .equ	STOP_RC_PULS	= 200	; Support for http://www.xaircraft.com/wiki/UltraPWM/en
@@ -121,25 +122,27 @@
 .if	RC_PULS_REVERSE
 .equ	NEUTRAL_RC_PULS	= FULL_RC_PULS + STOP_RC_PULS	; Doubled
 .equ	RCP_DEADBAND	= 100	; Do not start until this much above or below neutral
+.equ	RCP_DIVISOR	= CPU_MHZ / 2 ; Work with half-microsecond steps
 .else
 .equ	NEUTRAL_RC_PULS	= STOP_RC_PULS
 .equ	RCP_DEADBAND	= 0
+.equ	RCP_DIVISOR	= CPU_MHZ ; Work with microsecond steps
 .endif
 
 .equ	MIN_DUTY	= 63	; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
 .equ	POWER_RANGE	= FULL_RC_PULS - STOP_RC_PULS - RCP_DEADBAND + MIN_DUTY
+
 .equ	MAX_POWER	= (POWER_RANGE-1)
+.equ	PWR_MIN_START	= (POWER_RANGE/8) ; Power limit until running mode
+.equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit until running mode
+.equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
+.equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
 .equ	TIMING_MIN	= 0x8000 ; 8192us per commutation
 .equ	TIMING_RUN	= 0x1000 ; 1024us per commutation
 .equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
 .equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
 .equ	TIMING_MAX	= 0x0050 ; 20us per commutation
-
-.equ	PWR_MIN_START	= (POWER_RANGE/8) ; Power limit until running mode
-.equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit until running mode
-.equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
-.equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
 .equ	timeoutSTART	= 48000 ; 48ms per commutation
 .equ	timeoutMIN	= 36000	; 36ms per commutation
@@ -379,8 +382,13 @@ clear_loop1:	cp	ZL, r0
 	; Set clock to almost 16MHz -- this should be stable provided we do
 	; not write to the EEPROM or flash unless we revert OSCCAL to 0x9f
 		rcall	wait260ms	; wait a while
+.if CPU_MHZ == 16
 		ldi	temp1, 0xff
 		out	OSCCAL, temp1
+.elif CPU_MHZ == 8
+		ldi	temp1, 0x9f
+		out	OSCCAL, temp1
+.endif
 		rcall	wait30ms
 
 	; Check reset cause
@@ -493,11 +501,11 @@ falling_edge1:	lds	ZH, start_rcpuls_l
 		lds	ZH, start_rcpuls_x
 		sbc	XH, ZH
 
-.if byte3(MAX_RC_PULS*16)
+.if byte3(MAX_RC_PULS*CPU_MHZ)
 .error "MAX_RC_PULS too high: adjust it or the pulse length checking code"
 .endif
-		cpi	i_temp1, byte1(MAX_RC_PULS*16)
-		ldi	ZH, byte2(MAX_RC_PULS*16)
+		cpi	i_temp1, byte1(MAX_RC_PULS*CPU_MHZ)
+		ldi	ZH, byte2(MAX_RC_PULS*CPU_MHZ)
 		cpc	i_temp2, ZH
 		ldi	ZH, 0			; Return ZH to 0; clr clobbers flags
 		cpc	XH, ZH
@@ -648,11 +656,11 @@ beep_on:	out	PORTB, i_temp1		; Restore ON state
 		out	PORTD, YH
 		out	TCNT0, zero
 beep_BpCn10:	in	temp1, TCNT0
-		cpi	temp1, 32		; 32탎 on (was 32)
+		cpi	temp1, 2*CPU_MHZ	; 32탎 on
 		brlo	beep_BpCn10
 		all_nFETs_off YL
 		all_pFETs_off YL
-		ldi	temp3, 16		; 2040탎 off (was 8)
+		ldi	temp3, CPU_MHZ		; 2040탎 off
 beep_BpCn12:	out	TCNT0, zero
 beep_BpCn13:	in	temp1, TCNT0
 		cp	temp1, temp4
@@ -664,7 +672,7 @@ beep_BpCn13:	in	temp1, TCNT0
 		ret
 
 wait30ms:	ldi	temp2, 15
-beep_BpCn20:	ldi	temp3, 16	; was 8
+beep_BpCn20:	ldi	temp3, CPU_MHZ
 beep_BpCn21:	out	TCNT0, zero
 		out	TIFR, zero
 beep_BpCn22:	in	temp1, TIFR
@@ -678,7 +686,7 @@ beep_BpCn22:	in	temp1, TIFR
 
 	; 128 periods = 261ms silence
 wait260ms:	ldi	temp2, 128
-beep2_BpCn20:	ldi	temp3, 16	; was 8
+beep2_BpCn20:	ldi	temp3, CPU_MHZ
 beep2_BpCn21:	out	TCNT0, zero
 beep2_BpCn22:	in	temp1, TCNT0
 		cpi	temp1, 200
@@ -698,20 +706,27 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		cp	rc_timeout, temp1
 		adc	rc_timeout, zero	; Increment if not at RCP_TOT
 		movw	YL, rcpuls_l		; Atomic copy of rc pulse length
-.if RC_PULS_REVERSE
-		lsr	YH			; Divide by 8 (us / Mhz / 2 for reverse)
-		ror	YL
-		lsr	YH
-		ror	YL
-		lsr	YH
-		ror	YL
-.else
+.if RCP_DIVISOR == 16
 		swap	YL			; Divide by 16 (MHz -> us)
 		swap	YH
 		andi	YL, 0x0f
 		eor	YL, YH
 		andi	YH, 0x0f
 		eor	YL, YH
+.elif RCP_DIVISOR == 8
+		lsr	YH			; Divide by 8 (us / Mhz / 2 for reverse)
+		ror	YL
+		lsr	YH
+		ror	YL
+		lsr	YH
+		ror	YL
+.elif RCP_DIVISOR == 4
+		lsr	YH			; Divide by 8 (us / Mhz / 2 for reverse)
+		ror	YL
+		lsr	YH
+		ror	YL
+.else
+.error Teach me how to divide by RCP_DIVISOR
 .endif
 .if MOTOR_REVERSE
 		sbr	flags1, (1<<REVERSE)
@@ -829,10 +844,10 @@ update_timing2:
 .endif
 .endif
 	; Limit maximum RPM (fastest timing)
-		cpi	YL, byte1(TIMING_MAX*16)
-		ldi	temp4, byte2(TIMING_MAX*16)
+		cpi	YL, byte1(TIMING_MAX*CPU_MHZ)
+		ldi	temp4, byte2(TIMING_MAX*CPU_MHZ)
 		cpc	YH, temp4
-		ldi	temp4, byte3(TIMING_MAX*16)
+		ldi	temp4, byte3(TIMING_MAX*CPU_MHZ)
 		cpc	temp5, temp4
 		brcc	update_timing3
 		lsr	sys_control_h		; limit by reducing power
@@ -842,19 +857,19 @@ update_timing3:
 	; With higher KV motors or high voltage, we need to make
 	; sure we don't call sync_with_poweron with fast timing,
 	; or we might miss.
-		cpi	YH, byte2(TIMING_RUN*16)
-		ldi	temp4, byte3(TIMING_RUN*16)
+		cpi	YH, byte2(TIMING_RUN*CPU_MHZ)
+		ldi	temp4, byte3(TIMING_RUN*CPU_MHZ)
 		cpc	temp5, temp4
 		brcc	update_timing4
 		cbr	flags1, (1<<STARTUP)
 update_timing4:
 	; Limit minimum RPM (slowest timing)
-		ldi	temp4, byte3(TIMING_MIN*16)
+		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ)
 		cp	temp5, temp4
 		brcs	update_timing5
 		mov	temp5, temp4
-		ldi	YH, byte2(TIMING_MIN*16)
-		ldi	YL, byte1(TIMING_MIN*16)
+		ldi	YH, byte2(TIMING_MIN*CPU_MHZ)
+		ldi	YL, byte1(TIMING_MIN*CPU_MHZ)
 update_timing5:
 .if TIME_ACCUMULATE
 		sts	timing_count, zero
@@ -876,14 +891,14 @@ update_timing5:
 
 		ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
-		cpi	YH, byte2(TIMING_RANGE2*16)
-		ldi	temp4, byte3(TIMING_RANGE2*16)
+		cpi	YH, byte2(TIMING_RANGE2*CPU_MHZ)
+		ldi	temp4, byte3(TIMING_RANGE2*CPU_MHZ)
 		cpc	temp5, temp4
 		brcs	update_timing6
 		ldi	temp1, low(PWR_MAX_RPM2)
 		ldi	temp2, high(PWR_MAX_RPM2)
-		cpi	YH, byte2(TIMING_RANGE1*16)
-		ldi	temp4, byte3(TIMING_RANGE1*16)
+		cpi	YH, byte2(TIMING_RANGE1*CPU_MHZ)
+		ldi	temp4, byte3(TIMING_RANGE1*CPU_MHZ)
 		cpc	temp5, temp4
 		brcs	update_timing6
 		ldi	temp1, low(PWR_MAX_RPM1)
@@ -969,9 +984,9 @@ set_ocr1b:	adiw	YL, 7			; Compensate for cycles during in-add-out before OCF1B c
 		ret
 ;-----bko-----------------------------------------------------------------
 start_timeout_start:
-		ldi	YL, byte1(timeoutSTART*16)
-		ldi	YH, byte2(timeoutSTART*16)
-		ldi	temp1, byte3(timeoutSTART*16)
+		ldi	YL, byte1(timeoutSTART*CPU_MHZ)
+		ldi	YH, byte2(timeoutSTART*CPU_MHZ)
+		ldi	temp1, byte3(timeoutSTART*CPU_MHZ)
 		mov	temp5, temp1
 		ret
 ;-----bko-----------------------------------------------------------------
@@ -984,10 +999,10 @@ start_timeout:
 		sub	YH, temp1
 		sbc	temp5, zero
 		brcs	start_timeout1
-		cpi	YL, byte1(timeoutMIN*16)
-		ldi	temp1, byte2(timeoutMIN*16)
+		cpi	YL, byte1(timeoutMIN*CPU_MHZ)
+		ldi	temp1, byte2(timeoutMIN*CPU_MHZ)
 		cpc	YH, temp1
-		ldi	temp1, byte3(timeoutMIN*16)
+		ldi	temp1, byte3(timeoutMIN*CPU_MHZ)
 		cpc	temp5, temp1
 		brcc	start_timeout2
 start_timeout1:	rcall	start_timeout_start
@@ -1069,7 +1084,7 @@ switch_power_off:
 		all_nFETs_off temp1
 		ret
 ;-----bko-----------------------------------------------------------------
-wait_if_spike:	ldi	temp1, 16		; 8 is slightly too low
+wait_if_spike:	ldi	temp1, CPU_MHZ
 wait_if_spike2:	dec	temp1
 		brne	wait_if_spike2
 		ret
@@ -1206,7 +1221,7 @@ run6:
 .else
 		; If timing is too slow and power is off, return to init_startup
 		lds	temp1, timing_x
-		cpi	temp1, byte3(TIMING_MIN*16)
+		cpi	temp1, byte3(TIMING_MIN*CPU_MHZ)
 		sbrc	flags1, POWER_OFF
 		brsh	run_to_brake
 .endif

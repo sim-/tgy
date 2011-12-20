@@ -4,6 +4,8 @@
 ;* modified by Eduardo Reginato Lavratti (agressiva)       *
 ;***********************************************************
 
+#define F_CPU 16000000
+
 ;*********************
 ; PORT D definitions *
 ;*********************
