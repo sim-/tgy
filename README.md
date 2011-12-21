@@ -30,8 +30,9 @@ Supported (Tested) Hardware
 - bs:
     - Hobby King 60A (F-60A)
 - bs_nfet:
+    - Hobby King 20A (F-20A)
+    - Hobby King 30A (F-30A)
     - Hobby King BlueSeries 30A
-    - Hobby King 30A F-30A
 - rct50a:
     - RCTimer 50A
 - tp:
@@ -41,6 +42,8 @@ Supported (Tested) Hardware
     - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (rebranded Hobbywing)
     - RCTimer 10A, 18A, 20A, 30A (18A, 20A, 30A are same board with more or less FETs)
     - Hobby King SS 15-18A
+- tgy6a:
+    - Original Turnigy Plush 6A
 - tp_nfet:
     - Newer TowerPro 25A
     - Turnigy TY-P1 25A (HEXFET)
