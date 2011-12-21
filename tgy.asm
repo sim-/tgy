@@ -133,7 +133,7 @@
 .equ	POWER_RANGE	= FULL_RC_PULS - STOP_RC_PULS - RCP_DEADBAND + MIN_DUTY
 
 .equ	MAX_POWER	= (POWER_RANGE-1)
-.equ	PWR_MIN_START	= (POWER_RANGE/8) ; Power limit until running mode
+.equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit until running mode
 .equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit until running mode
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
@@ -169,7 +169,7 @@
 .def	rc_timeout	= r11
 .def	sys_control_l	= r12		; duty limit low (word register aligned)
 .def	sys_control_h	= r13		; duty limit high
-.def	acsr_save	= r14		; saved ACSR register value
+;.def	acsr_save	= r14		; saved ACSR register value
 
 .def	temp1		= r16		; main temporary (L)
 .def	temp2		= r17		; main temporary (H)
@@ -246,6 +246,7 @@ wt_OCT1_tot_x:	.byte	1
 zero_wt_l:	.byte	1	; time to wait for zero-crossing while running
 zero_wt_h:	.byte	1
 zero_wt_x:	.byte	1
+zc_filter_time:	.byte	1	; number of times to check zero-crossing
 
 ocr1ax:		.byte	1	; 3rd byte of OCR1A
 ocr1bx:		.byte	1	; 3rd byte of OCR1B
@@ -392,10 +393,10 @@ clear_loop1:	cp	ZL, r0
 		rcall	wait30ms
 
 	; Check reset cause
-		in	acsr_save, MCUCSR
+		in	i_sreg, MCUCSR
 		out	MCUCSR, zero
 
-		sbrs	acsr_save, PORF		; Power-on reset
+		sbrs	i_sreg, PORF		; Power-on reset
 		rjmp	init_no_porf
 		rcall	beep_f1			; Usual startup beeps
 		rcall	wait30ms
@@ -404,12 +405,12 @@ clear_loop1:	cp	ZL, r0
 		rcall	beep_f3
 		rjmp	control_start
 
-init_no_porf:	sbrs	acsr_save, BORF		; Brown-out reset
+init_no_porf:	sbrs	i_sreg, BORF		; Brown-out reset
 		rjmp	init_no_borf
 		rcall	beep_f3			; "dead cellphone"
 		rcall	beep_f1
 
-init_no_borf:	sbrs	acsr_save, EXTRF	; External reset
+init_no_borf:	sbrs	i_sreg, EXTRF	; External reset
 		rjmp	control_start
 		rcall	beep_f4			; Single beep
 
@@ -602,19 +603,11 @@ pwm_on:
 		reti
 
 pwm_off:
-		cpse	off_duty_h, zero	; 1 cycle if not zero, 2 if zero
-		rjmp	pwm_off_long		; 2 cycles
 		ldi	ZL, pwm_on		; 1 cycle
-		in	acsr_save, ACSR		; 1 cycle
-		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
-		out	TCNT2, off_duty_l	; 1 cycle
-		reti				; 4 cycles
-pwm_off_long:	ldi	ZL, pwm_on_high		; 1 cycle
-		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
-		st	X, nfet_off		; 2 cycles (still off)
-		st	X, nfet_off		; 2 cycles (just wasting cycles)
+		cpse	off_duty_h, zero	; 1 cycle if not zero, 2 if zero
+		ldi	ZL, pwm_on_high		; 1 cycle
 		mov	tcnt2h, off_duty_h	; 1 cycle
-		in	acsr_save, ACSR		; 1 cycle (5 cycles after off)
+		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
 		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
 
@@ -906,6 +899,15 @@ update_timing5:
 update_timing6:	sts	timing_duty_l, temp1	; Save new duty limit by timing
 		sts	timing_duty_h, temp2
 
+		mov	temp1, YH		; Copy high and check extended byte
+		tst	temp5			; We work with 1/256th of timing
+		breq	update_timing7
+		ldi	temp1, 0xff
+.if TIMING_MAX*CPU_MHZ / 0xff < 3
+.error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
+.endif
+update_timing7:	sts	zc_filter_time, temp1	; Save zero cross filter time
+
 		lsr	temp5			; shift back to timing for one commutation
 		ror	YH
 		ror	YL
@@ -1084,21 +1086,6 @@ switch_power_off:
 		all_nFETs_off temp1
 		ret
 ;-----bko-----------------------------------------------------------------
-wait_if_spike:	ldi	temp1, CPU_MHZ
-wait_if_spike2:	dec	temp1
-		brne	wait_if_spike2
-		ret
-;-----bko-----------------------------------------------------------------
-sync_with_poweron:
-		ldi	temp1, (1<<ACD)
-		or	acsr_save, temp1	; ACD will always be enabled
-wait_for_poweroff:
-		sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbrc	acsr_save, ACD
-		rjmp	wait_for_poweroff
-		ret
-;-----bko-----------------------------------------------------------------
 ; **** startup loop ****
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
@@ -1158,25 +1145,12 @@ run1:		sbrc	flags1, REVERSE
 		rjmp	run_reverse
 
 run_forward:	rcall	wait_for_high
-		sbrs	flags1, STARTUP
-		rjmp	run_com1com2
-		sbrs	acsr_save, ACO
-		rjmp	run_com1com2
-		push	flags1
-		sbr	flags1, (1<<POWER_OFF)
-		rcall	com1com2		; Do the special 120 degree advance
-		pop	flags1
-		rcall	com2com3
-		rcall	com3com4
-		rcall	sync_with_poweron
-		rcall	sync_with_poweron
-		rjmp	run_com4com5
-run_com1com2:	rcall	com1com2
+		rcall	com1com2
 		rcall	wait_for_low
 		rcall	com2com3
 		rcall	wait_for_high
 		rcall	com3com4
-run_com4com5:	rcall	wait_for_low
+		rcall	wait_for_low
 		rcall	com4com5
 		rcall	wait_for_high
 		rcall	com5com6
@@ -1188,23 +1162,12 @@ run_to_start:	rcall	switch_power_off
 		rjmp	start_from_running
 
 run_reverse:	rcall	wait_for_low
-		sbrs	flags1, STARTUP
-		rjmp	run_com1com6
-		sbrc	acsr_save, ACO
-		rjmp	run_com1com6
-		push	flags1
-		sbr	flags1, (1<<POWER_OFF)
-		rcall	com1com6		; Do the special 120 degree advance
-		pop	flags1
-		rcall	com6com5
-		rcall	com5com4
-		rjmp	run_com4com3
-run_com1com6:	rcall	com1com6
+		rcall	com1com6
 		rcall	wait_for_high
 		rcall	com6com5
 		rcall	wait_for_low
 		rcall	com5com4
-run_com4com3:	rcall	wait_for_high
+		rcall	wait_for_high
 		rcall	com4com3
 		rcall	wait_for_low
 		rcall	com3com2
@@ -1267,63 +1230,44 @@ restart_control:
 run_to_brake:	rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
-; *** scan comparator utilities ***
-; Now we check the accumulated result and if equal twice, we start the
-; com_timing timer. If the result flips back again while waiting, we
-; jump back and pretend we never saw the false crossing, resetting the
-; timer once more when we see the crossing. This can repeat as many
-; times as necessary until the zero_wt timeout occurs (OCT1A).
-wait_startup:	rcall	sync_with_poweron
-		rcall	sync_with_poweron
-		mov	temp4, acsr_save
-wait_startup1:	sbrs	flags0, OCT1_PENDING
-		rjmp	wait_timeout
-		sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		cp	temp4, acsr_save
-		breq	wait_startup1
-		ret
-;-----bko-----------------------------------------------------------------
 wait_timeout:	sts	goodies, zero
 		sbr	flags1, (1<<STARTUP)
 		ret
 ;-----bko-----------------------------------------------------------------
 wait_for_low:	rcall	calc_next_timing_and_wait
-		mov	temp4, acsr_save
+		in	temp4, ACSR
 		cbr	temp4, (1<<ACO)
 		rjmp	wait_for_edge
 ;-----bko-----------------------------------------------------------------
 wait_for_high:	rcall	calc_next_timing_and_wait
-		mov	temp4, acsr_save
+		in	temp4, ACSR
 		sbr	temp4, (1<<ACO)
 ;-----bko-----------------------------------------------------------------
-wait_for_edge:	sbrc	flags1, STARTUP
-		rjmp	wait_startup
-wait_for_edge1:	sbrs	flags0, OCT1_PENDING
+wait_for_edge:	cbr	flags0, (1<<OCT1B_PENDING)
+wait_for_edge1:	lds	temp1, zc_filter_time
+wait_for_edge2:	lds	temp2, zc_filter_time
+wait_for_edge3:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
-		sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc		; Must not clobber temp4
-		in	acsr_save, ACSR
-		cp	acsr_save, temp4
-		breq	wait_for_edge1
-		rcall	wait_if_spike
-		in	acsr_save, ACSR		; Check again after spike wait
-		cp	acsr_save, temp4
-		breq	wait_for_edge1
-		rcall	wait_if_spike
-		in	acsr_save, ACSR		; Check again after spike wait
-		cp	acsr_save, temp4
-		breq	wait_for_edge1
-		rcall	set_com_timing		; Start commutation wait timer
-wait_for_edge2:	sbrc	flags1, EVAL_RC
+		in	temp3, ACSR
+		cp	temp3, temp4
+		brne	wait_for_edge4
+		cp	temp1, temp2		; Not yet crossed
+		adc	temp1, zero		; Increment temp1 if < temp2
+		sbrs	flags1, EVAL_RC
+		rjmp	wait_for_edge3
+		push	temp1
+		rcall	evaluate_rc		; Does not clobber temp4
+		pop	temp1
+		rjmp	wait_for_edge2		; Restore temp2 and loop
+wait_for_edge4:	dec	temp1			; Zero-cross has happened
+		brne	wait_for_edge3		; Check again unless temp1 is zero
+		sbrs	flags1, STARTUP
+		rcall	set_com_timing
+wait_for_edge5:	sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
-		cp	acsr_save, temp4	; Now check PWM-updated value only
-		breq	wait_for_edge3		; Enable startup mode and jump back if we got a false crossing
 		sbrc	flags0, OCT1B_PENDING
-		rjmp	wait_for_edge2		; Wait for commutation time
+		rjmp	wait_for_edge5		; Wait for commutation time
 		ret
-wait_for_edge3:	sbr	flags1, (1<<STARTUP)
-		rjmp	wait_for_edge1
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
 com1com2:	; Bp off, Ap on
