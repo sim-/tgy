@@ -700,21 +700,21 @@ evaluate_rc_puls:				; No clobbering temp4 here, please
 		adc	rc_timeout, zero	; Increment if not at RCP_TOT
 		movw	YL, rcpuls_l		; Atomic copy of rc pulse length
 .if RCP_DIVISOR == 16
-		swap	YL			; Divide by 16 (MHz -> us)
+		swap	YL			; Divide by 16 (16MHz -> us)
 		swap	YH
 		andi	YL, 0x0f
 		eor	YL, YH
 		andi	YH, 0x0f
 		eor	YL, YH
 .elif RCP_DIVISOR == 8
-		lsr	YH			; Divide by 8 (us / Mhz / 2 for reverse)
+		lsr	YH			; Divide by 8
 		ror	YL
 		lsr	YH
 		ror	YL
 		lsr	YH
 		ror	YL
 .elif RCP_DIVISOR == 4
-		lsr	YH			; Divide by 8 (us / Mhz / 2 for reverse)
+		lsr	YH			; Divide by 4
 		ror	YL
 		lsr	YH
 		ror	YL
