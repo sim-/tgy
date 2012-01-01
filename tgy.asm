@@ -770,10 +770,17 @@ evaluate_rc_i2c:
 		ret
 ;-----bko-----------------------------------------------------------------
 update_timing:
-		lds	temp3, tcnt1x
-		rcall	set_ocr1a		; Returns TCNT1L/H in temp1, temp2
-		sbrs	temp2, 7		; Unless highest bit of TCNT1H is set,
-		lds	temp3, tcnt1x		; load possibly-updated extended byte.
+		rcall	set_ocr1a		; Returns TCNT1L/H/X in temp1, temp2, temp3
+	; tcnt1x may not be updated until many instructions later, even though
+	; interrupts have been enabled, because the AVR always executes one
+	; non-interrupt instruction between interrupts, and several other
+	; higher-priority interrupts may (have) come up. So, we must save
+	; tcnt1x and TIFR with interrupts disabled, then do a correction.
+		sbrc	temp2, 7		; If highest bit of TCNT1H is set,
+		rjmp	update_timing1		; we assume tcnt1x must be right.
+		sbrc	temp4, TOV1		; If TOV1 is/was pending,
+		inc	temp3			; increment our copy of tcnt1x.
+update_timing1:
 
 .if TIME_ACCUMULATE
 		lds	temp4, timing_count
@@ -963,6 +970,8 @@ set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
 		out	TIFR, temp4		; Clear any pending OCF1A interrupt (7 cycles from TCNT1 read)
 		sts	ocr1ax, temp5
 		sbr	flags0, (1<<OCT1_PENDING)
+		lds	temp3, tcnt1x
+		in	temp4, TIFR
 		sei				; We could use reti here, but that's
 		ret				; 4 more cycles of interrupt latency
 ;-----bko-----------------------------------------------------------------
