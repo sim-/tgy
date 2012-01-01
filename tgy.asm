@@ -184,7 +184,7 @@
 
 .def	flags0	= r23	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
-	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
+;	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 ;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
@@ -249,7 +249,6 @@ zero_wt_x:	.byte	1
 zc_filter_time:	.byte	1	; number of times to check zero-crossing
 
 ocr1ax:		.byte	1	; 3rd byte of OCR1A
-ocr1bx:		.byte	1	; 3rd byte of OCR1B
 tcnt1x:		.byte	1	; 3rd byte of TCNT1
 
 start_rcpuls_l:	.byte	1
@@ -306,7 +305,7 @@ goodies:	.byte	1
 		ijmp		; t2ovfl_int
 		rjmp_icp1_int	; icp1_int
 		rjmp t1oca_int
-		rjmp t1ocb_int	; t1ocb_int
+		nop		; t1ocb_int
 		rjmp t1ovfl_int
 		nop		; t0ovfl_int
 		nop		; spi_int
@@ -421,7 +420,7 @@ control_start:
 		GRN_on
 
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<OCIE2)
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
 		out	TIMSK, temp1		; enable TOIE1,OCIE1A & OCIE2 interrupts
 
@@ -526,16 +525,6 @@ t1oca_int:	in	i_sreg, SREG
 		brcc	t1oca_int1
 		cbr	flags0, (1<<OCT1_PENDING)	; signal OCT1A passed
 t1oca_int1:	sts	ocr1ax, i_temp1
-		out	SREG, i_sreg
-		reti
-;-----bko-----------------------------------------------------------------
-; timer output compare B interrupt
-t1ocb_int:	in	i_sreg, SREG
-		lds	i_temp1, ocr1bx
-		subi	i_temp1, 1
-		brcc	t1ocb_int1
-		cbr	flags0, (1<<OCT1B_PENDING)	; signal OCT1B passed
-t1ocb_int1:	sts	ocr1bx, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
@@ -950,12 +939,9 @@ calc_next_timing_and_wait:
 		lds	temp5, wt_comp_scan_x
 		rcall	update_timing
 
-wait_OCT1_tot:	sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbrc	flags0, OCT1_PENDING
-		rjmp	wait_OCT1_tot
+		rcall	wait_OCT1_tot		; Wait for zero blanking completion
 
-		lds	YL, zero_wt_l
+		lds	YL, zero_wt_l		; Set OCT1 for zero-crossing timeout
 		lds	YH, zero_wt_h
 		lds	temp5, zero_wt_x
 set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
@@ -975,23 +961,15 @@ set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
 		sei				; We could use reti here, but that's
 		ret				; 4 more cycles of interrupt latency
 ;-----bko-----------------------------------------------------------------
-set_com_timing:					; Does not clobber temp4
+set_com_timing_and_wait:
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
 		lds	temp5, com_timing_x
-set_ocr1b:	adiw	YL, 7			; Compensate for cycles during in-add-out before OCF1B clear
-		ldi	temp3, (1<<OCF1B)
-		cli
-		in	temp1, TCNT1L
-		in	temp2, TCNT1H
-		add	YL, temp1
-		adc	YH, temp2
-		out	OCR1BH, YH
-		out	OCR1BL, YL
-		out	TIFR, temp3		; Clear any pending OCF1B interrupt (7 cycles from TCNT1 read)
-		sts	ocr1bx, temp5
-		sbr	flags0, (1<<OCT1B_PENDING)
-		sei
+		rcall	set_ocr1a
+wait_OCT1_tot:	sbrc	flags1, EVAL_RC
+		rcall	evaluate_rc
+		sbrc	flags0, OCT1_PENDING
+		rjmp	wait_OCT1_tot		; Wait for commutation time
 		ret
 ;-----bko-----------------------------------------------------------------
 start_timeout_start:
@@ -1244,22 +1222,20 @@ wait_timeout:	sts	goodies, zero
 		ret
 ;-----bko-----------------------------------------------------------------
 wait_for_low:	rcall	calc_next_timing_and_wait
-		in	temp4, ACSR
-		cbr	temp4, (1<<ACO)
+		ldi	temp4, 0
 		rjmp	wait_for_edge
 ;-----bko-----------------------------------------------------------------
 wait_for_high:	rcall	calc_next_timing_and_wait
-		in	temp4, ACSR
-		sbr	temp4, (1<<ACO)
+		ldi	temp4, (1<<ACO)
 ;-----bko-----------------------------------------------------------------
-wait_for_edge:	cbr	flags0, (1<<OCT1B_PENDING)
-wait_for_edge1:	lds	temp1, zc_filter_time
+wait_for_edge:	lds	temp1, zc_filter_time
 wait_for_edge2:	lds	temp2, zc_filter_time
 wait_for_edge3:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		in	temp3, ACSR
-		cp	temp3, temp4
-		brne	wait_for_edge4
+		eor	temp3, temp4
+		sbrc	temp3, ACO
+		rjmp	wait_for_edge4
 		cp	temp1, temp2		; Not yet crossed
 		adc	temp1, zero		; Increment temp1 if < temp2
 		sbrs	flags1, EVAL_RC
@@ -1270,12 +1246,8 @@ wait_for_edge3:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_for_edge2		; Restore temp2 and loop
 wait_for_edge4:	dec	temp1			; Zero-cross has happened
 		brne	wait_for_edge3		; Check again unless temp1 is zero
-		sbrs	flags1, STARTUP
-		rcall	set_com_timing
-wait_for_edge5:	sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbrc	flags0, OCT1B_PENDING
-		rjmp	wait_for_edge5		; Wait for commutation time
+		sbrs	flags1, STARTUP		; Skip commutation wait during startup
+		rjmp	set_com_timing_and_wait
 		ret
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
