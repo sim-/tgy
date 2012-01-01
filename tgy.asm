@@ -155,8 +155,8 @@
 
 ;**** **** **** **** ****
 ; Register Definitions
-.def	zero		= r0		; stays at 0
-.def	i_sreg		= r1		; status register save in interrupts
+.def	temp5		= r0		; aux temporary (L) (limited operations)
+.def	temp6		= r1		; aux temporary (H) (limited operations)
 .def	duty_l		= r2		; on duty cycle low, one's complement
 .def	duty_h		= r3		; on duty cycle high
 .def	off_duty_l	= r4		; off duty cycle low, one's complement
@@ -164,12 +164,13 @@
 .def	rcpuls_l	= r6
 .def	rcpuls_h	= r7
 .def	tcnt2h		= r8
-.def	temp5		= r9		; aux temporary (limited operations)
+.def	i_sreg		= r9		; status register save in interrupts
 .def	uart_cnt	= r10
 .def	rc_timeout	= r11
 .def	sys_control_l	= r12		; duty limit low (word register aligned)
 .def	sys_control_h	= r13		; duty limit high
 ;.def	acsr_save	= r14		; saved ACSR register value
+;.def			= r15
 
 .def	temp1		= r16		; main temporary (L)
 .def	temp2		= r17		; main temporary (H)
@@ -219,7 +220,7 @@
 ; YL: general temporary
 ; YH: general temporary
 ; ZL: Next PWM interrupt vector (low)
-; ZH: Next PWM interrupt vector (high, stays at zero)
+; ZH: Next PWM interrupt vector (high, stays at zero) -- used as "zero" register
 
 ;**** **** **** **** ****
 ; RAM Definitions
@@ -363,7 +364,7 @@ clear_loop1:	cp	ZL, r0
 		out	TCCR0, temp1
 		ldi	temp1, T1CLK+T1ICP	; timer1: commutation timing,
 		out	TCCR1B, temp1		; RC pulse measurement
-		out	TCCR2, zero		; timer2: PWM, stopped
+		out	TCCR2, ZH		; timer2: PWM, stopped
 
 	; Set PWM interrupt vector
 		ldi	ZL, low(pwm_off)	; Set PWM interrupt vector
@@ -393,7 +394,7 @@ clear_loop1:	cp	ZL, r0
 
 	; Check reset cause
 		in	i_sreg, MCUCSR
-		out	MCUCSR, zero
+		out	MCUCSR, ZH
 
 		sbrs	i_sreg, PORF		; Power-on reset
 		rjmp	init_no_porf
@@ -481,7 +482,7 @@ rising_edge:					; Flags not saved here!
 		out	SREG, i_sreg
 		reti
 
-rcpint_fail:	cpse	rc_timeout, zero
+rcpint_fail:	cpse	rc_timeout, ZH
 		dec	rc_timeout
 		rjmp	rcpint_exit
 
@@ -535,7 +536,7 @@ t1ovfl_int:	in	i_sreg, SREG
 		sts	tcnt1x, i_temp1
 		andi	i_temp1, 15			; Every 16 overflows
 		brne	t1ovfl_int1
-		cpse	rc_timeout, zero
+		cpse	rc_timeout, ZH
 		dec	rc_timeout
 t1ovfl_int1:	out	SREG, i_sreg
 		reti
@@ -585,7 +586,7 @@ pwm_off_again:	out	SREG, i_sreg
 pwm_on:
 		st	X, nfet_on
 		ldi	ZL, pwm_off
-		cpse	duty_h, zero
+		cpse	duty_h, ZH
 		ldi	ZL, pwm_off_high
 		mov	tcnt2h, duty_h
 		out	TCNT2, duty_l
@@ -593,7 +594,7 @@ pwm_on:
 
 pwm_off:
 		ldi	ZL, pwm_on		; 1 cycle
-		cpse	off_duty_h, zero	; 1 cycle if not zero, 2 if zero
+		cpse	off_duty_h, ZH	; 1 cycle if not zero, 2 if zero
 		ldi	ZL, pwm_on_high		; 1 cycle
 		mov	tcnt2h, off_duty_h	; 1 cycle
 		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
@@ -636,14 +637,14 @@ beep:		in	i_temp1, PORTB		; Save ON state
 beep_on:	out	PORTB, i_temp1		; Restore ON state
 		out	PORTC, i_temp2
 		out	PORTD, YH
-		out	TCNT0, zero
+		out	TCNT0, ZH
 beep_BpCn10:	in	temp1, TCNT0
 		cpi	temp1, 2*CPU_MHZ	; 32µs on
 		brlo	beep_BpCn10
 		all_nFETs_off YL
 		all_pFETs_off YL
 		ldi	temp3, CPU_MHZ		; 2040µs off
-beep_BpCn12:	out	TCNT0, zero
+beep_BpCn12:	out	TCNT0, ZH
 beep_BpCn13:	in	temp1, TCNT0
 		cp	temp1, temp4
 		brlo	beep_BpCn13
@@ -655,8 +656,8 @@ beep_BpCn13:	in	temp1, TCNT0
 
 wait30ms:	ldi	temp2, 15
 beep_BpCn20:	ldi	temp3, CPU_MHZ
-beep_BpCn21:	out	TCNT0, zero
-		out	TIFR, zero
+beep_BpCn21:	out	TCNT0, ZH
+		out	TIFR, ZH
 beep_BpCn22:	in	temp1, TIFR
 		sbrs	temp1, TOV0
 		rjmp	beep_BpCn22
@@ -669,7 +670,7 @@ beep_BpCn22:	in	temp1, TIFR
 	; 128 periods = 261ms silence
 wait260ms:	ldi	temp2, 128
 beep2_BpCn20:	ldi	temp3, CPU_MHZ
-beep2_BpCn21:	out	TCNT0, zero
+beep2_BpCn21:	out	TCNT0, ZH
 beep2_BpCn22:	in	temp1, TCNT0
 		cpi	temp1, 200
 		brlo	beep2_BpCn22
@@ -686,7 +687,7 @@ evaluate_rc:	cbr	flags1, (1<<EVAL_RC)
 evaluate_rc_puls:				; No clobbering temp4 here, please
 		ldi	temp1, RCP_TOT
 		cp	rc_timeout, temp1
-		adc	rc_timeout, zero	; Increment if not at RCP_TOT
+		adc	rc_timeout, ZH	; Increment if not at RCP_TOT
 		movw	YL, rcpuls_l		; Atomic copy of rc pulse length
 .if RCP_DIVISOR == 16
 		swap	YL			; Divide by 16 (16MHz -> us)
@@ -852,7 +853,7 @@ update_timing3:
 		ldi	YL, byte1(TIMING_MIN*CPU_MHZ)
 update_timing5:
 .if TIME_ACCUMULATE
-		sts	timing_count, zero
+		sts	timing_count, ZH
 .endif
 		sts	timing_l, YL		; save new timing
 		sts	timing_h, YH
@@ -977,7 +978,7 @@ start_timeout:
 		in	temp1, TCNT0
 		andi	temp1, 0x1f
 		sub	YH, temp1
-		sbc	temp5, zero
+		sbc	temp5, ZH
 		brcs	start_timeout1
 		cpi	YL, byte1(timeoutMIN*CPU_MHZ)
 		ldi	temp1, byte2(timeoutMIN*CPU_MHZ)
@@ -1029,8 +1030,8 @@ set_new_duty13:
 		sbc	temp2, YH
 		breq	set_new_duty_full
 		cbr	flags1, (1<<FULL_POWER)
-		cp	YL, zero
-		cpc	YH, zero
+		cp	YL, ZH
+		cpc	YH, ZH
 		breq	set_new_duty_zero
 		; Not off and not full power
 		; Halve PWM frequency when starting (helps hard drive startup)
@@ -1059,7 +1060,7 @@ set_new_duty_zero:
 		rjmp	set_new_duty_set_off
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
-		out	TCCR2, zero		; Disable PWM
+		out	TCCR2, ZH		; Disable PWM
 		all_pFETs_off temp1
 		all_nFETs_off temp1
 		ret
@@ -1098,7 +1099,7 @@ FETs_off_wt:	dec	temp1
 		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
 		movw	sys_control_l, YL	; align to a timing harmonic
 
-		sts	goodies, zero
+		sts	goodies, ZH
 		sbr	flags1, (1<<STARTUP)
 		ldi	temp1, 4
 		sts	timing_count, temp1
@@ -1108,7 +1109,7 @@ FETs_off_wt:	dec	temp1
 		sts	timing_l, YL		; Reset timing to timeoutSTART
 		sts	timing_h, YH
 		sts	timing_x, temp1
-		sts	timing_count, zero
+		sts	timing_count, ZH
 
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
@@ -1166,8 +1167,8 @@ run6:
 		sbrc	flags1, POWER_OFF
 		brsh	run_to_brake
 .endif
-		cp	sys_control_l, zero
-		cpc	sys_control_h, zero
+		cp	sys_control_l, ZH
+		cpc	sys_control_h, ZH
 		breq	run_to_start
 
 		movw	YL, sys_control_l
@@ -1208,7 +1209,7 @@ restart_control:
 run_to_brake:	rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
-wait_timeout:	sts	goodies, zero
+wait_timeout:	sts	goodies, ZH
 		sbr	flags1, (1<<STARTUP)
 		ret
 ;-----bko-----------------------------------------------------------------
@@ -1228,7 +1229,7 @@ wait_for_edge3:	sbrs	flags0, OCT1_PENDING
 		sbrc	temp3, ACO
 		rjmp	wait_for_edge4
 		cp	temp1, temp2		; Not yet crossed
-		adc	temp1, zero		; Increment temp1 if < temp2
+		adc	temp1, ZH		; Increment temp1 if < temp2
 		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_edge3
 		push	temp1
