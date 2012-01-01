@@ -841,17 +841,8 @@ update_timing2:
 		brcc	update_timing3
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
-		rjmp	update_timing4
+		rjmp	update_timing5
 update_timing3:
-	; With higher KV motors or high voltage, we need to make
-	; sure we don't call sync_with_poweron with fast timing,
-	; or we might miss.
-		cpi	YH, byte2(TIMING_RUN*CPU_MHZ)
-		ldi	temp4, byte3(TIMING_RUN*CPU_MHZ)
-		cpc	temp5, temp4
-		brcc	update_timing4
-		cbr	flags1, (1<<STARTUP)
-update_timing4:
 	; Limit minimum RPM (slowest timing)
 		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ)
 		cp	temp5, temp4
