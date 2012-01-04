@@ -199,7 +199,7 @@
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
 ;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
-;	.equ    EVAL_SYS_STATE	= 5	; if set, overcurrent and undervoltage are checked
+	.equ	ACO_EDGE_HIGH	= 5	; if set, looking for ACO high - conviently located at the same bit position as ACO
 	.equ    STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
 
@@ -1213,19 +1213,18 @@ wait_timeout:	sts	goodies, ZH
 		sbr	flags1, (1<<STARTUP)
 		ret
 ;-----bko-----------------------------------------------------------------
-wait_for_low:	rcall	calc_next_timing_and_wait
-		ldi	temp4, 0
+wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
 		rjmp	wait_for_edge
 ;-----bko-----------------------------------------------------------------
-wait_for_high:	rcall	calc_next_timing_and_wait
-		ldi	temp4, (1<<ACO)
+wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ;-----bko-----------------------------------------------------------------
-wait_for_edge:	lds	temp1, zc_filter_time
+wait_for_edge:	rcall	calc_next_timing_and_wait
+		lds	temp1, zc_filter_time
 wait_for_edge2:	lds	temp2, zc_filter_time
 wait_for_edge3:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		in	temp3, ACSR
-		eor	temp3, temp4
+		eor	temp3, flags1
 		sbrc	temp3, ACO
 		rjmp	wait_for_edge4
 		cp	temp1, temp2		; Not yet crossed
