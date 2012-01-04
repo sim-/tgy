@@ -1061,6 +1061,8 @@ set_new_duty_zero:
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
 		out	TCCR2, ZH		; Disable PWM
+		ldi	temp1, (1<<TOV2)
+		out	TIFR, temp1		; Clear pending PWM interrupts
 		all_pFETs_off temp1
 		all_nFETs_off temp1
 		ret
