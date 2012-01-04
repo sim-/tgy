@@ -202,7 +202,7 @@
 ;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
 	.equ	ACO_EDGE_HIGH	= 5	; if set, looking for ACO high - conviently located at the same bit position as ACO
-	.equ    STARTUP		= 6	; if set, startup-phase is active
+	.equ	STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
 
 ;.def	flags2	= r25
@@ -713,7 +713,7 @@ eeprom_read_block:
 		rcall	eeprom_address_init 
 eeprom_read_block1:
 		rcall	eeprom_address_send_inc
-		sbi     EECR, EERE
+		sbi	EECR, EERE
 		in	temp1, EEDR
 		st	Y+, temp1
 		cpi	YL, low(eeprom_end)
@@ -728,8 +728,8 @@ eeprom_write_block1:
 		rcall	eeprom_address_send_inc
 		ld	temp1, Y+
 		out	EEDR, temp1
-		sbi     EECR, EEMWE
-		sbi     EECR, EEWE
+		sbi	EECR, EEMWE
+		sbi	EECR, EEWE
 		cpi	YL, low(eeprom_end)
 		brne	eeprom_write_block1
 eeprom_write_block2:
