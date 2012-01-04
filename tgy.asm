@@ -169,7 +169,7 @@
 .def	rc_timeout	= r11
 .def	sys_control_l	= r12		; duty limit low (word register aligned)
 .def	sys_control_h	= r13		; duty limit high
-;.def	acsr_save	= r14		; saved ACSR register value
+.def	temp7		= r14		; really aux temporary (limited operations)
 ;.def			= r15
 
 .def	temp1		= r16		; main temporary (L)
@@ -399,9 +399,7 @@ clear_loop1:	cp	ZL, r0
 		sbrs	i_sreg, PORF		; Power-on reset
 		rjmp	init_no_porf
 		rcall	beep_f1			; Usual startup beeps
-		rcall	wait30ms
 		rcall	beep_f2
-		rcall	wait30ms
 		rcall	beep_f3
 		rjmp	control_start
 
@@ -415,8 +413,6 @@ init_no_borf:	sbrs	i_sreg, EXTRF	; External reset
 		rcall	beep_f4			; Single beep
 
 control_start:
-		rcall	wait260ms
-
 		; status led on
 		GRN_on
 
@@ -628,21 +624,22 @@ beep_f4:	ldi	temp4, 140
 		ldi	temp2, 140
 		CpFET_on
 		AnFET_on
-		rjmp	beep
-
-; Interrupts must be disabled before entry
-beep:		in	i_temp1, PORTB		; Save ON state
-		in	i_temp2, PORTC
-		in	YH, PORTD
-beep_on:	out	PORTB, i_temp1		; Restore ON state
-		out	PORTC, i_temp2
-		out	PORTD, YH
+		; Fall through
+;-----bko-----------------------------------------------------------------
+; Interrupts no longer need to be disabled to beep, but the PWM interrupt
+; must be muted first
+beep:		in	temp5, PORTB		; Save ON state
+		in	temp6, PORTC
+		in	temp7, PORTD
+beep_on:	out	PORTB, temp5		; Restore ON state
+		out	PORTC, temp6
+		out	PORTD, temp7
 		out	TCNT0, ZH
 beep_BpCn10:	in	temp1, TCNT0
 		cpi	temp1, 2*CPU_MHZ	; 32µs on
 		brlo	beep_BpCn10
-		all_nFETs_off YL
-		all_pFETs_off YL
+		all_nFETs_off temp3
+		all_pFETs_off temp3
 		ldi	temp3, CPU_MHZ		; 2040µs off
 beep_BpCn12:	out	TCNT0, ZH
 beep_BpCn13:	in	temp1, TCNT0
@@ -654,10 +651,15 @@ beep_BpCn13:	in	temp1, TCNT0
 		brne	beep_on
 		ret
 
+wait260ms:
+wait240ms:	rcall	wait120ms
+wait120ms:	rcall	wait60ms
+wait60ms:	rcall	wait30ms
 wait30ms:	ldi	temp2, 15
 beep_BpCn20:	ldi	temp3, CPU_MHZ
 beep_BpCn21:	out	TCNT0, ZH
-		out	TIFR, ZH
+		ldi	temp1, (1<<TOV0)	; Clear TOV0 by setting it
+		out	TIFR, temp1
 beep_BpCn22:	in	temp1, TIFR
 		sbrs	temp1, TOV0
 		rjmp	beep_BpCn22
@@ -665,19 +667,6 @@ beep_BpCn22:	in	temp1, TIFR
 		brne	beep_BpCn21
 		dec	temp2
 		brne	beep_BpCn20
-		ret
-
-	; 128 periods = 261ms silence
-wait260ms:	ldi	temp2, 128
-beep2_BpCn20:	ldi	temp3, CPU_MHZ
-beep2_BpCn21:	out	TCNT0, ZH
-beep2_BpCn22:	in	temp1, TCNT0
-		cpi	temp1, 200
-		brlo	beep2_BpCn22
-		dec	temp3
-		brne	beep2_BpCn21
-		dec	temp2
-		brne	beep2_BpCn20
 		ret
 ;-----bko-----------------------------------------------------------------
 evaluate_rc:	cbr	flags1, (1<<EVAL_RC)
