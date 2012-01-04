@@ -776,7 +776,7 @@ mul_y_12x34:
 		adc	YH, ZH
 		mul	temp2, temp4
 		add	YL, temp5
-		adc	YH, temp6		; Product is now in Y
+		adc	YH, temp6		; Product is now in Y, flags set
 		ret
 ;-----bko-----------------------------------------------------------------
 evaluate_rc_init:
@@ -955,7 +955,7 @@ puls_scale:
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Find the lowest 16.16 multiplicand that brings us to full throttle
-; (POWER_RANGE - MIN_DUTY) when multplied by temp4:temp3.
+; (POWER_RANGE - MIN_DUTY) when multplied by temp3:temp4.
 ; The range we are looking for is around 3000 - 10000:
 ; m = (POWER_RANGE - MIN_DUTY) * 65536 / (1000us * 16MHz)
 ; If the input range is < 100us at 8MHz, < 50us at 16MHz, we return
@@ -971,12 +971,13 @@ puls_find1:	adiw	temp1, 1
 		cpi	temp2, 0xff
 		cpc	temp1, temp2
 		breq	puls_find_fail		; Return if we reached 0xffff
-		ldi	YL, 0
-		ldi	YH, 0
+	; Start with negative POWER_RANGE so that 0 is full throttle
+		ldi	YL, low(MIN_DUTY - POWER_RANGE)
+		ldi	YH, high(MIN_DUTY - POWER_RANGE)
 		rcall	mul_y_12x34
-		subi	YL, low(POWER_RANGE - MIN_DUTY)
-		sbci	YH, high(POWER_RANGE - MIN_DUTY)
-		brmi	puls_find1
+	; We will always be increasing the result in steps of less than 1,
+	; so we can test for just zero rather than a range.
+		brne	puls_find1
 puls_find_fail:	ret
 ;-----bko-----------------------------------------------------------------
 update_timing:
