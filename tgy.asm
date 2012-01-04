@@ -41,7 +41,7 @@
 ;
 ; NOTE: We do 16-bit PWM on timer2 at the full CPU clock rate, using tcnt2h
 ; to simulate the high byte. An input FULL to STOP range of 800 plus a
-; MIN_DUTY of 63 (a POWER_RANGE of 863) gives 800 unique PWM steps at an
+; MIN_DUTY of 64 (a POWER_RANGE of 864) gives 800 unique PWM steps at an
 ; about 18kHz on a 16MHz CPU clock. The output frequency is slightly lower
 ; than F_CPU / POWER_RANGE due to cycles used in the interrupt before
 ; reloading TCNT2.
@@ -105,36 +105,37 @@
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 .equ	CPU_MHZ		= F_CPU / 1000000
 
+; These are now defaults which can be adjusted via throttle calibration
+; (stick high, stick low, (stick neutral) at start).
 .if defined(ultrapwm)
 .equ	STOP_RC_PULS	= 200	; Support for http://www.xaircraft.com/wiki/UltraPWM/en
 .equ	FULL_RC_PULS	= 1200	; which says motors should start at 200us,
 .equ	MAX_RC_PULS	= 1400	; but does not define min/max pulse width.
-.elif RC_PULS_REVERSE
-.equ	STOP_RC_PULS	= 1000	; Stop motor at or below this pulse length
-.equ	FULL_RC_PULS	= 1900	; Full speed at or above this pulse length
-.equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
+.equ	PROGRAM_RC_PULS	= 800	; Length at/above which we consider "stick high"
 .else
+; These might be a bit wide for most radios, but lines up with POWER_RANGE.
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
+.equ	PROGRAM_RC_PULS	= 1640	; Length at/above which we consider "stick high"
 .endif
 
 .if	RC_PULS_REVERSE
-.equ	NEUTRAL_RC_PULS	= FULL_RC_PULS + STOP_RC_PULS	; Doubled
-.equ	RCP_DEADBAND	= 100	; Do not start until this much above or below neutral
-.equ	RCP_DIVISOR	= CPU_MHZ / 2 ; Work with half-microsecond steps
+.equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
 .else
-.equ	NEUTRAL_RC_PULS	= STOP_RC_PULS
 .equ	RCP_DEADBAND	= 0
-.equ	RCP_DIVISOR	= CPU_MHZ ; Work with microsecond steps
 .endif
+.equ	MAX_DRIFT_PULS	= 5	; Maximum jitter/drift microseconds during programming
 
-.equ	MIN_DUTY	= 63	; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
-.equ	POWER_RANGE	= FULL_RC_PULS - STOP_RC_PULS - RCP_DEADBAND + MIN_DUTY
+; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
+.equ	MIN_DUTY	= 64 * CPU_MHZ / 16
+
+; Number of PWM steps (too high and PWM frequency drops into audible range)
+.equ	POWER_RANGE	= 800 * CPU_MHZ / 16 + MIN_DUTY
 
 .equ	MAX_POWER	= (POWER_RANGE-1)
-.equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit until running mode
-.equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit until running mode
+.equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit while starting (to start)
+.equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit while starting (if still not running)
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
@@ -152,6 +153,9 @@
 .equ	T0CLK		= (1<<CS01)	; clk/8 == 2Mhz
 .equ	T1CLK		= (1<<CS10)	; clk/1 == 16MHz
 .equ	T2CLK		= (1<<CS20)	; clk/1 == 16MHz
+
+.equ	EEPROM_SIGN	= 31337		; Random 16-bit value
+.equ	EEPROM_OFFSET	= 0x80		; Offset into 512-byte space (why not)
 
 ;**** **** **** **** ****
 ; Register Definitions
@@ -172,18 +176,16 @@
 .def	temp7		= r14		; really aux temporary (limited operations)
 ;.def			= r15
 
-.def	temp1		= r16		; main temporary (L)
-.def	temp2		= r17		; main temporary (H)
-.def	temp3		= r18		; main temporary (L)
-.def	temp4		= r19		; main temporary (H)
-
+.def	nfet_on		= r18
+.def	nfet_off	= r19
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r21		; interrupt temporary
+.def	temp3		= r22		; main temporary (L)
+.def	temp4		= r23		; main temporary (H)
+.def	temp1		= r24		; main temporary (L), adiw-capable
+.def	temp2		= r25		; main temporary (H), adiw-capable
 
-.def	nfet_on		= r22
-.def	nfet_off	= r25
-
-.def	flags0	= r23	; state flags
+.def	flags0	= r16	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
 ;	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
@@ -193,7 +195,7 @@
 ;	.equ	I_FET_ON	= 6	; if set, fets off
 ;	.equ	I_ON_CYCLE	= 7	; if set, current on cycle is active (optimized as MSB)
 
-.def	flags1	= r24	; state flags
+.def	flags1	= r17	; state flags
 	.equ	POWER_OFF	= 0	; switch fets on disabled
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
@@ -227,6 +229,10 @@
 .dseg				; DATA segment
 .org SRAM_START
 
+orig_osccal:	.byte	1	; original OSCCAL value
+goodies:	.byte	1
+ocr1ax:		.byte	1	; 3rd byte of OCR1A
+tcnt1x:		.byte	1	; 3rd byte of TCNT1
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
 last_tcnt1_x:	.byte	1
@@ -234,7 +240,6 @@ timing_l:	.byte	1	; holds time of 4 commutations
 timing_h:	.byte	1
 timing_x:	.byte	1
 timing_count:	.byte	1
-
 wt_comp_scan_l:	.byte	1	; time from switch to comparator scan (blanking time)
 wt_comp_scan_h:	.byte	1
 wt_comp_scan_x:	.byte	1
@@ -248,10 +253,6 @@ zero_wt_l:	.byte	1	; time to wait for zero-crossing while running
 zero_wt_h:	.byte	1
 zero_wt_x:	.byte	1
 zc_filter_time:	.byte	1	; number of times to check zero-crossing
-
-ocr1ax:		.byte	1	; 3rd byte of OCR1A
-tcnt1x:		.byte	1	; 3rd byte of TCNT1
-
 start_rcpuls_l:	.byte	1
 start_rcpuls_h:	.byte	1
 start_rcpuls_x:	.byte	1
@@ -259,13 +260,27 @@ rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 timing_duty_l:	.byte	1	; duty cycle limit based on timing
 timing_duty_h:	.byte	1
-max_power_l:	.byte	1
-max_power_h:	.byte	1
-neutral_l:	.byte	1
+fwd_scale_l:	.byte	1	; 16.16 multipliers to scale input RC pulse to POWER_RANGE
+fwd_scale_h:	.byte	1
+rev_scale_l:	.byte	1
+rev_scale_h:	.byte	1
+neutral_l:	.byte	1	; Offset for neutral throttle (in CPU_MHZ)
 neutral_h:	.byte	1
-
-goodies:	.byte	1
-
+;**** **** **** **** ****
+; The following entries are block-copied from/to EEPROM
+eeprom_sig_l:	.byte	1
+eeprom_sig_h:	.byte	1
+puls_high_l:	.byte	1	; -,
+puls_high_h:	.byte	1	;  | 
+puls_low_l:	.byte	1	;  |- saved pulse lengths during throttle calibration 
+puls_low_h:	.byte	1	;  |  (order used by rc_prog)
+puls_neutral_l:	.byte	1	;  |
+puls_neutral_h:	.byte	1	; -'
+eeprom_end:	.byte	1
+;-----bko-----------------------------------------------------------------
+;**** **** **** **** ****
+.cseg
+.org 0
 ;**** **** **** **** ****
 ; ATmega8 interrupts
 
@@ -288,12 +303,6 @@ goodies:	.byte	1
 ;.equ	TWIaddr =$011	; Irq. vector address for Two-Wire Interface
 ;.equ	SPMaddr =$012	; SPM complete Interrupt Vector Address
 ;.equ	SPMRaddr =$012	; SPM complete Interrupt Vector Address
-;-----bko-----------------------------------------------------------------
-
-;**** **** **** **** ****
-.cseg
-.org 0
-;**** **** **** **** ****
 
 ;-----bko-----------------------------------------------------------------
 ; Reset and interrupt jump table
@@ -339,10 +348,16 @@ clear_loop:	st	-Z, r0
 		ldi	ZL, 30			; Start clearing registers
 clear_loop1:	cp	ZL, r0
 		cpc	ZH, r0
-		brne	clear_loop
+		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
+
+	; Save original OSCCAL and reset cause
+		in	i_sreg, OSCCAL
+		sts	orig_osccal, i_sreg
+		in	i_sreg, MCUCSR
+		out	MCUCSR, r0
 
 	; portB - all FETs off
-		ldi	temp1, INIT_PB		; PORTB initially holds 0x00
+		ldi	temp1, INIT_PB
 		out	PORTB, temp1
 		ldi	temp1, DIR_PB
 		out	DDRB, temp1
@@ -366,36 +381,39 @@ clear_loop1:	cp	ZL, r0
 		out	TCCR1B, temp1		; RC pulse measurement
 		out	TCCR2, ZH		; timer2: PWM, stopped
 
-	; Set PWM interrupt vector
-		ldi	ZL, low(pwm_off)	; Set PWM interrupt vector
-
-	; Set default max_power and neutral levels
-	; (eventually, these should be loaded from EEPROM)
-		ldi	temp1, byte1(MAX_POWER)
-		sts	max_power_l, temp1
-		ldi	temp1, byte2(MAX_POWER)
-		sts	max_power_h, temp1
-		ldi	temp1, byte1(NEUTRAL_RC_PULS)
-		sts	neutral_l, temp1
-		ldi	temp1, byte2(NEUTRAL_RC_PULS)
-		sts	neutral_h, temp1
-
-	; Set clock to almost 16MHz -- this should be stable provided we do
-	; not write to the EEPROM or flash unless we revert OSCCAL to 0x9f
-		rcall	wait260ms	; wait a while
-.if CPU_MHZ == 16
-		ldi	temp1, 0xff
-		out	OSCCAL, temp1
-.elif CPU_MHZ == 8
-		ldi	temp1, 0x9f
-		out	OSCCAL, temp1
-.endif
+	; Read EEPROM block
 		rcall	wait30ms
+		rcall	eeprom_read_block
+
+	; Check EEPROM signature
+		lds	temp1, eeprom_sig_l
+		lds	temp2, eeprom_sig_h
+		subi	temp1, low(EEPROM_SIGN)
+		sbci	temp2, high(EEPROM_SIGN)
+		breq	eeprom_good
+
+	; Signature not good, set defaults (but do not write to the EEPROM
+	; until if and when we actually change something)
+		ldi	temp1, byte1(FULL_RC_PULS * CPU_MHZ)
+		sts	puls_high_l, temp1
+		ldi	temp1, byte2(FULL_RC_PULS * CPU_MHZ)
+		sts	puls_high_h, temp1
+		ldi	temp1, byte1(STOP_RC_PULS * CPU_MHZ)
+		sts	puls_low_l, temp1
+		ldi	temp1, byte2(STOP_RC_PULS * CPU_MHZ)
+		sts	puls_low_h, temp1
+		ldi	temp1, byte1((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
+		sts	puls_neutral_l, temp1
+		ldi	temp1, byte2((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
+		sts	puls_neutral_h, temp1
+		ldi	temp1, low(EEPROM_SIGN)
+		sts	eeprom_sig_l, temp1
+		ldi	temp1, high(EEPROM_SIGN)
+		sts	eeprom_sig_h, temp1
+eeprom_good:
+		rcall	osccal_set
 
 	; Check reset cause
-		in	i_sreg, MCUCSR
-		out	MCUCSR, ZH
-
 		sbrs	i_sreg, PORF		; Power-on reset
 		rjmp	init_no_porf
 		rcall	beep_f1			; Usual startup beeps
@@ -416,6 +434,8 @@ control_start:
 		; status led on
 		GRN_on
 
+		rcall	puls_scale
+
 	; init registers and interrupts
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE2)
 		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
@@ -429,7 +449,7 @@ control_start:
 i_rc_puls1:	clr	rc_timeout
 i_rc_puls2:	sbrs	flags1, EVAL_RC
 		rjmp	i_rc_puls2
-		rcall	evaluate_rc
+		rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
@@ -669,77 +689,228 @@ beep_BpCn22:	in	temp1, TIFR
 		brne	beep_BpCn20
 		ret
 ;-----bko-----------------------------------------------------------------
+eeprom_address_init:
+		lds	temp1, orig_osccal	; Restore original calibration
+		out	OSCCAL, temp1
+		ldi	YL, low(eeprom_sig_l)
+		ldi	YH, high(eeprom_sig_l)
+		ldi	temp1, low(EEPROM_OFFSET)
+		ldi	temp2, high(EEPROM_OFFSET)
+		ret
+;-----bko-----------------------------------------------------------------
+eeprom_address_send_inc:
+		sbic	EECR, EEWE
+		rjmp	eeprom_address_send_inc
+		in	temp3, SPMCR
+		sbrc	temp3, SPMEN
+		rjmp	eeprom_address_send_inc
+		out	EEARH, temp2
+		out	EEARL, temp1
+		adiw	temp1, 1
+		ret
+;-----bko-----------------------------------------------------------------
+eeprom_read_block:
+		rcall	eeprom_address_init 
+eeprom_read_block1:
+		rcall	eeprom_address_send_inc
+		sbi     EECR, EERE
+		in	temp1, EEDR
+		st	Y+, temp1
+		cpi	YL, low(eeprom_end)
+		brne	eeprom_read_block1
+		ret
+;-----bko-----------------------------------------------------------------
+; Write over all EEPROM settings
+eeprom_write_block:
+		rcall	eeprom_address_init 
+		cli
+eeprom_write_block1:
+		rcall	eeprom_address_send_inc
+		ld	temp1, Y+
+		out	EEDR, temp1
+		sbi     EECR, EEMWE
+		sbi     EECR, EEWE
+		cpi	YL, low(eeprom_end)
+		brne	eeprom_write_block1
+eeprom_write_block2:
+		sbic	EECR, EEWE
+		rjmp	eeprom_write_block2
+		sei
+		; Fall through to restore our oscillator calibration
+;-----bko-----------------------------------------------------------------
+; Set the oscillator calibration for 8MHz operation, or set it to 0xff for
+; approximately 16MHz operation even without an external oscillator. This
+; should be safe as long as we restore it during EEPROM accesses. This
+; will have no effect on boards with external oscillators, except that
+; the EEPROM still uses the internal oscillator (at 1MHz).
+osccal_set:
+.if CPU_MHZ == 16
+		ldi	temp1, 0xff		; Almost 16MHz
+.else
+		ldi	temp1, 0x9f		; Almost 8MHz
+.endif
+		out	OSCCAL, temp1
+		ret
+;-----bko-----------------------------------------------------------------
+; Shift left temp7:temp6:temp5 temp1 times.
+lsl_temp567:
+		lsl	temp5
+		rol	temp6
+		rol	temp7
+		dec	temp1
+		brne	lsl_temp567
+		ret
+;-----bko-----------------------------------------------------------------
+; Multiply temp1:temp2 by temp3:temp4 and adds high 16 bits of result to Y.
+; Clobbers temp5, temp6, temp7.
+mul_y_12x34:
+		mul	temp1, temp3		; Scale raw pulse length to POWER_RANGE: 16x16->32 (bottom 16 discarded)
+		mov	temp7, temp6		; Save byte 2 of result, discard byte 1 already
+		mul	temp2, temp3
+		add	temp7, temp5
+		adc	YL, temp6
+		adc	YH, ZH
+		mul	temp1, temp4
+		add	temp7, temp5
+		adc	YL, temp6
+		adc	YH, ZH
+		mul	temp2, temp4
+		add	YL, temp5
+		adc	YH, temp6		; Product is now in Y
+		ret
+;-----bko-----------------------------------------------------------------
+evaluate_rc_init:
+		cbr	flags1, (1<<EVAL_RC)
+		sbrc	flags1, I2C_MODE
+		rjmp	evaluate_rc_i2c
+	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
+		ldi	YL, low(puls_high_l)	; Start with high pulse calibration
+		ldi	YH, high(puls_high_l)
+	; Collect average of throttle input pulse length
+rc_prog1:	movw	temp3, rcpuls_l		; Save the starting pulse length
+rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
+		clr	temp7
+		cpi	YL, low(puls_high_l)	; Are we learning the high pulse?
+		brne	rc_prog3		; No, maybe the low pulse
+		cpi	temp3, byte1(PROGRAM_RC_PULS * CPU_MHZ)
+		ldi	temp1, byte2(PROGRAM_RC_PULS * CPU_MHZ)
+		cpc	temp4, temp1
+		brcs	evaluate_rc_puls	; Lower than PROGRAM_RC_PULS - exit programming
+		ldi	temp1, 32 * 15/16	; Full speed pulse averaging count (slightly below exact)
+		rjmp	rc_prog5
+rc_prog3:	lds	temp1, puls_high_l	; If not learning the high pulse, we should stay below it
+		cp	temp3, temp1
+		lds	temp1, puls_high_h
+		cpc	temp4, temp1
+		brcc	rc_prog1		; Restart while pulse not lower than learned high pulse
+		cpi	YL, low(puls_low_l)	; Are we learning the low pulse?
+		brne	rc_prog4		; No, must be the neutral pulse
+		ldi	temp1, 32 * 17/16	; Stop/reverse pulse (slightly above exact)
+		rjmp	rc_prog5
+rc_prog4:	lds	temp1, puls_low_l
+		cp	temp3, temp1
+		lds	temp1, puls_low_h
+		cpc	temp4, temp1
+		brcs	rc_prog1		; Restart while pulse lower than learned low pulse
+		ldi	temp1, 32		; Neutral pulse measurement (exact)
+rc_prog5:	mov	tcnt2h, temp1		; Abuse tcnt2h as pulse counter
+rc_prog6:	sbrs	flags1, EVAL_RC		; Wait for next pulse
+		rjmp	rc_prog6
+		cbr	flags1, (1<<EVAL_RC)
+		movw	temp1, rcpuls_l		; Atomic copy of new rc pulse length
+		add	temp5, temp1		; Accumulate 24-bit average
+		adc	temp6, temp2
+		adc	temp7, ZH
+		sub	temp1, temp3		; Subtract the starting pulse from this one
+		sbc	temp2, temp4		; to find the drift since the starting pulse
+	; Check for excessive drift with an emulated signed comparison -
+	; add the drift amount to offset the negative side to 0
+		subi	temp1, -byte1(MAX_DRIFT_PULS * CPU_MHZ)
+		sbci	temp2, -1 - byte2(MAX_DRIFT_PULS * CPU_MHZ)
+	; ..then subtract the 2*drift + 1 -- carry will be clear if
+	; we drifted outside of the range
+		subi	temp1, byte1(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
+		sbci	temp2, byte2(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
+		brcc	rc_prog1		; Start over if input moved too far
+		dec	tcnt2h
+		brne	rc_prog6		; Loop until average accumulated
+		ldi	temp1, 3
+		rcall	lsl_temp567		; Multiply by 8 (so that 32 loops makes average*256)
+		st	Y+, temp6		; Save the top 16 bits as the result
+		st	Y+, temp7
+	; One beep: high (full speed) pulse received
+		rcall	beep_f3
+		cpi	YL, low(puls_high_l+2)
+		breq	rc_prog1		; Go back to get low pulse
+	; Two beeps: low (stop/reverse) pulse received
+		rcall	wait30ms
+		rcall	beep_f3
+		cpi	YL, low(puls_low_l+2)
+		.if RC_PULS_REVERSE
+		breq	rc_prog1		; Go back to get neutral pulse
+		.else
+		breq	rc_prog_done
+		.endif
+	; Three beeps: neutral pulse received
+		rcall	wait30ms
+		rcall	beep_f3
+rc_prog_done:	rcall	eeprom_write_block
+		rjmp	puls_scale		; Calculate the new scaling factors
+;-----bko-----------------------------------------------------------------
 evaluate_rc:	cbr	flags1, (1<<EVAL_RC)
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
 ;-----bko-----------------------------------------------------------------
-evaluate_rc_puls:				; No clobbering temp4 here, please
+evaluate_rc_puls:
 		ldi	temp1, RCP_TOT
 		cp	rc_timeout, temp1
-		adc	rc_timeout, ZH	; Increment if not at RCP_TOT
-		movw	YL, rcpuls_l		; Atomic copy of rc pulse length
-.if RCP_DIVISOR == 16
-		swap	YL			; Divide by 16 (16MHz -> us)
-		swap	YH
-		andi	YL, 0x0f
-		eor	YL, YH
-		andi	YH, 0x0f
-		eor	YL, YH
-.elif RCP_DIVISOR == 8
-		lsr	YH			; Divide by 8
-		ror	YL
-		lsr	YH
-		ror	YL
-		lsr	YH
-		ror	YL
-.elif RCP_DIVISOR == 4
-		lsr	YH			; Divide by 4
-		ror	YL
-		lsr	YH
-		ror	YL
-.else
-.error Teach me how to divide by RCP_DIVISOR
-.endif
-.if MOTOR_REVERSE
-		sbr	flags1, (1<<REVERSE)
-.else
-		cbr	flags1, (1<<REVERSE)
-.endif
-		lds	temp1, neutral_l
-		lds	temp2, neutral_h
-		sub	YL, temp1
-		sbc	YH, temp2
+		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
+		lds	YL, neutral_l
+		lds	YH, neutral_h
+		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
+		sub	temp1, YL
+		sbc	temp2, YH
 		brcc	puls_plus
-.if RC_PULS_REVERSE
-.if MOTOR_REVERSE
+		.if RC_PULS_REVERSE
+		.if MOTOR_REVERSE
 		cbr	flags1, (1<<REVERSE)
-.else
+		.else
 		sbr	flags1, (1<<REVERSE)
-.endif
-		subi	YL, -low(RCP_DEADBAND)
-		sbci	YH, -1 - high(RCP_DEADBAND)
-		brpl	puls_zero
-		com	YH
-		neg	YL
-		sbci	YH, -1
+		.endif
+		com	temp2
+		neg	temp1
+		sbci	temp2, -1
+		lds	temp3, rev_scale_l
+		lds	temp4, rev_scale_h
 		rjmp	puls_not_zero
-.endif
+		.endif
+		; Fall through
 puls_zero:	clr	YL
 		clr	YH
 		rjmp	puls_not_full
 puls_plus:
-.if RCP_DEADBAND
-		subi	YL, low(RCP_DEADBAND)
-		sbci	YH, high(RCP_DEADBAND)
+		.if MOTOR_REVERSE
+		sbr	flags1, (1<<REVERSE)
+		.else
+		cbr	flags1, (1<<REVERSE)
+		.endif
+		lds	temp3, fwd_scale_l
+		lds	temp4, fwd_scale_h
+puls_not_zero:
+		.if RCP_DEADBAND
+		subi	temp1, byte1(RCP_DEADBAND * CPU_MHZ)
+		sbci	temp2, byte2(RCP_DEADBAND * CPU_MHZ)
 		brmi	puls_zero
-.endif
-puls_not_zero:	adiw	YL, MIN_DUTY
-		lds	temp1, max_power_l
-		lds	temp2, max_power_h
-		cp	YL, temp1
-		cpc	YH, temp2
+		.endif
+		ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
+		ldi	YH, byte2(MIN_DUTY)
+		rcall	mul_y_12x34		; Scaled result is now in Y
+		cpi	YL, byte1(MAX_POWER)
+		ldi	temp1, byte2(MAX_POWER)
+		cpc	YH, temp1
 		brlo	puls_not_full
-		movw	YL, temp1
+		ldi	YL, byte1(MAX_POWER)
+		ldi	YH, byte2(MAX_POWER)
 puls_not_full:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
@@ -747,6 +918,66 @@ puls_not_full:	sts	rc_duty_l, YL
 evaluate_rc_i2c:
 	; Stub for now
 		ret
+;-----bko-----------------------------------------------------------------
+; Calculate the neutral offset and forward (and reverse) scaling factors
+; to line up with the high/low (and neutral) pulse lengths.
+puls_scale:
+		.if RC_PULS_REVERSE
+		lds	temp1, puls_neutral_l
+		lds	temp2, puls_neutral_h
+		.else
+		lds	temp1, puls_low_l
+		lds	temp2, puls_low_h
+		.endif
+		sts	neutral_l, temp1
+		sts	neutral_h, temp2
+	; Find the distance to full throttle and fit it to match the
+	; distance between FULL_RC_PULS and STOP_RC_PULS by walking
+	; for the lowest 16.16 multiplier that just brings us in range.
+		lds	temp3, puls_high_l
+		lds	temp4, puls_high_h
+		sub	temp3, temp1
+		sbc	temp4, temp2
+		rcall	puls_find_multiplicand
+		sts	fwd_scale_l, temp1
+		sts	fwd_scale_h, temp2
+		.if RC_PULS_REVERSE
+		lds	temp3, puls_neutral_l
+		lds	temp4, puls_neutral_h
+		lds	temp1, puls_low_l
+		lds	temp2, puls_low_h
+		sub	temp3, temp1
+		sbc	temp4, temp2
+		rcall	puls_find_multiplicand
+		sts	rev_scale_l, temp1
+		sts	rev_scale_h, temp2
+		.endif
+		ret
+;-----bko-----------------------------------------------------------------
+; Find the lowest 16.16 multiplicand that brings us to full throttle
+; (POWER_RANGE - MIN_DUTY) when multplied by temp4:temp3.
+; The range we are looking for is around 3000 - 10000:
+; m = (POWER_RANGE - MIN_DUTY) * 65536 / (1000us * 16MHz)
+; If the input range is < 100us at 8MHz, < 50us at 16MHz, we return
+; too low a multiplicand (higher won't fit in 16 bits).
+puls_find_multiplicand:
+		.if RCP_DEADBAND
+		subi	temp3, byte1(RCP_DEADBAND * CPU_MHZ)
+		sbci	temp4, byte2(RCP_DEADBAND * CPU_MHZ)
+		.endif
+		ldi	temp1, byte1(1999)
+		ldi	temp2, byte2(1999)
+puls_find1:	adiw	temp1, 1
+		cpi	temp2, 0xff
+		cpc	temp1, temp2
+		breq	puls_find_fail		; Return if we reached 0xffff
+		ldi	YL, 0
+		ldi	YH, 0
+		rcall	mul_y_12x34
+		subi	YL, low(POWER_RANGE - MIN_DUTY)
+		sbci	YH, high(POWER_RANGE - MIN_DUTY)
+		brmi	puls_find1
+puls_find_fail:	ret
 ;-----bko-----------------------------------------------------------------
 update_timing:
 		rcall	set_ocr1a		; Returns TCNT1L/H/X in temp1, temp2, temp3
@@ -1000,8 +1231,8 @@ set_new_duty11:
 		; cycle can double at any time, but any larger change will
 		; be rate-limited.
 		ldi	temp1, low(PWR_MIN_START)
-		cp	YL, temp1
 		ldi	temp2, high(PWR_MIN_START)
+		cp	YL, temp1
 		cpc	YH, temp2
 		brcs	set_new_duty12
 		movw	temp1, YL		; temp1:temp2 >= PWR_MIN_START
@@ -1052,6 +1283,7 @@ switch_power_off:
 		out	TCCR2, ZH		; Disable PWM
 		ldi	temp1, (1<<TOV2)
 		out	TIFR, temp1		; Clear pending PWM interrupts
+		ldi	ZL, low(pwm_off)	; Set PWM interrupt vector
 		all_pFETs_off temp1
 		all_nFETs_off temp1
 		ret
@@ -1223,7 +1455,7 @@ wait_for_edge3:	sbrs	flags0, OCT1_PENDING
 		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_edge3
 		push	temp1
-		rcall	evaluate_rc		; Does not clobber temp4
+		rcall	evaluate_rc
 		pop	temp1
 		rjmp	wait_for_edge2		; Restore temp2 and loop
 wait_for_edge4:	dec	temp1			; Zero-cross has happened
