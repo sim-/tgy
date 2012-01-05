@@ -39,7 +39,7 @@ Supported (Tested) Hardware
     - Original TowerPro 17A, 25A
 - tgy:
     - Original TowerPro 18A
-    - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (rebranded Hobbywing)
+    - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (Hobbywing OEM)
     - RCTimer 10A, 18A, 20A, 30A (18A, 20A, 30A are same board with more or less FETs)
     - Hobby King SS 15-18A
 - tgy6a:
@@ -52,11 +52,11 @@ Notes
 -----
 - If it breaks, you get to keep both pieces!
 - Use at your own risk, and always test first without propellers!
-- Newer Turnigy Plush seems to have switched to SiLabs C8051F334, d'oh!
-- If your cheap ESC has 6 pads and an AVR, it's probably compatible;
-  the pads are MOSI, MISO, SCLK, GND, VCC, and RESET. If it has 4 pads,
-  it is probably a newer SiLabs-based one, for which this code will not
-  work.
+- New Turnigy Plush, Basic, Sentry and Pentium boards (Hobbywing OEM)
+  have all switched to SiLabs C8051F334, d'oh!
+- If your ESC has 6 pads and an AVR, it's probably compatible; the pads
+  are MOSI, MISO, SCLK, GND, VCC, and RESET. If it has 4 pads, it is
+  probably a newer SiLabs-based one, for which this code will not work.
 - I build and maintain this in Linux with avra (1.3.0 or newer). Patches
   welcome for AVR Studio APS files, etc.
 - The TowerPro/Turnigy Plush type boards typically do not come with
