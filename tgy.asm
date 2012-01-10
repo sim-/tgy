@@ -308,26 +308,25 @@ eeprom_end:	.byte	1
 ; Reset and interrupt jump table
 ; When multiple interrupts are pending, the vectors are executed from top
 ; (ext_int0) to bottom.
-		rjmp reset
+		rjmp reset	; reset
 		rjmp_ext_int0	; ext_int0
-		nop		; ext_int1
-		nop		; t2oc_int
+		reti		; ext_int1
+		reti		; t2oc_int
 		ijmp		; t2ovfl_int
 		rjmp_icp1_int	; icp1_int
-		rjmp t1oca_int
-		nop		; t1ocb_int
-		rjmp t1ovfl_int
-		nop		; t0ovfl_int
-		nop		; spi_int
-		nop		; urxc
-		nop		; udre
-		nop		; utxc
-
-; not used	nop		; adc_int
-; not used	nop		; eep_int
-; not used	nop		; aci_int
-; not used	nop		; wire2_int
-; not used	nop		; spmc_int
+		rjmp t1oca_int	; t1oca_int
+		reti		; t1ocb_int
+		rjmp t1ovfl_int	; t1ovfl_int
+		reti		; t0ovfl_int
+		reti		; spi_int
+		reti		; urxc
+		reti		; udre
+		reti		; utxc
+; not used	reti		; adc_int
+; not used	reti		; eep_int
+; not used	reti		; aci_int
+; not used	reti		; wire2_int
+; not used	reti		; spmc_int
 
 ;-----bko-----------------------------------------------------------------
 ; init after reset
@@ -437,9 +436,9 @@ control_start:
 		rcall	puls_scale
 
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE2)
-		out	TIFR, temp1		; clear TOIE1,OCIE1A & OCIE2
-		out	TIMSK, temp1		; enable TOIE1,OCIE1A & OCIE2 interrupts
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
+		out	TIFR, temp1		; clear TOIE1, OCIE1A & TOIE2
+		out	TIMSK, temp1		; enable TOIE1, OCIE1A & TOIE2 interrupts
 
 		sei				; enable all interrupts
 
