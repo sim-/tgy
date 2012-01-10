@@ -463,6 +463,92 @@ i_rc_puls2:	sbrs	flags1, EVAL_RC
 		rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
+; timer2 overflow compare interrupt (output PWM) -- the interrupt vector
+; actually "ijmp"s to Z which should point to one of these entry points.
+;
+; We try to avoid clobbering (and thus needing to save/restore) flags;
+; in, out, mov, ldi, etc. do not modify any flags, while dec does.
+;
+; The comparator (ACSR) is saved at the very end of the ON cycle, but
+; since the nFET takes at least half a microsecond to turn off and the
+; AVR buffers ACO for a few cycles, we do it after turning off the drive
+; pin. For low duty cycles (with a longer off period), testing shows that
+; waiting an extra 0.5us - 0.75us (8-12 cycles at 16MHz) actually helps
+; to improve zero-crossing detection accuracy significantly, perhaps
+; because the driven-low phase has had a chance to finish swinging down.
+; However, some tiny boards such as 10A or less may have very low gate
+; charge/capacitance, and so can turn off faster. We used to wait 8/9
+; cycles, but now we wait 5 cycles (5/16ths of a microsecond), which
+; still helps on ~30A boards without breaking 10A boards.
+;
+; We reload TCNT2 as the very last step so as to reduce PWM dead areas
+; between the reti and the next interrupt vector execution, which still
+; takes a good 4 (reti) + 4 (interrupt call) + 2 (ijmp) cycles. We also
+; try to keep the fet switch off as close to this as possible to avoid a
+; significant bump at FULL_POWER.
+;
+; The pwm_*_high entry points are only called when the particular on/off
+; cycle is longer than 8 bits. This is tracked in tcnt2h.
+
+pwm_on_high:
+		in	i_sreg, SREG
+		dec	tcnt2h
+		brne	pwm_on_again
+		ldi	ZL, pwm_on
+pwm_on_again:	out	SREG, i_sreg
+		reti
+pwm_off_high:
+		in	i_sreg, SREG
+		dec	tcnt2h
+		brne	pwm_off_again
+		ldi	ZL, pwm_off
+pwm_off_again:	out	SREG, i_sreg
+		reti
+
+pwm_on:
+		st	X, nfet_on
+		ldi	ZL, pwm_off
+		cpse	duty_h, ZH
+		ldi	ZL, pwm_off_high
+		mov	tcnt2h, duty_h
+		out	TCNT2, duty_l
+		reti
+
+pwm_off:
+		ldi	ZL, pwm_on		; 1 cycle
+		cpse	off_duty_h, ZH	; 1 cycle if not zero, 2 if zero
+		ldi	ZL, pwm_on_high		; 1 cycle
+		mov	tcnt2h, off_duty_h	; 1 cycle
+		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
+		out	TCNT2, off_duty_l	; 1 cycle
+		reti				; 4 cycles
+
+.if high(pwm_off)
+.error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
+.endif
+;-----bko-----------------------------------------------------------------
+; timer output compare interrupt
+t1oca_int:	in	i_sreg, SREG
+		lds	i_temp1, ocr1ax
+		subi	i_temp1, 1
+		brcc	t1oca_int1
+		cbr	flags0, (1<<OCT1_PENDING)	; signal OCT1A passed
+t1oca_int1:	sts	ocr1ax, i_temp1
+		out	SREG, i_sreg
+		reti
+;-----bko-----------------------------------------------------------------
+; timer1 overflow interrupt (happens every 4096µs)
+t1ovfl_int:	in	i_sreg, SREG
+		lds	i_temp1, tcnt1x
+		inc	i_temp1
+		sts	tcnt1x, i_temp1
+		andi	i_temp1, 15			; Every 16 overflows
+		brne	t1ovfl_int1
+		cpse	rc_timeout, ZH
+		dec	rc_timeout
+t1ovfl_int1:	out	SREG, i_sreg
+		reti
+;-----bko-----------------------------------------------------------------
 ; NOTE: This interrupt uses the 16-bit atomic timer read/write register
 ; by reading TCNT1L and TCNT1H, so this interrupt must be disabled before
 ; any other 16-bit timer options happen that might use the same register
@@ -533,92 +619,6 @@ falling_edge1:	lds	ZH, start_rcpuls_l
 
 rcpint_exit:	out	SREG, i_sreg
 		reti
-;-----bko-----------------------------------------------------------------
-; timer output compare interrupt
-t1oca_int:	in	i_sreg, SREG
-		lds	i_temp1, ocr1ax
-		subi	i_temp1, 1
-		brcc	t1oca_int1
-		cbr	flags0, (1<<OCT1_PENDING)	; signal OCT1A passed
-t1oca_int1:	sts	ocr1ax, i_temp1
-		out	SREG, i_sreg
-		reti
-;-----bko-----------------------------------------------------------------
-; timer1 overflow interrupt (happens every 4096µs)
-t1ovfl_int:	in	i_sreg, SREG
-		lds	i_temp1, tcnt1x
-		inc	i_temp1
-		sts	tcnt1x, i_temp1
-		andi	i_temp1, 15			; Every 16 overflows
-		brne	t1ovfl_int1
-		cpse	rc_timeout, ZH
-		dec	rc_timeout
-t1ovfl_int1:	out	SREG, i_sreg
-		reti
-;-----bko-----------------------------------------------------------------
-; timer2 overflow compare interrupt (output PWM) -- the interrupt vector
-; actually "ijmp"s to Z which should point to one of these entry points.
-;
-; We try to avoid clobbering (and thus needing to save/restore) flags;
-; in, out, mov, ldi, etc. do not modify any flags, while dec does.
-;
-; The comparator (ACSR) is saved at the very end of the ON cycle, but
-; since the nFET takes at least half a microsecond to turn off and the
-; AVR buffers ACO for a few cycles, we do it after turning off the drive
-; pin. For low duty cycles (with a longer off period), testing shows that
-; waiting an extra 0.5us - 0.75us (8-12 cycles at 16MHz) actually helps
-; to improve zero-crossing detection accuracy significantly, perhaps
-; because the driven-low phase has had a chance to finish swinging down.
-; However, some tiny boards such as 10A or less may have very low gate
-; charge/capacitance, and so can turn off faster. We used to wait 8/9
-; cycles, but now we wait 5 cycles (5/16ths of a microsecond), which
-; still helps on ~30A boards without breaking 10A boards.
-;
-; We reload TCNT2 as the very last step so as to reduce PWM dead areas
-; between the reti and the next interrupt vector execution, which still
-; takes a good 4 (reti) + 4 (interrupt call) + 2 (ijmp) cycles. We also
-; try to keep the fet switch off as close to this as possible to avoid a
-; significant bump at FULL_POWER.
-;
-; The pwm_*_high entry points are only called when the particular on/off
-; cycle is longer than 8 bits. This is tracked in tcnt2h.
-
-pwm_on_high:
-		in	i_sreg, SREG
-		dec	tcnt2h
-		brne	pwm_on_again
-		ldi	ZL, pwm_on
-pwm_on_again:	out	SREG, i_sreg
-		reti
-pwm_off_high:
-		in	i_sreg, SREG
-		dec	tcnt2h
-		brne	pwm_off_again
-		ldi	ZL, pwm_off
-pwm_off_again:	out	SREG, i_sreg
-		reti
-
-pwm_on:
-		st	X, nfet_on
-		ldi	ZL, pwm_off
-		cpse	duty_h, ZH
-		ldi	ZL, pwm_off_high
-		mov	tcnt2h, duty_h
-		out	TCNT2, duty_l
-		reti
-
-pwm_off:
-		ldi	ZL, pwm_on		; 1 cycle
-		cpse	off_duty_h, ZH	; 1 cycle if not zero, 2 if zero
-		ldi	ZL, pwm_on_high		; 1 cycle
-		mov	tcnt2h, off_duty_h	; 1 cycle
-		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
-		out	TCNT2, off_duty_l	; 1 cycle
-		reti				; 4 cycles
-
-.if high(pwm_off)
-.error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
-.endif
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp4, 200
