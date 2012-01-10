@@ -116,7 +116,7 @@
 ; These might be a bit wide for most radios, but lines up with POWER_RANGE.
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
-.equ	MAX_RC_PULS	= 2200	; Throw away any pulses longer than this
+.equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
 .equ	PROGRAM_RC_PULS	= 1640	; Length at/above which we consider "stick high"
 .endif
 
