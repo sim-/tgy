@@ -827,7 +827,7 @@ rc_prog6:	sbrs	flags1, EVAL_RC		; Wait for next pulse
 		sbc	temp2, temp4		; to find the drift since the starting pulse
 	; Check for excessive drift with an emulated signed comparison -
 	; add the drift amount to offset the negative side to 0
-		subi	temp1, -byte1(MAX_DRIFT_PULS * CPU_MHZ)
+		subi	temp1, byte1(-MAX_DRIFT_PULS * CPU_MHZ)
 		sbci	temp2, -1 - byte2(MAX_DRIFT_PULS * CPU_MHZ)
 	; ..then subtract the 2*drift + 1 -- carry will be clear if
 	; we drifted outside of the range
