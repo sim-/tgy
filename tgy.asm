@@ -125,7 +125,7 @@
 .else
 .equ	RCP_DEADBAND	= 0
 .endif
-.equ	MAX_DRIFT_PULS	= 5	; Maximum jitter/drift microseconds during programming
+.equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
 ; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
 .equ	MIN_DUTY	= 64 * CPU_MHZ / 16
@@ -670,7 +670,6 @@ beep_BpCn13:	in	temp1, TCNT0
 		brne	beep_on
 		ret
 
-wait260ms:
 wait240ms:	rcall	wait120ms
 wait120ms:	rcall	wait60ms
 wait60ms:	rcall	wait30ms
@@ -709,7 +708,7 @@ eeprom_address_send_inc:
 		ret
 ;-----bko-----------------------------------------------------------------
 eeprom_read_block:
-		rcall	eeprom_address_init 
+		rcall	eeprom_address_init
 eeprom_read_block1:
 		rcall	eeprom_address_send_inc
 		sbi	EECR, EERE
@@ -721,7 +720,7 @@ eeprom_read_block1:
 ;-----bko-----------------------------------------------------------------
 ; Write over all EEPROM settings
 eeprom_write_block:
-		rcall	eeprom_address_init 
+		rcall	eeprom_address_init
 		cli
 eeprom_write_block1:
 		rcall	eeprom_address_send_inc
@@ -785,6 +784,8 @@ evaluate_rc_init:
 	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
 		ldi	YL, low(puls_high_l)	; Start with high pulse calibration
 		ldi	YH, high(puls_high_l)
+		rjmp	rc_prog1
+rc_prog0:	rcall	wait240ms		; Wait for stick movement to settle
 	; Collect average of throttle input pulse length
 rc_prog1:	movw	temp3, rcpuls_l		; Save the starting pulse length
 rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
@@ -830,7 +831,7 @@ rc_prog6:	sbrs	flags1, EVAL_RC		; Wait for next pulse
 	; we drifted outside of the range
 		subi	temp1, byte1(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
 		sbci	temp2, byte2(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
-		brcc	rc_prog1		; Start over if input moved too far
+		brcc	rc_prog0		; Wait and start over if input moved
 		dec	tcnt2h
 		brne	rc_prog6		; Loop until average accumulated
 		ldi	temp1, 3
