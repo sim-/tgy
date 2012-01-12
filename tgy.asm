@@ -380,8 +380,8 @@ clear_loop1:	cp	ZL, r0
 		out	TCCR1B, temp1		; RC pulse measurement
 		out	TCCR2, ZH		; timer2: PWM, stopped
 
-	; Read EEPROM block
-		rcall	wait30ms
+	; Read EEPROM block to RAM
+		rcall	wait120ms
 		rcall	eeprom_read_block
 
 	; Check EEPROM signature
@@ -391,8 +391,10 @@ clear_loop1:	cp	ZL, r0
 		sbci	temp2, high(EEPROM_SIGN)
 		breq	eeprom_good
 
-	; Signature not good, set defaults (but do not write to the EEPROM
-	; until if and when we actually change something)
+	; Signature not good: set defaults in RAM, but do not write
+	; to the EEPROM until we actually set something non-default
+	; TODO: Store these in the program and lpm-memcpy them, since
+	; each sts takes 4 bytes.
 		ldi	temp1, byte1(FULL_RC_PULS * CPU_MHZ)
 		sts	puls_high_l, temp1
 		ldi	temp1, byte2(FULL_RC_PULS * CPU_MHZ)
