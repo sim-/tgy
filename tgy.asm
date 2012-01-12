@@ -335,11 +335,11 @@ reset:		clr	r0
 		out	SREG, r0		; Clear interrupts and flags
 
 	; Set up stack
-		ldi	ZH, high(RAMEND)
-		ldi	ZL, low (RAMEND)
+		ldi	ZH, high(RAMEND+1)
+		ldi	ZL, low (RAMEND+1)
 		out	SPH, ZH
 		out	SPL, ZL
-	; clear RAM and all registers
+	; Clear RAM and all registers
 clear_loop:	st	-Z, r0
 		cpi	ZL, SRAM_START
 		cpc	ZH, r0
