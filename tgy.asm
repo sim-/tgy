@@ -111,19 +111,19 @@
 .equ	STOP_RC_PULS	= 200	; Support for http://www.xaircraft.com/wiki/UltraPWM/en
 .equ	FULL_RC_PULS	= 1200	; which says motors should start at 200us,
 .equ	MAX_RC_PULS	= 1400	; but does not define min/max pulse width.
-.equ	PROGRAM_RC_PULS	= 800	; Length at/above which we consider "stick high"
 .else
 ; These might be a bit wide for most radios, but lines up with POWER_RANGE.
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
-.equ	PROGRAM_RC_PULS	= 1640	; Length at/above which we consider "stick high"
 .endif
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
+.equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS * 3) / 4	; Normally 1660
 .else
 .equ	RCP_DEADBAND	= 0
+.equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Normally 1460
 .endif
 .equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
