@@ -779,6 +779,17 @@ mul_y_12x34:
 		adc	YH, temp6		; Product is now in Y, flags set
 		ret
 ;-----bko-----------------------------------------------------------------
+; Unlike the normal evaluate_rc, we look here for programming mode (pulses
+; above PROGRAM_RC_PULS) or I2C input (if found, we set I2C_MODE).
+;
+; With pulse position modulation (PPM) input, we have to be careful about
+; oscillator drift. If we are running on a board without an external
+; crystal/resonator/oscillator, the internal RC oscillator must be used,
+; which can drift significantly with temperature and voltage. So, we must
+; use some margins while calibrating. The internal RC speeds up when cold,
+; causing arming problems if the learned pulse is too low. Likewise, the
+; internal RC slows down when hot, making it impossible to reach full
+; throttle.
 evaluate_rc_init:
 		cbr	flags1, (1<<EVAL_RC)
 		sbrc	flags1, I2C_MODE
@@ -798,7 +809,7 @@ rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
 		ldi	temp1, byte2(PROGRAM_RC_PULS * CPU_MHZ)
 		cpc	temp4, temp1
 		brcs	evaluate_rc_puls	; Lower than PROGRAM_RC_PULS - exit programming
-		ldi	temp1, 32 * 15/16	; Full speed pulse averaging count (slightly below exact)
+		ldi	temp1, 32 * 31/32	; Full speed pulse averaging count (slightly below exact)
 		rjmp	rc_prog5
 rc_prog3:	lds	temp1, puls_high_l	; If not learning the high pulse, we should stay below it
 		cp	temp3, temp1
