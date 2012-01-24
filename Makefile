@@ -22,7 +22,7 @@ program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
 
 program_dapa_%: %.hex
-	avrdude -c dapa -p m8 -U flash:w:$<:i
+	avrdude -c dapa -u -p m8 -U flash:w:$<:i
 
 program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<
