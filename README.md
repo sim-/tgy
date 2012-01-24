@@ -28,11 +28,11 @@ Supported (Tested) Hardware
 - afro:
     - AfroESC (http://code.google.com/p/afrodevices/downloads/list)
 - bs:
+    - Hobby King 40A (F-40A)
     - Hobby King 60A (F-60A)
 - bs_nfet:
     - Hobby King 20A (F-20A)
     - Hobby King 30A (F-30A)
-    - Hobby King BlueSeries 30A
 - rct50a:
     - RCTimer 50A
 - tp:
