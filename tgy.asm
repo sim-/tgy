@@ -680,6 +680,7 @@ i2c_rx_data:	sbrs	flags0, I2C_SPACE_LEFT	; Receive buffer has room?
 		sbrs	flags0, I2C_FIRST
 		rjmp	i2c_rx_data1
 		in	rx_h, TWDR		; Receive high byte from bus
+		mov	rx_l, ZH		; Zero low byte (we may not receive it)
 		cbr	flags0, (1<<I2C_FIRST)
 		rjmp	i2c_ack
 i2c_rx_data1:	in	rx_l, TWDR		; Receive low byte from bus (MK FlightCtrl "new protocol")
