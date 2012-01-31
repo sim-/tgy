@@ -8,7 +8,11 @@
 ;*********************
 ; PORT B definitions *
 ;*********************
-.equ	ApFET		= 3	;o
+;.equ			= 7
+;.equ			= 6
+;.equ			= 5	(sck)
+;.equ			= 4	(miso)
+.equ	ApFET		= 3	;o (mosi)
 .equ	BpFET		= 2	;o
 .equ	CpFET		= 1	;o
 .equ	rcp_in		= 0	;i r/c pulse input
@@ -123,13 +127,8 @@
 
 
 ;*********************
-; PORT B definitions *
+; PORT D definitions *
 ;*********************
-;.equ			= 7
-;.equ			= 6
-;.equ			= 5	(sck stk200 interface)
-;.equ			= 4	(miso stk200 interface)
-;.equ			= 3	(mosi stk200 interface)
 .equ	WarnLED		= 2
 .equ	AnFET		= 3
 .equ	BnFET		= 4
