@@ -340,7 +340,7 @@ reset:		clr	r0
 
 	; Set up stack
 		ldi	ZH, high(RAMEND+1)
-		ldi	ZL, low (RAMEND+1)
+		ldi	ZL, low(RAMEND+1)
 		out	SPH, ZH
 		out	SPL, ZL
 	; Clear RAM and all registers
@@ -1534,7 +1534,7 @@ run6:
 		sts	goodies, temp1
 		; Build up sys_control to PWR_MAX_START in steps.
 		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 15) / 16
-		ldi	temp1, low (PWR_MAX_START)
+		ldi	temp1, low(PWR_MAX_START)
 		ldi	temp2, high(PWR_MAX_START)
 		rjmp	run6_3
 
@@ -1544,7 +1544,7 @@ run6_2:		cbr	flags1, (1<<STARTUP)
 		; initial start ramp-up; once running, sys_control
 		; will stay at MAX_POWER unless timing is lost.
 		adiw	YL, (POWER_RANGE + 31) / 32
-		ldi	temp1, low (MAX_POWER)
+		ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 run6_3:		cp	YL, temp1
 		cpc	YH, temp2
