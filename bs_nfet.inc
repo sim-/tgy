@@ -6,7 +6,11 @@
 ;* https://github.com/sim-/tgy                                 *
 ;***************************************************************
 
-#define F_CPU 16000000
+.equ	F_CPU		= 16000000
+.equ	USE_INT0	= 1
+.equ	USE_I2C		= 0	; We could, but FETs are on the I2C ports
+.equ	USE_ICP		= 0
+.equ	T1ICP		= 0
 
 ;*********************
 ; PORT D definitions *
@@ -21,21 +25,15 @@
 .equ	INIT_PD		= (1<<ApFET)
 .equ	DIR_PD		= (1<<AnFET)+(1<<ApFET)
 
-.equ	USE_ICP		= 0
-.equ	T1ICP		= 0
-
 .equ	AnFET_port	= PORTD
 .equ	ApFET_port	= PORTD
 
-.MACRO rjmp_ext_int0
-	rjmp	ext_int0
-.ENDMACRO
-.MACRO rjmp_icp1_int
-	nop
-.ENDMACRO
 .MACRO rcp_int_enable
-	ldi @0, (1<<INT0)	; enable ext0int
+	ldi	@0, (1<<INT0)	; enable ext0int
 	out	GICR, @0
+.ENDMACRO
+.MACRO rcp_int_disable
+	out	GICR, ZH	; disable ext0int
 .ENDMACRO
 .MACRO rcp_int_rising_edge
 	ldi	@0, (1<<ISC01)+(1<<ISC00)

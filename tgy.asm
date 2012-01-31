@@ -93,6 +93,9 @@
 .include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PPM)
 .endif
 
+.equ	I2C_ADDR	= 0x50	; MK-style I2C address
+.equ	MOTOR_ID	= 1	; MK-style I2C motor ID
+
 .equ	TIME_ACCUMULATE	= 0	; Accumulate 4 commutations timing method
 .equ	TIME_HALFADD	= 0	; Update half timing method
 .equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
@@ -165,9 +168,9 @@
 .def	duty_h		= r3		; on duty cycle high
 .def	off_duty_l	= r4		; off duty cycle low, one's complement
 .def	off_duty_h	= r5		; off duty cycle high
-.def	rcpuls_l	= r6
-.def	rcpuls_h	= r7
-.def	tcnt2h		= r8
+.def	rx_l		= r6		; received throttle low
+.def	rx_h		= r7		; received throttle high
+.def	tcnt2h		= r8		; timer2 high byte
 .def	i_sreg		= r9		; status register save in interrupts
 .def	uart_cnt	= r10
 .def	rc_timeout	= r11
@@ -190,8 +193,8 @@
 ;	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
-;	.equ	C_FET		= 4	; if set, C-FET state is to be changed
-;	.equ	A_FET		= 5	; if set, A-FET state is to be changed
+	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
+	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
 ;	.equ	I_FET_ON	= 6	; if set, fets off
 ;	.equ	I_ON_CYCLE	= 7	; if set, current on cycle is active (optimized as MSB)
 
@@ -266,6 +269,7 @@ rev_scale_l:	.byte	1
 rev_scale_h:	.byte	1
 neutral_l:	.byte	1	; Offset for neutral throttle (in CPU_MHZ)
 neutral_h:	.byte	1
+max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -309,11 +313,11 @@ eeprom_end:	.byte	1
 ; When multiple interrupts are pending, the vectors are executed from top
 ; (ext_int0) to bottom.
 		rjmp reset	; reset
-		rjmp_ext_int0	; ext_int0
+		rjmp rcp_int	; ext_int0
 		reti		; ext_int1
 		reti		; t2oc_int
 		ijmp		; t2ovfl_int
-		rjmp_icp1_int	; icp1_int
+		rjmp rcp_int	; icp1_int
 		rjmp t1oca_int	; t1oca_int
 		reti		; t1ocb_int
 		rjmp t1ovfl_int	; t1ovfl_int
@@ -322,11 +326,11 @@ eeprom_end:	.byte	1
 		reti		; urxc
 		reti		; udre
 		reti		; utxc
-; not used	reti		; adc_int
-; not used	reti		; eep_int
-; not used	reti		; aci_int
-; not used	reti		; wire2_int
-; not used	reti		; spmc_int
+		reti		; adc_int
+		reti		; eep_int
+		reti		; aci_int
+		rjmp i2c_int	; twi_int
+		reti		; spmc_int
 
 ;-----bko-----------------------------------------------------------------
 ; init after reset
@@ -444,10 +448,20 @@ control_start:
 
 		sei				; enable all interrupts
 
-	; init rc-puls
+	; init input sources (i2c and/or rc-puls)
+		.if USE_I2C
+		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
+		ldi	temp1, I2C_ADDR + (MOTOR_ID << 1)
+		out	TWAR, temp1
+		ldi	temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
+		out	TWCR, temp1
+		.endif
+		.if USE_INT0 || USE_ICP
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
+		.endif
 i_rc_puls1:	clr	rc_timeout
+		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)
 i_rc_puls2:	sbrs	flags1, EVAL_RC
 		rjmp	i_rc_puls2
 		rcall	evaluate_rc_init
@@ -459,6 +473,16 @@ i_rc_puls2:	sbrs	flags1, EVAL_RC
 		cp	rc_timeout, temp1
 		brlo	i_rc_puls2
 		cli				; disable all interrupts
+		.if USE_I2C
+		sbrs	flags1, I2C_MODE
+		out	TWCR, ZH		; Turn off I2C and interrupt
+		.endif
+		.if USE_INT0 || USE_ICP
+		sbrs	flags1, I2C_MODE
+		rjmp	i_rc_puls3
+		rcp_int_disable temp1		; Turn off RC pulse interrupt
+i_rc_puls3:
+		.endif
 		rcall	beep_f4			; signal: rcpuls ready
 		rcall	beep_f4
 		rcall	beep_f4
@@ -555,18 +579,20 @@ t1ovfl_int1:	out	SREG, i_sreg
 ; by reading TCNT1L and TCNT1H, so this interrupt must be disabled before
 ; any other 16-bit timer options happen that might use the same register
 ; (see "Accessing 16-bit registers" in the Atmel documentation)
-.if USE_ICP
 ; icp1 = rc pulse input, if enabled
-icp1_int:	in	i_temp1, ICR1L		; get captured timer values
+rcp_int:
+		.if USE_ICP || USE_INT0
+		.if USE_ICP
+		in	i_temp1, ICR1L		; get captured timer values
 		in	i_temp2, ICR1H
 		in	i_sreg, TCCR1B		; abuse i_sreg to hold value
 		sbrs	i_sreg, ICES1		; evaluate edge of this interrupt
-.else
+		.else
 ;-----bko-----------------------------------------------------------------
-ext_int0:	in	i_temp1, TCNT1L		; get timer1 values
+		in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
 		sbis	PIND, rcp_in		; evaluate edge of this interrupt
-.endif
+		.endif
 		rjmp	falling_edge		; bit is clear = falling edge
 rising_edge:					; Flags not saved here!
 		sts	start_rcpuls_l, i_temp1	; Save pulse start time
@@ -616,11 +642,67 @@ falling_edge1:	lds	ZH, start_rcpuls_l
 		ldi	XH, 0			; Return XH to 0
 		brsh	rcpint_fail		; throw away (too long pulse)
 
-		movw	rcpuls_l, i_temp1
+		movw	rx_l, i_temp1
 		sbr	flags1, (1<<EVAL_RC)
 
 rcpint_exit:	out	SREG, i_sreg
 		reti
+		.endif
+;-----bko-----------------------------------------------------------------
+i2c_int:
+		.if USE_I2C
+		in	i_sreg, SREG
+		in	i_temp1, TWSR
+		cpi	i_temp1, 0x00		; 00000000b bus error due to illegal start/stop condition
+		breq	i2c_io_error
+		cpi	i_temp1, 0x60		; 01100000b rx-mode: own SLA+W
+		breq	i2c_rx_init
+		cpi	i_temp1, 0x80		; 10000000b rx-mode: data available
+		breq	i2c_rx_data
+		cpi	i_temp1, 0xa0		; 10100000b stop/restart condition (end of message)
+		breq	i2c_rx_stop
+		cpi	i_temp1, 0xa8		; 10101000b tx-mode: own SLA+R
+		breq	i2c_ack
+		cpi	i_temp1, 0xb8		; 10111000b tx-mode: data request
+		breq	i2c_tx_data
+		cpi	i_temp1, 0xf8		; 11111000b no relevant state information
+		breq	i2c_io_error
+		brne	i2c_unknown		; unknown state, reset all ;-)
+i2c_rx_stop:	sbrs	flags0, I2C_FIRST
+		sbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)	; i2c message received
+i2c_unknown:	ldi	i_temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
+		rjmp	i2c_out
+i2c_rx_init:	sbrs	flags1, EVAL_RC		; Skip this message if last one not received
+		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
+		rjmp	i2c_ack
+i2c_rx_data:	sbrs	flags0, I2C_SPACE_LEFT	; Receive buffer has room?
+		rjmp	i2c_ack			; No, skip
+		sbrs	flags0, I2C_FIRST
+		rjmp	i2c_rx_data1
+		in	rx_h, TWDR		; Receive high byte from bus
+		cbr	flags0, (1<<I2C_FIRST)
+		rjmp	i2c_ack
+i2c_rx_data1:	in	rx_l, TWDR		; Receive low byte from bus (MK FlightCtrl "new protocol")
+		cbr	flags0, (1<<I2C_SPACE_LEFT)
+		rjmp	i2c_ack
+i2c_tx_init:	out	TWDR, ZH		; Send 0 as Current (dummy)
+		ldi	i_temp1, 250		; Prepare MaxPWM value (250 when stopped enables proto v2 for MK)
+		sbrc	flags1, POWER_OFF
+i2c_tx_datarep:	ldi	i_temp1, 255		; Send MaxPWM 255 when running (and repeat for Temperature)
+		sts	max_pwm, i_temp1
+		rjmp	i2c_ack
+i2c_tx_data:	lds	i_temp1, max_pwm	; MaxPWM value (has special meaning for MK)
+		out	TWDR, i_temp1
+		rjmp	i2c_tx_datarep		; Send 255 for Temperature for which we should get a NACK (0xc0)
+i2c_io_error:	in	i_temp1, TWCR
+		sbr	i_temp1, (1<<TWSTO)+(1<<TWINT)
+		rjmp	i2c_out
+i2c_ack:	in	i_temp1, TWCR
+		sbr	i_temp1, (1<<TWINT)
+i2c_out:	out	TWCR, i_temp1
+i2c_ret:	out	SREG, i_sreg
+		reti
+		.endif
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp4, 200
@@ -791,16 +873,19 @@ mul_y_12x34:
 ; internal RC slows down when hot, making it impossible to reach full
 ; throttle.
 evaluate_rc_init:
-		cbr	flags1, (1<<EVAL_RC)
+		.if USE_I2C
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
+		.endif
+		.if USE_ICP || USE_INT0
+		cbr	flags1, (1<<EVAL_RC)
 	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
 		ldi	YL, low(puls_high_l)	; Start with high pulse calibration
 		ldi	YH, high(puls_high_l)
 		rjmp	rc_prog1
 rc_prog0:	rcall	wait240ms		; Wait for stick movement to settle
 	; Collect average of throttle input pulse length
-rc_prog1:	movw	temp3, rcpuls_l		; Save the starting pulse length
+rc_prog1:	movw	temp3, rx_l		; Save the starting pulse length
 rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
 		clr	temp7
 		cpi	YL, low(puls_high_l)	; Are we learning the high pulse?
@@ -830,7 +915,7 @@ rc_prog5:	mov	tcnt2h, temp1		; Abuse tcnt2h as pulse counter
 rc_prog6:	sbrs	flags1, EVAL_RC		; Wait for next pulse
 		rjmp	rc_prog6
 		cbr	flags1, (1<<EVAL_RC)
-		movw	temp1, rcpuls_l		; Atomic copy of new rc pulse length
+		movw	temp1, rx_l		; Atomic copy of new rc pulse length
 		add	temp5, temp1		; Accumulate 24-bit average
 		adc	temp6, temp2
 		adc	temp7, ZH
@@ -869,18 +954,24 @@ rc_prog6:	sbrs	flags1, EVAL_RC		; Wait for next pulse
 		rcall	beep_f3
 rc_prog_done:	rcall	eeprom_write_block
 		rjmp	puls_scale		; Calculate the new scaling factors
+		.endif
 ;-----bko-----------------------------------------------------------------
-evaluate_rc:	cbr	flags1, (1<<EVAL_RC)
+evaluate_rc:
+		.if USE_I2C
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
+		.endif
+	; Fall through to evaluate_rc_puls
 ;-----bko-----------------------------------------------------------------
+.if USE_ICP || USE_INT0
 evaluate_rc_puls:
+		cbr	flags1, (1<<EVAL_RC)
 		ldi	temp1, RCP_TOT
 		cp	rc_timeout, temp1
 		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
 		lds	YL, neutral_l
 		lds	YH, neutral_h
-		movw	temp1, rcpuls_l		; Atomic copy of rc pulse length
+		movw	temp1, rx_l		; Atomic copy of rc pulse length
 		sub	temp1, YL
 		sbc	temp2, YH
 		brcc	puls_plus
@@ -900,7 +991,7 @@ evaluate_rc_puls:
 		; Fall through
 puls_zero:	clr	YL
 		clr	YH
-		rjmp	puls_not_full
+		rjmp	rc_not_full
 puls_plus:
 		.if MOTOR_REVERSE
 		sbr	flags1, (1<<REVERSE)
@@ -915,22 +1006,48 @@ puls_not_zero:
 		sbci	temp2, byte2(RCP_DEADBAND * CPU_MHZ)
 		brmi	puls_zero
 		.endif
-		ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
+.endif
+	; The following is used by all input modes
+rc_do_scale:	ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
 		ldi	YH, byte2(MIN_DUTY)
 		rcall	mul_y_12x34		; Scaled result is now in Y
 		cpi	YL, byte1(MAX_POWER)
 		ldi	temp1, byte2(MAX_POWER)
 		cpc	YH, temp1
-		brlo	puls_not_full
+		brlo	rc_not_full
 		ldi	YL, byte1(MAX_POWER)
 		ldi	YH, byte2(MAX_POWER)
-puls_not_full:	sts	rc_duty_l, YL
+rc_not_full:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
 ;-----bko-----------------------------------------------------------------
+.if USE_I2C
 evaluate_rc_i2c:
-	; Stub for now
-		ret
+		ldi	temp1, RCP_TOT
+		cp	rc_timeout, temp1
+		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
+		movw	YL, rx_l		; Atomic copy of rc pulse length
+		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
+		.if MOTOR_REVERSE
+		sbr	flags1, (1<<REVERSE)
+		.endif
+	; MK sends one or two bytes, if supported, and if low bits are
+	; non-zero. We store the first received byte in rx_h, second
+	; in rx_l. There are 3 low bits which are stored at the low
+	; side of the second byte, so we must shift them to line up with
+	; the high byte. The high bits become less significant, if set.
+		lsl	YL			; 00000xxxb -> 0000xxx0b
+		swap	YL			; 0000xxx0b -> xxx00000b
+		adiw	YL, 0			; 16-bit zero-test
+		breq	rc_not_full
+	; Scale so that YH == 247 is MAX_POWER, to support reaching full
+	; power from the highest MaxGas setting in MK-Tools. Bernhard's
+	; original version reaches full power at around 245.
+		movw	temp1, YL
+		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 247)
+		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 247)
+		rjmp	rc_do_scale		; The rest of the code is common
+.endif
 ;-----bko-----------------------------------------------------------------
 ; Calculate the neutral offset and forward (and reverse) scaling factors
 ; to line up with the high/low (and neutral) pulse lengths.

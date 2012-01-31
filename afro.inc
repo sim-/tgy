@@ -3,7 +3,11 @@
 ;* 2011.09                                                 *
 ;***********************************************************
 
-#define F_CPU 16000000
+.equ	F_CPU		= 16000000
+.equ	USE_INT0	= 0
+.equ	USE_I2C		= 1
+.equ	USE_ICP		= 1
+.equ	T1ICP		= (1<<ICES1)+(1<<ICNC1)
 
 ;*********************
 ; PORT B definitions *
@@ -20,22 +24,18 @@
 .equ	INIT_PB		= 0
 .equ	DIR_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 
-.equ	USE_ICP		= 1
-.equ	T1ICP		= (1<<ICES1)+(1<<ICNC1)
-
 .equ	ApFET_port	= PORTB
 .equ	BpFET_port	= PORTB
 .equ	CpFET_port	= PORTB
 
-.MACRO rjmp_ext_int0
-	nop
-.ENDMACRO
-.MACRO rjmp_icp1_int
-	rjmp	icp1_int
-.ENDMACRO
 .MACRO rcp_int_enable
 	in	@0, TIMSK
-	sbr	@0, (1<<TICIE1) ; enable icp1_int
+	sbr	@0, (1<<TICIE1)	; enable icp1_int
+	out	TIMSK, @0
+.ENDMACRO
+.MACRO rcp_int_disable
+	in	@0, TIMSK
+	cbr	@0, (1<<TICIE1)	; disable icp1_int
 	out	TIMSK, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
@@ -96,14 +96,14 @@
 ;*********************
 .equ	accu_adc	= 7	; ADC7 voltage control input
 ;.equ			= 6	; ADC6
-;.equ			= 5	; ADC6
-;.equ			= 4	; ADC6
+.equ	i2c_clk		= 5	; ADC5/SCL
+.equ	i2c_data	= 4	; ADC4/SDA
 .equ	temp_adc	= 3	; ADC3 temperature control input
 .equ	mux_c		= 2	; ADC2 phase input
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
 
-.equ	INIT_PC		= 0
+.equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
 .equ	DIR_PC		= 0
 
 .MACRO comp_init
