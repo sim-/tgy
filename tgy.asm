@@ -65,11 +65,11 @@
 ;
 ; Suggested fuses with 4.0V brown-out voltage:
 ; Without external crystal: avrdude -U lfuse:w:0x24:m -U hfuse:w:0xd7:m
-;    With external crystal: avrdude -U lfuse:w:0x3f:m -U hfuse:w:0xd7:m
+;    With external crystal: avrdude -U lfuse:w:0x3f:m -U hfuse:w:0xc7:m
 ;
 ; Testing fuses with 2.7V brown-out voltage (unsafe at 16MHz):
 ; Without external crystal: avrdude -U lfuse:w:0xa4:m -U hfuse:w:0xd7:m
-;    With external crystal: avrdude -U lfuse:w:0xbf:m -U hfuse:w:0xd7:m
+;    With external crystal: avrdude -U lfuse:w:0xbf:m -U hfuse:w:0xc7:m
 ;
 ;-- Board -----------------------------------------------------------------
 ;
