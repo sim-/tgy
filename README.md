@@ -33,6 +33,8 @@ Supported (Tested) Hardware
 - bs_nfet:
     - Hobby King 20A (F-20A)
     - Hobby King 30A (F-30A)
+- bs40a:
+    - Hobby King BlueSeries 40A
 - rct50a:
     - RCTimer 50A
 - tp:
