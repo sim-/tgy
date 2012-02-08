@@ -41,7 +41,7 @@
 ;
 ; NOTE: We do 16-bit PWM on timer2 at the full CPU clock rate, using tcnt2h
 ; to simulate the high byte. An input FULL to STOP range of 800 plus a
-; MIN_DUTY of 64 (a POWER_RANGE of 864) gives 800 unique PWM steps at an
+; MIN_DUTY of 63 (a POWER_RANGE of 863) gives 800 unique PWM steps at an
 ; about 18kHz on a 16MHz CPU clock. The output frequency is slightly lower
 ; than F_CPU / POWER_RANGE due to cycles used in the interrupt before
 ; reloading TCNT2.
@@ -135,7 +135,7 @@
 .equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
 ; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
-.equ	MIN_DUTY	= 64 * CPU_MHZ / 16
+.equ	MIN_DUTY	= 63 * CPU_MHZ / 16
 
 ; Number of PWM steps (too high and PWM frequency drops into audible range)
 .equ	POWER_RANGE	= 800 * CPU_MHZ / 16 + MIN_DUTY
@@ -279,8 +279,8 @@ max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v
 eeprom_sig_l:	.byte	1
 eeprom_sig_h:	.byte	1
 puls_high_l:	.byte	1	; -,
-puls_high_h:	.byte	1	;  | 
-puls_low_l:	.byte	1	;  |- saved pulse lengths during throttle calibration 
+puls_high_h:	.byte	1	;  |
+puls_low_l:	.byte	1	;  |- saved pulse lengths during throttle calibration
 puls_low_h:	.byte	1	;  |  (order used by rc_prog)
 puls_neutral_l:	.byte	1	;  |
 puls_neutral_h:	.byte	1	; -'
@@ -388,6 +388,12 @@ clear_loop1:	cp	ZL, r0
 		out	TCCR1B, temp1		; RC pulse measurement
 		out	TCCR2, ZH		; timer2: PWM, stopped
 
+	; Enable watchdog (WDTON may be set or unset)
+		ldi	temp1, (1<<WDCE)+(1<<WDE)
+		out	WDTCR, temp1
+		ldi	temp1, (1<<WDE)+(0<<WDP1)		; Fastest option: ~16.3ms timeout
+		out	WDTCR, temp1
+
 	; Read EEPROM block to RAM
 		rcall	wait120ms
 		rcall	eeprom_read_block	; Also calls osccal_set
@@ -428,68 +434,41 @@ eeprom_good:
 		rcall	beep_f2
 		rcall	beep_f3
 		rjmp	control_start
-
-init_no_porf:	sbrs	i_sreg, BORF		; Brown-out reset
+init_no_porf:
+		sbrs	i_sreg, BORF		; Brown-out reset
 		rjmp	init_no_borf
 		rcall	beep_f3			; "dead cellphone"
 		rcall	beep_f1
-
-init_no_borf:	sbrs	i_sreg, EXTRF	; External reset
 		rjmp	control_start
+init_no_borf:
+		sbrs	i_sreg, EXTRF		; External reset
+		rjmp	init_no_extrf
 		rcall	beep_f4			; Single beep
+		rjmp	control_start
+init_no_extrf:
+		sbrs	i_sreg, WDRF		; Watchdog reset
+		rjmp	init_no_wdrf
+init_wdrf1:	rcall	beep_f1			; "siren"
+		rcall	beep_f1
+		rcall	beep_f3
+		rcall	beep_f3
+		rjmp	init_wdrf1		; Loop forever
+init_no_wdrf:
 
-control_start:
-		; status led on
-		GRN_on
-
-		rcall	puls_scale
-
-	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIFR, temp1		; clear TOIE1, OCIE1A & TOIE2
-		out	TIMSK, temp1		; enable TOIE1, OCIE1A & TOIE2 interrupts
-
-		sei				; enable all interrupts
-
-	; init input sources (i2c and/or rc-puls)
-		.if USE_I2C
-		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
-		ldi	temp1, I2C_ADDR + (MOTOR_ID << 1)
-		out	TWAR, temp1
-		ldi	temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
-		out	TWCR, temp1
-		.endif
-		.if USE_INT0 || USE_ICP
-		rcp_int_rising_edge temp1
-		rcp_int_enable temp1
-		.endif
-i_rc_puls1:	clr	rc_timeout
-		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)
-i_rc_puls2:	sbrs	flags1, EVAL_RC
-		rjmp	i_rc_puls2
-		rcall	evaluate_rc_init
-		lds	YL, rc_duty_l
-		lds	YH, rc_duty_h
-		adiw	YL, 0			; Test for zero
-		brne	i_rc_puls1
-		ldi	temp1, 10		; wait for this count of receiving power off
-		cp	rc_timeout, temp1
-		brlo	i_rc_puls2
-		cli				; disable all interrupts
-		.if USE_I2C
-		sbrs	flags1, I2C_MODE
-		out	TWCR, ZH		; Turn off I2C and interrupt
-		.endif
-		.if USE_INT0 || USE_ICP
-		sbrs	flags1, I2C_MODE
-		rjmp	i_rc_puls3
-		rcp_int_disable temp1		; Turn off RC pulse interrupt
-i_rc_puls3:
-		.endif
-		rcall	beep_f4			; signal: rcpuls ready
+	; Unknown reset cause: Beep out all 8 bits
+	; Sometimes I can cause this by touching the oscillator.
+init_bitbeep1:	rcall	wait240ms
+		mov	nfet_on, i_sreg
+		ldi	nfet_off, 8
+init_bitbeep2:	sbrs	nfet_on, 0
+		rcall	beep_f2
+		sbrc	nfet_on, 0
 		rcall	beep_f4
-		rcall	beep_f4
-		rjmp	init_startup
+		rcall	wait120ms
+		lsr	nfet_on
+		dec	nfet_off
+		brne	init_bitbeep2
+		rjmp	init_bitbeep1		; Loop forever
 
 ;-----bko-----------------------------------------------------------------
 ; timer2 overflow compare interrupt (output PWM) -- the interrupt vector
@@ -545,10 +524,11 @@ pwm_on:
 
 pwm_off:
 		ldi	ZL, pwm_on		; 1 cycle
-		cpse	off_duty_h, ZH	; 1 cycle if not zero, 2 if zero
+		cpse	off_duty_h, ZH		; 1 cycle if not zero, 2 if zero
 		ldi	ZL, pwm_on_high		; 1 cycle
 		mov	tcnt2h, off_duty_h	; 1 cycle
-		st	X, nfet_off		; 2 cycles (off at 6 cycles from entry)
+		wdr				; 1 cycle
+		st	X, nfet_off		; 2 cycles (off at 7 cycles from entry)
 		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
 
@@ -749,6 +729,7 @@ beep_BpCn10:	in	temp1, TCNT0
 		all_pFETs_off temp3
 		ldi	temp3, CPU_MHZ		; 2040µs off
 beep_BpCn12:	out	TCNT0, ZH
+		wdr
 beep_BpCn13:	in	temp1, TCNT0
 		cp	temp1, temp4
 		brlo	beep_BpCn13
@@ -766,6 +747,7 @@ beep_BpCn20:	ldi	temp3, CPU_MHZ
 beep_BpCn21:	out	TCNT0, ZH
 		ldi	temp1, (1<<TOV0)	; Clear TOV0 by setting it
 		out	TIFR, temp1
+		wdr
 beep_BpCn22:	in	temp1, TIFR
 		sbrs	temp1, TOV0
 		rjmp	beep_BpCn22
@@ -881,6 +863,7 @@ evaluate_rc_init:
 rc_prog0:	rcall	wait240ms		; Wait for stick movement to settle
 	; Collect average of throttle input pulse length
 rc_prog1:	movw	temp3, rx_l		; Save the starting pulse length
+		wdr
 rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
 		clr	temp7
 		cpi	YL, low(puls_high_l)	; Are we learning the high pulse?
@@ -907,7 +890,8 @@ rc_prog4:	lds	temp1, puls_low_l
 		brcs	rc_prog1		; Restart while pulse lower than learned low pulse
 		ldi	temp1, 32		; Neutral pulse measurement (exact)
 rc_prog5:	mov	tcnt2h, temp1		; Abuse tcnt2h as pulse counter
-rc_prog6:	sbrs	flags1, EVAL_RC		; Wait for next pulse
+rc_prog6:	wdr
+		sbrs	flags1, EVAL_RC		; Wait for next pulse
 		rjmp	rc_prog6
 		cbr	flags1, (1<<EVAL_RC)
 		movw	temp1, rx_l		; Atomic copy of new rc pulse length
@@ -1093,6 +1077,7 @@ puls_find_multiplicand:
 		ldi	temp1, byte1(1999)
 		ldi	temp2, byte2(1999)
 puls_find1:	adiw	temp1, 1
+		wdr
 		cpi	temp2, 0xff
 		cpc	temp1, temp2
 		breq	puls_find_fail		; Return if we reached 0xffff
@@ -1414,7 +1399,60 @@ switch_power_off:
 		all_nFETs_off temp1
 		ret
 ;-----bko-----------------------------------------------------------------
-; **** startup loop ****
+control_start:
+	; status led on
+		GRN_on
+
+		rcall	puls_scale
+
+	; init registers and interrupts
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
+		out	TIFR, temp1		; clear TOIE1, OCIE1A & TOIE2
+		out	TIMSK, temp1		; enable TOIE1, OCIE1A & TOIE2 interrupts
+
+		sei				; enable all interrupts
+
+	; init input sources (i2c and/or rc-puls)
+		.if USE_I2C
+		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
+		ldi	temp1, I2C_ADDR + (MOTOR_ID << 1)
+		out	TWAR, temp1
+		ldi	temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
+		out	TWCR, temp1
+		.endif
+		.if USE_INT0 || USE_ICP
+		rcp_int_rising_edge temp1
+		rcp_int_enable temp1
+		.endif
+i_rc_puls1:	clr	rc_timeout
+		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)
+i_rc_puls2:	wdr
+		sbrs	flags1, EVAL_RC
+		rjmp	i_rc_puls2
+		rcall	evaluate_rc_init
+		lds	YL, rc_duty_l
+		lds	YH, rc_duty_h
+		adiw	YL, 0			; Test for zero
+		brne	i_rc_puls1
+		ldi	temp1, 10		; wait for this count of receiving power off
+		cp	rc_timeout, temp1
+		brlo	i_rc_puls2
+		cli				; disable all interrupts
+		.if USE_I2C
+		sbrs	flags1, I2C_MODE
+		out	TWCR, ZH		; Turn off I2C and interrupt
+		.endif
+		.if USE_INT0 || USE_ICP
+		sbrs	flags1, I2C_MODE
+		rjmp	i_rc_puls3
+		rcp_int_disable temp1		; Turn off RC pulse interrupt
+i_rc_puls3:
+		.endif
+		rcall	beep_f4			; signal: rcpuls ready
+		rcall	beep_f4
+		rcall	beep_f4
+	; Fall through to init_startup
+;-----bko-----------------------------------------------------------------
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		sei
@@ -1424,6 +1462,7 @@ init_startup:
 		nFET_brake temp1
 .endif
 wait_for_power_on:
+		wdr
 		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_power_on
 		rcall	evaluate_rc
