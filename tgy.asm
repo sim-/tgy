@@ -388,7 +388,7 @@ clear_loop1:	cp	ZL, r0
 
 	; Read EEPROM block to RAM
 		rcall	wait120ms
-		rcall	eeprom_read_block
+		rcall	eeprom_read_block	; Also calls osccal_set
 
 	; Check EEPROM signature
 		lds	temp1, eeprom_sig_l
@@ -418,7 +418,6 @@ clear_loop1:	cp	ZL, r0
 		ldi	temp1, high(EEPROM_SIGN)
 		sts	eeprom_sig_h, temp1
 eeprom_good:
-		rcall	osccal_set
 
 	; Check reset cause
 		sbrs	i_sreg, PORF		; Power-on reset
@@ -774,54 +773,45 @@ beep_BpCn22:	in	temp1, TIFR
 		brne	beep_BpCn20
 		ret
 ;-----bko-----------------------------------------------------------------
-eeprom_address_init:
-		lds	temp1, orig_osccal	; Restore original calibration
+; Read from or write to the EEPROM block. To avoid duplication, we use the
+; global interrupts flag (I) to enable writing versus reading mde. Only
+; changed bytes are written. We restore OSCCAL to the boot-time value as
+; the EEPROM timing is affected by it. We always return by falling through
+; to osccal_set.
+eeprom_read_block:				; When interrupts disabled
+eeprom_write_block:				; When interrupts enabled
+		lds	temp1, orig_osccal
 		out	OSCCAL, temp1
 		ldi	YL, low(eeprom_sig_l)
 		ldi	YH, high(eeprom_sig_l)
 		ldi	temp1, low(EEPROM_OFFSET)
 		ldi	temp2, high(EEPROM_OFFSET)
-		ret
-;-----bko-----------------------------------------------------------------
-eeprom_address_send_inc:
+eeprom_rw1:	wdr
 		sbic	EECR, EEWE
-		rjmp	eeprom_address_send_inc
+		rjmp	eeprom_rw1		; Loop while writing EEPROM
 		in	temp3, SPMCR
 		sbrc	temp3, SPMEN
-		rjmp	eeprom_address_send_inc
+		rjmp	eeprom_rw1		; Loop while flashing
+		cpi	YL, low(eeprom_end)
+		breq	eeprom_rw4
 		out	EEARH, temp2
 		out	EEARL, temp1
 		adiw	temp1, 1
-		ret
-;-----bko-----------------------------------------------------------------
-eeprom_read_block:
-		rcall	eeprom_address_init
-eeprom_read_block1:
-		rcall	eeprom_address_send_inc
-		sbi	EECR, EERE
-		in	temp1, EEDR
-		st	Y+, temp1
-		cpi	YL, low(eeprom_end)
-		brne	eeprom_read_block1
-		ret
-;-----bko-----------------------------------------------------------------
-; Write over all EEPROM settings
-eeprom_write_block:
-		rcall	eeprom_address_init
+		sbi	EECR, EERE		; Read existing EEPROM byte
+		in	temp3, EEDR
+		brie	eeprom_rw2
+		st	Y+, temp3		; Store the byte to RAM
+		rjmp	eeprom_rw1
+eeprom_rw2:	ld	temp4, Y+		; Compare with the byte in RAM
+		out	EEDR, temp4
 		cli
-eeprom_write_block1:
-		rcall	eeprom_address_send_inc
-		ld	temp1, Y+
-		out	EEDR, temp1
 		sbi	EECR, EEMWE
+		cpse	temp3, temp4
 		sbi	EECR, EEWE
-		cpi	YL, low(eeprom_end)
-		brne	eeprom_write_block1
-eeprom_write_block2:
-		sbic	EECR, EEWE
-		rjmp	eeprom_write_block2
 		sei
-		; Fall through to restore our oscillator calibration
+		rjmp	eeprom_rw1
+eeprom_rw4:	rcall	wait30ms
+		; Fall through to set the oscillator calibration
 ;-----bko-----------------------------------------------------------------
 ; Set the oscillator calibration for 8MHz operation, or set it to 0xff for
 ; approximately 16MHz operation even without an external oscillator. This
