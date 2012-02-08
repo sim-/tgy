@@ -77,6 +77,8 @@
 ; For avrasm32, just comment out all but the include you need.
 .if defined(afro_esc)
 .include "afro.inc"		; AfroESC (ICP PPM)
+.elif defined(afro2_esc)
+.include "afro2.inc"		; AfroESC 2 (ICP PPM)
 .elif defined(bs_esc)
 .include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PPM)
 .elif defined(bs_nfet_esc)
