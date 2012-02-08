@@ -1437,7 +1437,6 @@ i_rc_puls2:	wdr
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
 		brlo	i_rc_puls2
-		cli				; disable all interrupts
 		.if USE_I2C
 		sbrs	flags1, I2C_MODE
 		out	TWCR, ZH		; Turn off I2C and interrupt
@@ -1455,9 +1454,6 @@ i_rc_puls3:
 ;-----bko-----------------------------------------------------------------
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
-		sei
-		; RC pulse interrupt likely happens here
-		cbr	flags1, (1<<EVAL_RC)	; Ignore any broken pulse from when interrupts were off
 .if MOTOR_BRAKE
 		nFET_brake temp1
 .endif
@@ -1588,7 +1584,6 @@ run6_4:		movw	sys_control_l, YL
 		rjmp	run1
 
 restart_control:
-		cli				; disable all interrupts
 		rcall	switch_power_off
 		rcall	wait30ms
 		rcall	beep_f3
