@@ -391,7 +391,7 @@ clear_loop1:	cp	ZL, r0
 	; Enable watchdog (WDTON may be set or unset)
 		ldi	temp1, (1<<WDCE)+(1<<WDE)
 		out	WDTCR, temp1
-		ldi	temp1, (1<<WDE)+(0<<WDP1)		; Fastest option: ~16.3ms timeout
+		ldi	temp1, (1<<WDE)		; Fastest option: ~16.3ms timeout
 		out	WDTCR, temp1
 
 	; Read EEPROM block to RAM
