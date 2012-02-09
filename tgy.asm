@@ -336,6 +336,12 @@ eeprom_end:	.byte	1
 		rjmp i2c_int	; twi_int
 		reti		; spmc_int
 
+eeprom_defaults_w:
+	.db low(EEPROM_SIGN), high(EEPROM_SIGN)
+	.db byte1(FULL_RC_PULS * CPU_MHZ), byte2(FULL_RC_PULS * CPU_MHZ)
+	.db byte1(STOP_RC_PULS * CPU_MHZ), byte2(STOP_RC_PULS * CPU_MHZ)
+	.db byte1((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2), byte2((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
+
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
@@ -399,32 +405,20 @@ clear_loop1:	cp	ZL, r0
 		rcall	eeprom_read_block	; Also calls osccal_set
 
 	; Check EEPROM signature
-		lds	temp1, eeprom_sig_l
-		lds	temp2, eeprom_sig_h
+		ldi	XL, low(eeprom_sig_l) + 2
+		ld	temp2, -X
+		ld	temp1, -X		; Leave X at eeprom_sig_l
 		subi	temp1, low(EEPROM_SIGN)
 		sbci	temp2, high(EEPROM_SIGN)
 		breq	eeprom_good
 
 	; Signature not good: set defaults in RAM, but do not write
 	; to the EEPROM until we actually set something non-default
-	; TODO: Store these in the program and lpm-memcpy them, since
-	; each sts takes 4 bytes.
-		ldi	temp1, byte1(FULL_RC_PULS * CPU_MHZ)
-		sts	puls_high_l, temp1
-		ldi	temp1, byte2(FULL_RC_PULS * CPU_MHZ)
-		sts	puls_high_h, temp1
-		ldi	temp1, byte1(STOP_RC_PULS * CPU_MHZ)
-		sts	puls_low_l, temp1
-		ldi	temp1, byte2(STOP_RC_PULS * CPU_MHZ)
-		sts	puls_low_h, temp1
-		ldi	temp1, byte1((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
-		sts	puls_neutral_l, temp1
-		ldi	temp1, byte2((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
-		sts	puls_neutral_h, temp1
-		ldi	temp1, low(EEPROM_SIGN)
-		sts	eeprom_sig_l, temp1
-		ldi	temp1, high(EEPROM_SIGN)
-		sts	eeprom_sig_h, temp1
+		ldi	ZL, low(eeprom_defaults_w << 1)
+eeprom_default:	lpm	temp1, Z+
+		st	X+, temp1
+		cpi	XL, low(eeprom_end)
+		brne	eeprom_default
 eeprom_good:
 
 	; Check reset cause
