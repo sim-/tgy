@@ -1566,7 +1566,13 @@ run6_2:		cbr	flags1, (1<<STARTUP)
 		; If SLOW_THROTTLE is disabled, this only limits
 		; initial start ramp-up; once running, sys_control
 		; will stay at MAX_POWER unless timing is lost.
-		adiw	YL, (POWER_RANGE + 31) / 32
+		.equ SLOW_THROTTLE_STEPS = (POWER_RANGE + 31) / 32
+		.if SLOW_THROTTLE_STEPS > 63
+		subi	YL, byte1(-SLOW_THROTTLE_STEPS)
+		sbci	YH, -1 - byte2(SLOW_THROTTLE_STEPS)
+		.else
+		adiw	YL, SLOW_THROTTLE_STEPS
+		.endif
 		ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 run6_3:		cp	YL, temp1
