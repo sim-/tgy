@@ -25,8 +25,16 @@ Features and Changes
 
 Supported (Tested) Hardware
 ---------------------------
+See http://wiki.openpilot.org/display/Doc/RapidESC+Database and/or
+https://docs.google.com/spreadsheet/ccc?key=0AhR02IDNb7_MdEhfVjk3MkRHVzhKdjU1YzdBQkZZRlE
+for a more complete list.
+
+Boards by target:
+
 - afro:
     - AfroESC (http://code.google.com/p/afrodevices/downloads/list)
+- afro2:
+    - AfroESC 2 (prototype)
 - bs:
     - Hobby King 40A (F-40A)
     - Hobby King 60A (F-60A)
@@ -73,6 +81,12 @@ Notes
 
 Installation
 ------------
+For more information, check out these sites:
+
+http://wiki.openpilot.org/display/Doc/RapidESCs
+http://wiki.openpilot.org/display/Doc/Flashing+Instructions
+http://www.rcgroups.com/forums/showthread.php?t=1513678
+
 Never just randomly try build targets until one works, especially not
 when directly powered from a 4S LiPo! :P Many boards have completely
 inverted FET banks and different pin assignments, so toggling one pin
@@ -171,13 +185,12 @@ The brown-out voltage should be set to 4.0V and enabled (BODEN). Leave
 the rest of the fuse values as shipped, and write down the new values.
 
 Flash the desired target .hex file to the AVR, then set the fuses, if
-anything needed changing. You can leave the EEPROM unchanged or erased
-for now. If you have any errors, check the connections to and voltage at
-the chip. Sometimes, a weak power or signal connection can temporarily
-work and then fail part-way through programming, giving verification
-errors. This can happen particularly if the target chip is powered weakly
-by the programmer itself, which then back-feeds to the rest of the
-circuit and tries to charge the capacitor, etc.
+anything needs changing. If you have any errors, check the connections
+to and voltage at the chip. Sometimes, a weak power or signal connection
+can temporarily work and then fail part-way through programming, giving
+verification errors. This can happen particularly if the target chip is
+powered weakly by the programmer itself, which then back-feeds to the
+rest of the circuit and tries to charge the capacitor, etc.
 
 Once programming is successful, hook up a small motor without propeller
 and reset the power. You should hear three increasing beeps. If not, or
@@ -215,7 +228,6 @@ beep.
 
 ---
 
-Patches and comments are always welcome! Let me know how it
-goes!
+Patches and comments are always welcome! Let me know how it goes!
 
 Code normally pushed to github here: https://github.com/sim-/tgy
