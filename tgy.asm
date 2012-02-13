@@ -158,7 +158,7 @@
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 
 .equ	T0CLK		= (1<<CS01)	; clk/8 == 2Mhz
-.equ	T1CLK		= (1<<CS10)	; clk/1 == 16MHz
+.equ	T1CLK		= (1<<CS10)+(USE_ICP<<ICES1)+(USE_ICP<<ICNC1)	; clk/1 == 16MHz
 .equ	T2CLK		= (1<<CS20)	; clk/1 == 16MHz
 
 .equ	EEPROM_SIGN	= 31337		; Random 16-bit value
@@ -390,7 +390,7 @@ clear_loop1:	cp	ZL, r0
 	; Start timers except output PWM
 		ldi	temp1, T0CLK		; timer0: beep control, delays
 		out	TCCR0, temp1
-		ldi	temp1, T1CLK+T1ICP	; timer1: commutation timing,
+		ldi	temp1, T1CLK		; timer1: commutation timing,
 		out	TCCR1B, temp1		; RC pulse measurement
 		out	TCCR2, ZH		; timer2: PWM, stopped
 

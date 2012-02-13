@@ -10,7 +10,6 @@
 .equ	USE_INT0	= 1
 .equ	USE_I2C		= 0
 .equ	USE_ICP		= 0
-.equ	T1ICP		= 0
 
 ;*********************
 ; PORT D definitions *

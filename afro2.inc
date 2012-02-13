@@ -7,7 +7,6 @@
 .equ	USE_INT0	= 0
 .equ	USE_I2C		= 1
 .equ	USE_ICP		= 1
-.equ	T1ICP		= (1<<ICES1)+(1<<ICNC1)
 
 ;*********************
 ; PORT B definitions *
@@ -38,11 +37,11 @@
 	out	TIMSK, @0
 .ENDMACRO
 .MACRO rcp_int_rising_edge
-	ldi	@0, T1CLK+T1ICP
+	ldi	@0, T1CLK
 	out	TCCR1B, @0
 .ENDMACRO
 .MACRO rcp_int_falling_edge
-	ldi	@0, (T1CLK+T1ICP) & ~(1<<ICES1)
+	ldi	@0, T1CLK & ~(1<<ICES1)
 	out	TCCR1B, @0
 .ENDMACRO
 

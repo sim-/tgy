@@ -9,7 +9,6 @@
 .equ	USE_INT0	= 1
 .equ	USE_I2C		= 0	; We could, but FETs are on the I2C ports
 .equ	USE_ICP		= 0
-.equ	T1ICP		= 0
 
 ;*********************
 ; PORT D definitions *
