@@ -56,7 +56,6 @@ Boards by target:
     - Original Turnigy Plush 6A
 - tp_nfet:
     - Newer TowerPro 25A
-    - Turnigy TY-P1 25A (HEXFET)
 
 Notes
 -----
