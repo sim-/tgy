@@ -620,11 +620,13 @@ falling_edge1:	lds	ZH, start_rcpuls_l
 		ldi	XH, 0			; Return XH to 0
 		brsh	rcpint_fail		; throw away (too long pulse)
 
+.if 0
 		cpi	i_temp1, byte1(180*CPU_MHZ)
 		ldi	XH, byte2(180*CPU_MHZ)
 		cpc	i_temp2, XH
 		ldi	XH, 0			; Return XH to 0
-		brsh	rcpint_fail		; throw away (too short pulse)
+		brlo	rcpint_fail		; throw away (too short pulse)
+.endif
 
 		movw	rx_l, i_temp1
 		sbr	flags1, (1<<EVAL_RC)
