@@ -98,7 +98,7 @@
 .endif
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
-.equ	MOTOR_ID	= 1	; MK-style I2C motor ID
+.equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
 .equ	TIME_ACCUMULATE	= 0	; Accumulate 4 commutations timing method
 .equ	TIME_HALFADD	= 0	; Update half timing method
@@ -176,7 +176,7 @@
 .def	rx_h		= r7		; received throttle high
 .def	tcnt2h		= r8		; timer2 high byte
 .def	i_sreg		= r9		; status register save in interrupts
-.def	uart_cnt	= r10
+;.def			= r10
 .def	rc_timeout	= r11
 .def	sys_control_l	= r12		; duty limit low (word register aligned)
 .def	sys_control_h	= r13		; duty limit high
@@ -199,14 +199,14 @@
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
 	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
-;	.equ	I_FET_ON	= 6	; if set, fets off
+	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
 ;	.equ	I_ON_CYCLE	= 7	; if set, current on cycle is active (optimized as MSB)
 
 .def	flags1	= r17	; state flags
 	.equ	POWER_OFF	= 0	; switch fets on disabled
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
-;	.equ	RC_PULS_UPDATED	= 3	; rcpuls value has changed
+	.equ	UART_MODE	= 3	; if receiving updates via UART
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
 	.equ	ACO_EDGE_HIGH	= 5	; if set, looking for ACO high - conviently located at the same bit position as ACO
 	.equ	STARTUP		= 6	; if set, startup-phase is active
@@ -274,6 +274,7 @@ rev_scale_h:	.byte	1
 neutral_l:	.byte	1	; Offset for neutral throttle (in CPU_MHZ)
 neutral_h:	.byte	1
 max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
+motor_count:	.byte	1	; Motor number for serial control
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -327,7 +328,7 @@ eeprom_end:	.byte	1
 		rjmp t1ovfl_int	; t1ovfl_int
 		reti		; t0ovfl_int
 		reti		; spi_int
-		reti		; urxc
+		rjmp urxc_int	; urxc
 		reti		; udre
 		reti		; utxc
 		reti		; adc_int
@@ -558,7 +559,7 @@ t1ovfl_int1:	out	SREG, i_sreg
 ; (see "Accessing 16-bit registers" in the Atmel documentation)
 ; icp1 = rc pulse input, if enabled
 rcp_int:
-		.if USE_ICP || USE_INT0
+	.if USE_ICP || USE_INT0
 		.if USE_ICP
 		in	i_temp1, ICR1L		; get captured timer values
 		in	i_temp2, ICR1H
@@ -619,15 +620,21 @@ falling_edge1:	lds	ZH, start_rcpuls_l
 		ldi	XH, 0			; Return XH to 0
 		brsh	rcpint_fail		; throw away (too long pulse)
 
+		cpi	i_temp1, byte1(180*CPU_MHZ)
+		ldi	XH, byte2(180*CPU_MHZ)
+		cpc	i_temp2, XH
+		ldi	XH, 0			; Return XH to 0
+		brsh	rcpint_fail		; throw away (too short pulse)
+
 		movw	rx_l, i_temp1
 		sbr	flags1, (1<<EVAL_RC)
 
 rcpint_exit:	out	SREG, i_sreg
 		reti
-		.endif
+	.endif
 ;-----bko-----------------------------------------------------------------
 i2c_int:
-		.if USE_I2C
+	.if USE_I2C
 		in	i_sreg, SREG
 		in	i_temp1, TWSR
 		cpi	i_temp1, 0x00		; 00000000b bus error due to illegal start/stop condition
@@ -680,7 +687,38 @@ i2c_ack:	in	i_temp1, TWCR
 i2c_out:	out	TWCR, i_temp1
 i2c_ret:	out	SREG, i_sreg
 		reti
-		.endif
+	.endif
+;-----bko-----------------------------------------------------------------
+urxc_int:
+	; This is Bernhard's serial protocol implementation in the UART
+	; version here: http://home.versanet.de/~b-konze/blc_6a/blc_6a.htm
+ 	; This seems to be implemented for a project described here:
+	; http://www.control.aau.dk/uav/reports/10gr833/10gr833_student_report.pdf
+	; The UART runs at 38400 baud, N81. Input is ignored until >= 0xf5
+	; is received, where we start counting to MOTOR_ID, at which
+	; the received byte is used as throttle input. 0 is POWER_OFF,
+	; >= 200 is FULL_POWER.
+	.if USE_UART
+		in	i_sreg, SREG
+		in	i_temp1, UDR
+		cpi	i_temp1, 0xf5		; Start throttle byte sequence
+		breq	urxc_x3d_sync
+		sbrs	flags0, UART_SYNC
+		rjmp	urxc_exit		; Throw away if not UART_SYNC
+		brcc	urxc_unknown
+		lds	i_temp2, motor_count
+		dec	i_temp2
+		brne	urxc_set_exit		; Skip when motor_count != 0
+		mov	rx_h, i_temp1		; Save 8-bit input
+		sbr	flags1, (1<<EVAL_RC)+(1<<UART_MODE)
+urxc_unknown:	cbr	flags0, (1<<UART_SYNC)
+		rjmp	urxc_exit
+urxc_x3d_sync:	sbr	flags0, (1<<UART_SYNC)
+		ldi	i_temp2, MOTOR_ID	; Start counting down from MOTOR_ID
+urxc_set_exit:	sts	motor_count, i_temp2
+urxc_exit:	out	SREG, i_sreg
+		reti
+	.endif
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp4, 200
@@ -833,7 +871,7 @@ mul_y_12x34:
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Unlike the normal evaluate_rc, we look here for programming mode (pulses
-; above PROGRAM_RC_PULS) or I2C input (if found, we set I2C_MODE).
+; above PROGRAM_RC_PULS), unless we have received I2C or UART input.
 ;
 ; With pulse position modulation (PPM) input, we have to be careful about
 ; oscillator drift. If we are running on a board without an external
@@ -844,6 +882,10 @@ mul_y_12x34:
 ; internal RC slows down when hot, making it impossible to reach full
 ; throttle.
 evaluate_rc_init:
+		.if USE_UART
+		sbrc	flags1, UART_MODE
+		rjmp	evaluate_rc_uart
+		.endif
 		.if USE_I2C
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
@@ -930,6 +972,10 @@ rc_prog_done:	rcall	eeprom_write_block
 		.endif
 ;-----bko-----------------------------------------------------------------
 evaluate_rc:
+		.if USE_UART
+		sbrc	flags1, UART_MODE
+		rjmp	evaluate_rc_uart
+		.endif
 		.if USE_I2C
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
@@ -939,9 +985,6 @@ evaluate_rc:
 .if USE_ICP || USE_INT0
 evaluate_rc_puls:
 		cbr	flags1, (1<<EVAL_RC)
-		ldi	temp1, RCP_TOT
-		cp	rc_timeout, temp1
-		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
 		lds	YL, neutral_l
 		lds	YH, neutral_h
 		movw	temp1, rx_l		; Atomic copy of rc pulse length
@@ -990,16 +1033,16 @@ rc_do_scale:	ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
 		brlo	rc_not_full
 		ldi	YL, byte1(MAX_POWER)
 		ldi	YH, byte2(MAX_POWER)
-rc_not_full:	sts	rc_duty_l, YL
+rc_not_full:	ldi	temp1, RCP_TOT		; Check rc_timeout
+		cp	rc_timeout, temp1
+		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
+		sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
 evaluate_rc_i2c:
-		ldi	temp1, RCP_TOT
-		cp	rc_timeout, temp1
-		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
-		movw	YL, rx_l		; Atomic copy of rc pulse length
+		movw	YL, rx_l		; Atomic copy of 16-bit input
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
 		.if MOTOR_REVERSE
 		sbr	flags1, (1<<REVERSE)
@@ -1019,6 +1062,23 @@ evaluate_rc_i2c:
 		movw	temp1, YL
 		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 247)
 		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 247)
+		rjmp	rc_do_scale		; The rest of the code is common
+.endif
+;-----bko-----------------------------------------------------------------
+.if USE_UART
+evaluate_rc_uart:
+		mov	YH, rx_h		; Copy 8-bit input
+		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
+		.if MOTOR_REVERSE
+		sbr	flags1, (1<<REVERSE)
+		.endif
+		ldi	YL, 0
+		cpi	YH, 0
+		breq	rc_not_full
+	; Scale so that YH == 200 is MAX_POWER.
+		movw	temp1, YL
+		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 200)
+		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 200)
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -1404,9 +1464,41 @@ control_start:
 		out	TIFR, temp1		; clear TOIE1, OCIE1A & TOIE2
 		out	TIMSK, temp1		; enable TOIE1, OCIE1A & TOIE2 interrupts
 
-		sei				; enable all interrupts
+		.if defined(HK_PROGRAM_CARD)
+	; This program card seems to send data at 1200 baud N81,
+	; Messages start with 0xdd 0xdd, have 7 bytes of config,
+	; and end with 0xde, sent two seconds after power-up or
+	; after any jumper change.
+		.equ	BAUD_RATE = 1200
+		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
+		ldi	temp1, high(UBRR_VAL)
+		out	UBRRH, temp1
+		ldi	temp1, low(UBRR_VAL)
+		out	UBRRL, temp1
+		ldi	temp1, (1<<RXEN)	; Do programming card rx by polling
+		out	UCSRB, temp1
+		ldi	temp1, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0)
+		out	UCSRC, temp1
+		.endif
 
 	; init input sources (i2c and/or rc-puls)
+		.if USE_UART && !defined(HK_PROGRAM_CARD)
+		.equ	BAUD_RATE = 38400
+		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
+		ldi	temp1, high(UBRR_VAL)
+		out	UBRRH, temp1
+		ldi	temp1, low(UBRR_VAL)
+		out	UBRRL, temp1
+		ldi	temp1, (1<<RXEN)+(0<<RXCIE)	; We don't actually tx
+		out	UCSRB, temp1
+		ldi	temp1, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0)	; N81
+		out	UCSRC, temp1
+		in	temp1, UDR
+		in	temp1, UDR
+		in	temp1, UDR
+                sbi     UCSRA, RXC              ; clear flag
+                sbi     UCSRB, RXCIE            ; enable reception irq
+		.endif
 		.if USE_I2C
 		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
 		ldi	temp1, I2C_ADDR + (MOTOR_ID << 1)
@@ -1418,9 +1510,14 @@ control_start:
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
 		.endif
+
+		sei				; enable all interrupts
+
 i_rc_puls1:	clr	rc_timeout
-		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)
+		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 i_rc_puls2:	wdr
+		.if defined(HK_PROGRAM_CARD)
+		.endif
 		sbrs	flags1, EVAL_RC
 		rjmp	i_rc_puls2
 		rcall	evaluate_rc_init
@@ -1435,9 +1532,14 @@ i_rc_puls2:	wdr
 		sbrs	flags1, I2C_MODE
 		out	TWCR, ZH		; Turn off I2C and interrupt
 		.endif
+		.if USE_UART
+		sbrs	flags1, UART_MODE
+		out	UCSRB, ZH		; Turn off UART and interrupt
+		.endif
 		.if USE_INT0 || USE_ICP
-		sbrs	flags1, I2C_MODE
-		rjmp	i_rc_puls3
+		mov	temp1, flags1
+		andi	temp1, (1<<I2C_MODE)+(1<<UART_MODE)
+		breq	i_rc_puls3
 		rcp_int_disable temp1		; Turn off RC pulse interrupt
 i_rc_puls3:
 		.endif

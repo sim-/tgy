@@ -6,6 +6,7 @@
 .equ	F_CPU		= 16000000
 .equ	USE_INT0	= 0
 .equ	USE_I2C		= 1
+.equ	USE_UART	= 1
 .equ	USE_ICP		= 1
 
 ;*********************
