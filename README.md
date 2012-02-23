@@ -47,11 +47,12 @@ Boards by target:
     - RCTimer 50A
 - tp:
     - Original TowerPro 17A, 25A
-- tgy:
+    - Hobby King SS models without "-HW" in part number
+- tgy (these boards typically have no external resonator):
     - Original TowerPro 18A
     - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (Hobbywing OEM)
     - RCTimer 10A, 18A, 20A, 30A (18A, 20A, 30A are same board with more or less FETs)
-    - Hobby King SS 15-18A
+    - Hobby King SS models with "-HW" in part number
 - tgy6a:
     - Original Turnigy Plush 6A
 - tp_nfet:
