@@ -87,6 +87,8 @@
 .include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PPM)
 .elif defined(bs40a_esc)
 .include "bs40a.inc"		; HobbyKing BlueSeries / Mystery 40A (INT0 PPM)
+.elif defined(rb50a_esc)
+.include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PPM)
 .elif defined(rb70a_esc)
 .include "rb70a.inc"		; Red Brick 70A with all nFETs (INT0 PPM)
 .elif defined(rct50a_esc)
