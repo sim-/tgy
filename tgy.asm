@@ -79,6 +79,8 @@
 .include "afro.inc"		; AfroESC (ICP PPM)
 .elif defined(afro2_esc)
 .include "afro2.inc"		; AfroESC 2 (ICP PPM)
+.elif defined(birdie70a_esc)
+.include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PPM)
 .elif defined(bs_esc)
 .include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PPM)
 .elif defined(bs_nfet_esc)
