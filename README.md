@@ -35,14 +35,24 @@ Boards by target:
     - AfroESC (http://code.google.com/p/afrodevices/downloads/list)
 - afro2:
     - AfroESC 2 (prototype)
+- birdie70a:
+    - Hobby King Birdie 70A (BIRD-60A)
 - bs:
+    - Hobby King 6A (HK_261000001)
+    - Hobby King 10A (HK_261000002)
     - Hobby King 40A (F-40A)
     - Hobby King 60A (F-60A)
 - bs_nfet:
     - Hobby King 20A (F-20A)
     - Hobby King 30A (F-30A)
 - bs40a:
-    - Hobby King BlueSeries 40A
+    - Hobby King BlueSeries 40A (and _some_ Mystery 40A boards)
+- hk200a:
+    - Hobby King SS Series 190-200A (HK-SS200ALV)
+- rb50a.hex
+    - Hobby King Red Brick 50A (RB50-ESC)
+- rb70a.hex
+    - Hobby King Red Brick 70A (RB70A)
 - rct50a:
     - RCTimer 50A
 - tp:
@@ -51,7 +61,7 @@ Boards by target:
 - tgy (these boards typically have no external resonator):
     - Original TowerPro 18A
     - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (Hobbywing OEM)
-    - RCTimer 10A, 18A, 20A, 30A (18A, 20A, 30A are same board with more or less FETs)
+    - RCTimer 10A, 18A, 20A, 30A, 40A (18A, 20A, 30A are same board with more or less FETs)
     - Hobby King SS models with "-HW" in part number
 - tgy6a:
     - Original Turnigy Plush 6A
@@ -67,6 +77,7 @@ Notes
 - If your ESC has 6 pads and an AVR, it's probably compatible; the pads
   are MOSI, MISO, SCLK, GND, VCC, and RESET. If it has 4 pads, it is
   probably a newer SiLabs-based one, for which this code will not work.
+  (Except HK_261000001 which has 4 pads but has an AVR.)
 - I build and maintain this in Linux with avra (1.3.0 or newer). Patches
   welcome for AVR Studio APS files, etc.
 - The TowerPro/Turnigy Plush type boards typically do not come with
