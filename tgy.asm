@@ -76,31 +76,31 @@
 ; The following only works with avra or avrasm2.
 ; For avrasm32, just comment out all but the include you need.
 .if defined(afro_esc)
-.include "afro.inc"		; AfroESC (ICP PPM)
+.include "afro.inc"		; AfroESC (ICP PWM)
 .elif defined(afro2_esc)
-.include "afro2.inc"		; AfroESC 2 (ICP PPM)
+.include "afro2.inc"		; AfroESC 2 (ICP PWM)
 .elif defined(birdie70a_esc)
-.include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PPM)
+.include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PWM)
 .elif defined(bs_esc)
-.include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PPM)
+.include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PWM)
 .elif defined(bs_nfet_esc)
-.include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PPM)
+.include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PWM)
 .elif defined(bs40a_esc)
-.include "bs40a.inc"		; HobbyKing BlueSeries / Mystery 40A (INT0 PPM)
+.include "bs40a.inc"		; HobbyKing BlueSeries / Mystery 40A (INT0 PWM)
 .elif defined(rb50a_esc)
-.include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PPM)
+.include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PWM)
 .elif defined(rb70a_esc)
-.include "rb70a.inc"		; Red Brick 70A with all nFETs (INT0 PPM)
+.include "rb70a.inc"		; Red Brick 70A with all nFETs (INT0 PWM)
 .elif defined(rct50a_esc)
-.include "rct50a.inc"		; RCTimer 50A with all nFETs (INT0 PPM)
+.include "rct50a.inc"		; RCTimer 50A with all nFETs (INT0 PWM)
 .elif defined(tp_esc)
-.include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PPM)
+.include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PWM)
 .elif defined(tp_nfet_esc)
-.include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" (INT0 PPM)
+.include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" (INT0 PWM)
 .elif defined(tgy6a_esc)
-.include "tgy6a.inc"		; Turnigy Plush 6A (INT0 PPM)
+.include "tgy6a.inc"		; Turnigy Plush 6A (INT0 PWM)
 .else
-.include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PPM)
+.include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PWM)
 .endif
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
@@ -881,7 +881,7 @@ mul_y_12x34:
 ; Unlike the normal evaluate_rc, we look here for programming mode (pulses
 ; above PROGRAM_RC_PULS), unless we have received I2C or UART input.
 ;
-; With pulse position modulation (PPM) input, we have to be careful about
+; With pulse width modulation (PWM) input, we have to be careful about
 ; oscillator drift. If we are running on a board without an external
 ; crystal/resonator/oscillator, the internal RC oscillator must be used,
 ; which can drift significantly with temperature and voltage. So, we must

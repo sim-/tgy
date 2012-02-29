@@ -8,26 +8,26 @@ Features and Changes
 - 16MHz operation on most boards
 - 16-bit output PWM with full clock rate resolution (~18kHz PWM with
   a POWER_RANGE of 800 steps)
-- 24-bit timing and PPM pulse tracking at full clock rate resolution
+- 24-bit timing and PWM pulse tracking at full clock rate resolution
 - ICP-based pulse time recording (on supported hardware) for zero
   throttle jitter
-- Immediate PPM input to PWM output for best possible multicopter
+- Immediate PWM input to PWM output for best possible multicopter
   response (eg: ideal for tricopters, quadcopters, etc., but NOT where
   where slow-start or really any significant current limiting is needed!)
-- Accepts 495Hz PPM update rates (minimum ~5microseconds PPM low time)
+- Accepts any PWM update rate (minimum ~5microseconds PWM low time)
 - Optimized interrupt code (very low minimum PWM and reduced full
   throttle bump, and should work beyond 120,000 RPM
 - Configurable board pin assignments by include file
 - Improved startup (though heavy hard drives are still a bit dodgy -
   suggestions/patches welcome!)
 - Forward and reverse commutation supported, including RC-car style
-  reverse-neutral-forward PPM ranges, with optional braking
+  reverse-neutral-forward PWM ranges, with optional braking
 
 Supported (Tested) Hardware
 ---------------------------
 See http://wiki.openpilot.org/display/Doc/RapidESC+Database and/or
 https://docs.google.com/spreadsheet/ccc?key=0AhR02IDNb7_MdEhfVjk3MkRHVzhKdjU1YzdBQkZZRlE
-for a more complete list.
+for a more complete list. Some board pictures here: http://0x.ca/sim/esc/
 
 Boards by target:
 
@@ -198,7 +198,7 @@ if you hear only some beeps, the FET pinout may be incorrect or one or
 more FETs may be broken. Repetitive clicking can also indicate that the
 pinout is incorrect and causing continuous brown-out resets.
 
-Now, if you attach a valid PPM servo pulse with low-enough pulse length,
+Now, if you attach a valid PWM servo pulse with low-enough pulse length,
 you should hear a forth beep indicating that the ESC is armed. If not,
 try lowering the trim as far as possible. If it still doesn't work, you
 may need to raise the STOP_RC_PULS value in the code.
