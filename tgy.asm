@@ -87,6 +87,8 @@
 .include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PWM)
 .elif defined(bs40a_esc)
 .include "bs40a.inc"		; HobbyKing BlueSeries / Mystery 40A (INT0 PWM)
+.elif defined(hk200a_esc)
+.include "hk200a.inc"		; Hobbyking SS Series 190-200A with all nFETs (INT0 PWM)
 .elif defined(rb50a_esc)
 .include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PWM)
 .elif defined(rb70a_esc)

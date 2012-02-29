@@ -6,7 +6,7 @@ all: tgy.hex
 
 test: all_targets
 
-ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_nfet.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex hk200a.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_nfet.hex tgy6a.hex tgy.hex
 
 all_targets: $(ALL_TARGETS)
 
