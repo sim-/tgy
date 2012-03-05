@@ -1,10 +1,14 @@
+https://github.com/sim-/tgy
+
 This tree contains Atmel AVR assembly code for AVR-based 3-phase
 sensor-less motor electronic speed control (ESC) boards. This work is
 based on Bernhard Konze's "tp-18a" code, with significant modifications.
 Please see tgy.asm for Bernhard's license.
 
-Features and Changes
---------------------
+Patches and comments are always welcome! Let me know how it goes!
+
+Features
+--------
 - 16MHz operation on most boards
 - 16-bit output PWM with full clock rate resolution (~18kHz PWM with
   a POWER_RANGE of 800 steps)
@@ -16,20 +20,20 @@ Features and Changes
   where slow-start or really any significant current limiting is needed!)
 - Accepts any PWM update rate (minimum ~5microseconds PWM low time)
 - Optimized interrupt code (very low minimum PWM and reduced full
-  throttle bump, and should work beyond 120,000 RPM
+  throttle bump
 - Configurable board pin assignments by include file
 - Improved startup (though heavy hard drives are still a bit dodgy -
   suggestions/patches welcome!)
 - Forward and reverse commutation supported, including RC-car style
   reverse-neutral-forward PWM ranges, with optional braking
 
-Supported (Tested) Hardware
----------------------------
+Hardware
+--------
 See http://wiki.openpilot.org/display/Doc/RapidESC+Database and/or
 https://docs.google.com/spreadsheet/ccc?key=0AhR02IDNb7_MdEhfVjk3MkRHVzhKdjU1YzdBQkZZRlE
 for a more complete list. Some board pictures here: http://0x.ca/sim/esc/
 
-Boards by target:
+Tested boards by target:
 
 - afro:
     - AfroESC (http://code.google.com/p/afrodevices/downloads/list)
@@ -90,6 +94,13 @@ Notes
   desired on multi-rotor platforms; however, people still want to use
   this on planes, cars, boats, etc., so I suppose I'll add it.
 
+WARNING
+-------
+Never just randomly try build targets until one works, especially not
+when directly powered from a 4S LiPo! :P Many boards have completely
+inverted FET banks and different pin assignments, so toggling one pin
+could immediately fry multiple FETs.
+
 Installation
 ------------
 For more information, check out these sites:
@@ -98,17 +109,12 @@ http://wiki.openpilot.org/display/Doc/RapidESCs
 http://wiki.openpilot.org/display/Doc/Flashing+Instructions
 http://www.rcgroups.com/forums/showthread.php?t=1513678
 
-Never just randomly try build targets until one works, especially not
-when directly powered from a 4S LiPo! :P Many boards have completely
-inverted FET banks and different pin assignments, so toggling one pin
-could immediately fry multiple FETs.
-
-The safest arrangement is to use a current-limited bench power supply,
-set to a low voltage (6V-7V), for both flashing and initial testing.
-If the pinout is wrong and causes a short, the current-limiting causes
-the input voltage to drop below the brown-out detection voltage of the
-MCU, causing all output pins to go high-impedance in hardware, and an
-automatic reset when the voltage comes back.
+See warning above! The safest arrangement is to use a current-limited
+bench power supply, set to a low voltage (6V-7V), for both flashing and
+initial testing. If the pinout is wrong and causes a short, the current
+limiting causes the input voltage to drop below the brown-out detection
+voltage of the MCU, causing all output pins to go high-impedance in
+hardware, and an automatic reset when the voltage comes back.
 
 If you do not have a current-limited supply, you can improvise by using 4
 AA batteries or an old NiCd pack or even a LiPo with a 12V light bulb in
@@ -237,8 +243,61 @@ phone with dead battery). Finally, an external reset, such as after ISP
 flashing, will cause just a single beep at the same pitch as the arming
 beep.
 
----
+Throttle Calibration and Programming
+------------------------------------
 
-Patches and comments are always welcome! Let me know how it goes!
+Since the 2012-01-04 release, there is software support for throttle
+calibration. This should be used whenever PWM input mode is used,
+including where external resonators are present, to set the usable
+throttle range.
 
-Code normally pushed to github here: https://github.com/sim-/tgy
+The default range is set at the top of tgy.asm (stop at 1060us, full
+throttle at 1860us) and is not changed if no new value is saved to the
+EEPROM. However, boards without external oscillators (typically those
+which use tgy.hex) must use the internal RC oscillator on the Atmega8,
+which may be off by 5% - 10% between each board, and will also drift by
+10% or more over a 40 degree Celsius temperature range. This can cause
+throttle differences between boards if not calibrated, and issues arming
+the ESC, particularly in cold environments.
+
+To calibrate the ESC, REMOVE ALL PROPELLERS and follow the steps
+documented for your flight controller board. With KK boards, for example,
+the Yaw pot must be set to the minimum position in order to enable "pass
+through" mode from the RX input to the ESC output, and the ESCs are then
+calibrated to the radio's throttle stick.
+
+Calibration may also be done with a servo tester or with the ESC directly
+connected to an RX channel. The only requirement is that the input pulse
+has to be at or above PROGRAM_RC_PULS (default 1460us) to enter
+programming mode. This will differ slightly on boards with no external
+oscillator, and if programming individually, try to maintain a close
+temperature.
+
+With the propellers removed and the source (radio, servo tester, or flight
+control board) set to full throttle, power up the ESC and wait for a
+single beep after the typical rising initialization beeps. This indicates
+the high pulse length has been saved to RAM. Move the stick to or knob
+the lowest setting, and wait for two beeps. This indicates that the low
+pulse length has been saved to RAM.
+
+If RC_PULS_NEUTRAL has been enabled (RC Car-style reverse mode), move the
+stick/knob to the center, and wait for three beeps. This indicates that
+the neutral pulse length has been saved to RAM.
+
+If the stick is not moved after the final setting, the ESC should now
+write the RAM settings to EEPROM, and continue startup. The ESC should
+recognize the same pulse length input as a valid arming pulse, and arm
+and work as usual.
+
+The input PWM pulse is measured in 24-bit space and scaled in 16.16 space
+to fit the number of PWM steps defined by POWER_RANGE - MIN_DUTY. There
+should be no measurable aliasing or quantization. Alternatively, the
+values may be adjusted in EEPROM directly. While calibrating, margins of
+1/16th on the low end and 1/32nd on the high end are used to try to
+avoid problems with arming and reaching full throttle during temperature
+extremes. If desired, margins may be adjusted in tgy.asm between rc_prog2
+and rc_prog5.
+
+There is currently no way to reset (remove) the calibration other than by
+clearing the EEPROM (or reflashing without EESAVE set). This may be
+implemented in the future by some basic stick programming feature.
