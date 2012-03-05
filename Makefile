@@ -1,14 +1,15 @@
-all: tgy.hex
+build: tgy.hex
 
 %.hex: tgy.asm $(wildcard *.inc)
 	avra --define $(patsubst %.hex,%_esc,$@) $<
 	$(if $(patsubst tgy.hex,,$@),mv -f tgy.hex $@)
 
-test: all_targets
-
 ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex hk200a.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_nfet.hex tgy6a.hex tgy.hex
 
-all_targets: $(ALL_TARGETS)
+all: $(ALL_TARGETS)
+all_targets: all
+
+test: all
 
 clean:
 	rm -f $(ALL_TARGETS)
