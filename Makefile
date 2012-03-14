@@ -25,6 +25,9 @@ program_dragon_%: %.hex
 program_dapa_%: %.hex
 	avrdude -c dapa -u -p m8 -U flash:w:$<:i
 
+program_usbasp_%: %.hex
+	avrdude -c usbasp -u -p m8 -U flash:w:$<:i
+
 program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<
 
@@ -39,6 +42,9 @@ read:
 
 read_dapa:
 	avrdude -c dapa -p m8 -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
+
+read_usbasp:
+	avrdude -c usbasp -u -p m8 -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
 read_uisp:
 	uisp -dprog=dapa --download -v of=flash.hex
