@@ -208,7 +208,7 @@
 	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
 	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
-;	.equ	I_ON_CYCLE	= 7	; if set, current on cycle is active (optimized as MSB)
+	.equ	NO_CALIBRATION	= 7	; if set, disallow calibration (unsafe reset cause)
 
 .def	flags1	= r17	; state flags
 	.equ	POWER_OFF	= 0	; switch fets on disabled
@@ -442,6 +442,7 @@ init_no_porf:
 		rjmp	init_no_borf
 		rcall	beep_f3			; "dead cellphone"
 		rcall	beep_f1
+		sbr	flags0, (1<<NO_CALIBRATION)
 		rjmp	control_start
 init_no_borf:
 		sbrs	i_sreg, EXTRF		; External reset
@@ -905,6 +906,8 @@ evaluate_rc_init:
 	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
 		ldi	YL, low(puls_high_l)	; Start with high pulse calibration
 		ldi	YH, high(puls_high_l)
+		sbrc	flags0, NO_CALIBRATION	; Is it safe to calibrate now?
+		rjmp	evaluate_rc_puls
 		rjmp	rc_prog1
 rc_prog0:	rcall	wait240ms		; Wait for stick movement to settle
 	; Collect average of throttle input pulse length
