@@ -276,7 +276,7 @@ temperature.
 With the propellers removed and the source (radio, servo tester, or flight
 control board) set to full throttle, power up the ESC and wait for a
 single beep after the typical rising initialization beeps. This indicates
-the high pulse length has been saved to RAM. Move the stick to or knob
+the high pulse length has been saved to RAM. Move the stick or knob to
 the lowest setting, and wait for two beeps. This indicates that the low
 pulse length has been saved to RAM.
 
@@ -301,3 +301,51 @@ and rc_prog5.
 There is currently no way to reset (remove) the calibration other than by
 clearing the EEPROM (or reflashing without EESAVE set). This may be
 implemented in the future by some basic stick programming feature.
+
+NOTE: As of 2012-03-15, throttle calibration is disabled when a brown-out
+reset is detected. I accidentally calibrated an ESC when testing with a
+NiCd pack. The pack could not supply enough current, resulting in a
+brown-out reset of all ESCs, excluding the flight controller. I did not
+lower the throttle in time, resulting in one ESC getting a stable enough
+signal to store a new calibration. When intentionally calibrating, be
+sure that you cleanly connect the power. If you don't hear the rising
+beeps, remove the power for a few seconds to allow the capacitors to
+discharge, then try again.
+
+Troubleshooting
+---------------
+
+There are 4 main beep frequencies used at different intervals and lengths
+to signal the various operation and fault states.
+
+During boot, the MCUCSR register is checked to see the reason for reset.
+For exact behaviour, see near "Check reset cause" in tgy.asm. Here are the
+expected beep sequences:
+
+f1 f2 f3: Regular startup with nothing special detected
+
+f3 f1: Voltage brown-out bit was set (MCU voltage dropped below 2.7V/4.0V)
+
+f4: External reset (via the reset pin, as in after programming)
+
+looping f1 f1 f3 f3: Watchdog reset (previous execution locked up)
+
+looping beeps (8) of f2 or f4: Unknown (beeps out all MCUCSR bits, LSF)
+
+Once a valid input source is found and receiving idle throttle, f4 f4 f4
+(a long f4 beep) indicates that the ESC is armed and will start the motor
+when throttle goes non-zero. If you are unable to start the motor and are
+not hearing the forth, long beep, try lowering the throttle trim, or
+raise it all the way to start throttle calibration (above).
+
+If the motor is spinning, and no throttle command is received for about 1
+second, f3 f2 is beeped and the ESC returns to armed idle, waiting for a
+valid signal. There is no beep if the motor is already stopped, however.
+
+The various beep frequencies use different FET combinations (rather than
+all FETs at the same time) to try to help diagnose boards with failed
+FETs or possible incorrect firmware pin configuration (build target). If
+you hear only one or two of the usual three power-up beeps, and the board
+worked previously, it is likely that one of the FETs has burned out. The
+ESC may still start and run the motor like this, but the motor will sound
+bad, and power and efficiency will be reduced.
