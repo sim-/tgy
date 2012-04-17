@@ -62,6 +62,8 @@ Tested boards by target:
 - tp:
     - Original TowerPro 17A, 25A
     - Hobby King SS models without "-HW" in part number
+- tp_i2c:
+    - Above modified for I2C input (old ADC4 routed to ADC1)
 - tgy (these boards typically have no external resonator):
     - Original TowerPro 18A
     - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (Hobbywing OEM)

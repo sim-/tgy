@@ -76,9 +76,9 @@
 ; The following only works with avra or avrasm2.
 ; For avrasm32, just comment out all but the include you need.
 .if defined(afro_esc)
-.include "afro.inc"		; AfroESC (ICP PWM)
+.include "afro.inc"		; AfroESC (ICP PWM, I2C, UART)
 .elif defined(afro2_esc)
-.include "afro2.inc"		; AfroESC 2 (ICP PWM)
+.include "afro2.inc"		; AfroESC 2 (ICP PWM, I2C, UART)
 .elif defined(birdie70a_esc)
 .include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PWM)
 .elif defined(bs_esc)
@@ -97,6 +97,8 @@
 .include "rct50a.inc"		; RCTimer 50A with all nFETs (INT0 PWM)
 .elif defined(tp_esc)
 .include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PWM)
+.elif defined(tp_i2c_esc)
+.include "tp_i2c.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (I2C)
 .elif defined(tp_nfet_esc)
 .include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" (INT0 PWM)
 .elif defined(tgy6a_esc)
