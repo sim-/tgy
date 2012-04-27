@@ -360,8 +360,8 @@ reset:		clr	r0
 		out	SREG, r0		; Clear interrupts and flags
 
 	; Set up stack
-		ldi	ZH, high(RAMEND+1)
-		ldi	ZL, low(RAMEND+1)
+		ldi	ZH, high(RAMEND)
+		ldi	ZL, low(RAMEND)
 		out	SPH, ZH
 		out	SPL, ZL
 	; Clear RAM and all registers
