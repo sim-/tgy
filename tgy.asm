@@ -87,6 +87,8 @@
 .include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PWM)
 .elif defined(bs40a_esc)
 .include "bs40a.inc"		; HobbyKing BlueSeries / Mystery 40A (INT0 PWM)
+.elif defined(dlu40a_esc)
+.include "dlu40a.inc"		; Pulso Advance Plus 40A DLU40A inverted-PWM-opto (INT0 PWM)
 .elif defined(hk200a_esc)
 .include "hk200a.inc"		; Hobbyking SS Series 190-200A with all nFETs (INT0 PWM)
 .elif defined(rb50a_esc)
@@ -580,7 +582,11 @@ rcp_int:
 ;-----bko-----------------------------------------------------------------
 		in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
+		.if USE_INT0 == 1
 		sbis	PIND, rcp_in		; evaluate edge of this interrupt
+		.else
+		sbic	PIND, rcp_in		; inverted signalling
+		.endif
 		.endif
 		rjmp	falling_edge		; bit is clear = falling edge
 rising_edge:					; Flags not saved here!

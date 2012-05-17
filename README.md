@@ -50,6 +50,8 @@ Tested boards by target:
     - Hobby King 30A (F-30A)
 - bs40a:
     - Hobby King BlueSeries 40A (and _some_ Mystery 40A boards)
+- dlu40a:
+    - Pulso Advance Plus DLU40A with opto-isolated inverted PWM input
 - hk200a:
     - Hobby King SS Series 190-200A (HK-SS200ALV)
 - rb50a.hex

@@ -4,7 +4,7 @@ build: tgy.hex
 	avra --define $(patsubst %.hex,%_esc,$@) $<
 	$(if $(patsubst tgy.hex,,$@),mv -f tgy.hex $@)
 
-ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex hk200a.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
 
 all: $(ALL_TARGETS)
 all_targets: all
