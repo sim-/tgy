@@ -20,10 +20,9 @@ Features
   where slow-start or really any significant current limiting is needed!)
 - Accepts any PWM update rate (minimum ~5microseconds PWM low time)
 - Optimized interrupt code (very low minimum PWM and reduced full
-  throttle bump
+  throttle bump)
 - Configurable board pin assignments by include file
-- Improved startup (though heavy hard drives are still a bit dodgy -
-  suggestions/patches welcome!)
+- Smooth starting in most cases
 - Forward and reverse commutation supported, including RC-car style
   reverse-neutral-forward PWM ranges, with optional braking
 
@@ -99,7 +98,7 @@ Notes
 WARNING
 -------
 Never just randomly try build targets until one works, especially not
-when directly powered from a 4S LiPo! :P Many boards have completely
+when directly powered from a LiPo! :P Many boards have completely
 inverted FET banks and different pin assignments, so toggling one pin
 could immediately fry multiple FETs.
 
@@ -120,10 +119,10 @@ hardware, and an automatic reset when the voltage comes back.
 
 If you do not have a current-limited supply, you can improvise by using 4
 AA batteries or an old NiCd pack or even a LiPo with a 12V light bulb in
-series to act as a current limiter. Also, be careful when touching the
-board, since it can be quite easy to turn on a FET gate with just your
-finger. This should be OK if you have a current-limited supply, since
-it should just reset.
+series to act as a current limiter. Be careful when touching the board,
+since it can be quite easy to turn on a FET gate with just your finger.
+This should be OK if you have a current-limited supply, since it should
+just reset.
 
 Even if the board appears to be one tested by others, make sure yours
 has the expected FET pin assignments, inversions, and sense lines! The
