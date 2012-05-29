@@ -2,19 +2,19 @@
 ;
 ;Die Benutzung der Software ist mit folgenden Bedingungen verbunden:
 ;
-;1. Da ich alles kostenlos zur Verfügung stelle, gebe ich keinerlei Garantie
-;   und übernehme auch keinerlei Haftung für die Folgen der Benutzung.
+;1. Da ich alles kostenlos zur Verfï¿½gung stelle, gebe ich keinerlei Garantie
+;   und ï¿½bernehme auch keinerlei Haftung fï¿½r die Folgen der Benutzung.
 ;
-;2. Die Software ist ausschließlich zur privaten Nutzung bestimmt. Ich
-;   habe nicht geprüft, ob bei gewerblicher Nutzung irgendwelche Patentrechte
-;   verletzt werden oder sonstige rechtliche Einschränkungen vorliegen.
+;2. Die Software ist ausschlieï¿½lich zur privaten Nutzung bestimmt. Ich
+;   habe nicht geprï¿½ft, ob bei gewerblicher Nutzung irgendwelche Patentrechte
+;   verletzt werden oder sonstige rechtliche Einschrï¿½nkungen vorliegen.
 ;
-;3. Jeder darf Änderungen vornehmen, z.B. um die Funktion seinen Bedürfnissen
-;   anzupassen oder zu erweitern. Ich würde mich freuen, wenn ich weiterhin als
+;3. Jeder darf ï¿½nderungen vornehmen, z.B. um die Funktion seinen Bedï¿½rfnissen
+;   anzupassen oder zu erweitern. Ich wï¿½rde mich freuen, wenn ich weiterhin als
 ;   Co-Autor in den Unterlagen erscheine und mir ein Link zur entprechenden Seite
 ;   (falls vorhanden) mitgeteilt wird.
 ;
-;4. Auch nach den Änderungen sollen die Software weiterhin frei sein, d.h. kostenlos bleiben.
+;4. Auch nach den ï¿½nderungen sollen die Software weiterhin frei sein, d.h. kostenlos bleiben.
 ;
 ;!! Wer mit den Nutzungbedingungen nicht einverstanden ist, darf die Software nicht nutzen !!
 ;
@@ -554,7 +554,7 @@ t1oca_int1:	sts	ocr1ax, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; timer1 overflow interrupt (happens every 4096µs)
+; timer1 overflow interrupt (happens every 4096ï¿½s)
 t1ovfl_int:	in	i_sreg, SREG
 		lds	i_temp1, tcnt1x
 		inc	i_temp1
@@ -739,7 +739,7 @@ urxc_exit:	out	SREG, i_sreg
 		reti
 	.endif
 ;-----bko-----------------------------------------------------------------
-; beeper: timer0 is set to 1µs/count
+; beeper: timer0 is set to 1ï¿½s/count
 beep_f1:	ldi	temp4, 200
 		ldi	temp2, 80
 		BpFET_on
@@ -774,11 +774,11 @@ beep_on:	out	PORTB, temp5		; Restore ON state
 		out	PORTD, temp7
 		out	TCNT0, ZH
 beep_BpCn10:	in	temp1, TCNT0
-		cpi	temp1, 2*CPU_MHZ	; 32µs on
+		cpi	temp1, 2*CPU_MHZ	; 32ï¿½s on
 		brlo	beep_BpCn10
 		all_nFETs_off temp3
 		all_pFETs_off temp3
-		ldi	temp3, CPU_MHZ		; 2040µs off
+		ldi	temp3, CPU_MHZ		; 2040ï¿½s off
 beep_BpCn12:	out	TCNT0, ZH
 		wdr
 beep_BpCn13:	in	temp1, TCNT0
@@ -1316,11 +1316,11 @@ update_timing7:	sts	zc_filter_time, temp1	; Save zero cross filter time
 		ror	YH
 		ror	YL
 
-		sts	wt_comp_scan_l, YL	; save zero-cross blanking wait time (15°)
+		sts	wt_comp_scan_l, YL	; save zero-cross blanking wait time (15ï¿½)
 		sts	wt_comp_scan_h, YH
 		sts	wt_comp_scan_x, temp5
 
-		sts	com_timing_l, YL	; use the same value for commutation timing (15°)
+		sts	com_timing_l, YL	; use the same value for commutation timing (15ï¿½)
 		sts	com_timing_h, YH
 		sts	com_timing_x, temp5
 
