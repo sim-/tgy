@@ -90,7 +90,7 @@
 .elif defined(dlu40a_esc)
 .include "dlu40a.inc"		; Pulso Advance Plus 40A DLU40A inverted-PWM-opto (INT0 PWM)
 .elif defined(hk200a_esc)
-.include "hk200a.inc"		; Hobbyking SS Series 190-200A with all nFETs (INT0 PWM)
+.include "hk200a.inc"		; HobbyKing SS Series 190-200A with all nFETs (INT0 PWM)
 .elif defined(rb50a_esc)
 .include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PWM)
 .elif defined(rb70a_esc)
@@ -711,7 +711,7 @@ i2c_ret:	out	SREG, i_sreg
 urxc_int:
 	; This is Bernhard's serial protocol implementation in the UART
 	; version here: http://home.versanet.de/~b-konze/blc_6a/blc_6a.htm
- 	; This seems to be implemented for a project described here:
+	; This seems to be implemented for a project described here:
 	; http://www.control.aau.dk/uav/reports/10gr833/10gr833_student_report.pdf
 	; The UART runs at 38400 baud, N81. Input is ignored until >= 0xf5
 	; is received, where we start counting to MOTOR_ID, at which
