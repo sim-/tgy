@@ -23,10 +23,10 @@
 ; autor: Bernhard Konze
 ; email: bernhard.konze@versanet.de
 ;--
-; Forked from "TGYP2010_416HzRCIntervalRate_PPM-Mod-only_NoCal" which removed
-; OSCCAL setting from EEPROM and tweaked some startup parameters, all which
-; have since been replaced.
-;
+; Based on upon Bernhard's "tp-18a" and others; see
+; http://home.versanet.de/~b-konze/blc_18a/blc_18a.htm
+; Copyright (C) 2004 Bernhard Konze
+; Copyright (C) 2011-2012 Simon Kirby and other contributors
 ; NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK. Always test
 ; without propellers! Please respect Bernhard Konze's license above.
 ;--
@@ -39,12 +39,12 @@
 ;
 ; WARNING: This does not check temperature or voltage ADC inputs.
 ;
-; NOTE: We do 16-bit PWM on timer2 at the full CPU clock rate, using tcnt2h
-; to simulate the high byte. An input FULL to STOP range of 800 plus a
-; MIN_DUTY of 63 (a POWER_RANGE of 863) gives 800 unique PWM steps at an
+; NOTE: We do 16-bit PWM on timer2 at full CPU clock rate resolution, using
+; tcnt2h to simulate the high byte. An input FULL to STOP range of 800 plus
+; a MIN_DUTY of 63 (a POWER_RANGE of 863) gives 800 unique PWM steps at an
 ; about 18kHz on a 16MHz CPU clock. The output frequency is slightly lower
-; than F_CPU / POWER_RANGE due to cycles used in the interrupt before
-; reloading TCNT2.
+; than F_CPU / POWER_RANGE due to cycles used in the interrupt as TCNT2 is
+; reloaded.
 ;
 ; Simon Kirby <sim@simulated.ca>
 ;
