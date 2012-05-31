@@ -96,6 +96,8 @@
 .include "dlu40a.inc"		; Pulso Advance Plus 40A DLU40A inverted-PWM-opto (INT0 PWM)
 .elif defined(hk200a_esc)
 .include "hk200a.inc"		; HobbyKing SS Series 190-200A with all nFETs (INT0 PWM)
+.elif defined(kda_esc)
+.include "kda.inc"		; Keda Model 12A - 30A (INT0 PWM)
 .elif defined(rb50a_esc)
 .include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PWM)
 .elif defined(rb70a_esc)
