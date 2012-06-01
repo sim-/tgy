@@ -1,5 +1,5 @@
 ;********************************************
-;* RedBrick 50A with all FETs on PORTD      *
+;* Red Brick 50A with all FETs on PORTD     *
 ;* Original fuses are lfuse:0xbf hfuse:0xc1 *
 ;********************************************
 
@@ -12,14 +12,14 @@
 ;*********************
 ; PORT D definitions *
 ;*********************
-.equ	CnFET		= 7	;o
-.equ	c_comp		= 6	;i common comparator input (AIN0)
-.equ	CpFET		= 5	;o
-.equ	BpFET		= 4	;o
-.equ	BnFET		= 3	;o
-.equ	rcp_in		= 2	;i r/c pulse input
-.equ	AnFET		= 1	;o
-.equ	ApFET		= 0	;o
+.equ	CnFET		= 7	;11 o
+.equ	c_comp		= 6	;10 i common comparator input (AIN0)
+.equ	CpFET		= 5	;9  o
+.equ	BpFET		= 4	;2  o
+.equ	BnFET		= 3	;1  o
+.equ	rcp_in		= 2	;32 i r/c pulse input
+.equ	AnFET		= 1	;31 o
+.equ	ApFET		= 0	;30 o
 
 .equ	INIT_PD		= 0
 .equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)+(1<<AnFET)+(1<<BnFET)+(1<<CnFET)
