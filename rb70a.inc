@@ -1,5 +1,6 @@
 ;********************************************
-;* RedBrick 70A with all FETs on PORTD      *
+;* Red Brick 70A with all FETs on PORTD     *
+;* Also Red Brick 200A black (RB200A-BTO)   *
 ;* Original fuses are lfuse:0x3f hfuse:0xc1 *
 ;********************************************
 
@@ -12,14 +13,14 @@
 ;*********************
 ; PORT D definitions *
 ;*********************
-.equ	CnFET		= 7	;o
-.equ	c_comp		= 6	;i common comparator input (AIN0)
-.equ	CpFET		= 5	;o
-.equ	BpFET		= 4	;o
-.equ	BnFET		= 3	;o
-.equ	rcp_in		= 2	;i r/c pulse input
-.equ	ApFET		= 1	;o
-.equ	AnFET		= 0	;o
+.equ	CnFET		= 7	;11 o
+.equ	c_comp		= 6	;10 i common comparator input (AIN0)
+.equ	CpFET		= 5	;9  o
+.equ	BpFET		= 4	;2  o
+.equ	BnFET		= 3	;1  o
+.equ	rcp_in		= 2	;32 i r/c pulse input
+.equ	ApFET		= 1	;31 o
+.equ	AnFET		= 0	;30 o
 
 .equ	INIT_PD		= 0
 .equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)+(1<<AnFET)+(1<<BnFET)+(1<<CnFET)
