@@ -19,35 +19,37 @@ binary_zip: $(ALL_TARGETS)
 	git archive -9 -o "$$TARGET" HEAD && \
 	zip -9 "$$TARGET" $(ALL_TARGETS) && ls -l "$$TARGET"
 
+program_tgy_%: %.hex
+	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -D -U flash:w:$<:i
+
+program_usbasp_%: %.hex
+	avrdude -c usbasp -u -p m8 -U flash:w:$<:i
+
 program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
 
 program_dapa_%: %.hex
 	avrdude -c dapa -u -p m8 -U flash:w:$<:i
 
-program_usbasp_%: %.hex
-	avrdude -c usbasp -u -p m8 -U flash:w:$<:i
-
 program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<
 
-program: program_dragon_tgy
+bootload_usbasp:
+	avrdude -c usbasp -u -p m8 -U hfuse:w:$(shell avrdude -c usbasp -u -p m8 -U hfuse:r:-:h | sed -n '/^0x/{s/.$$/a/;p}'):m
 
-program_dapa: program_dapa_tgy
+read: read_tgy
 
-program_uisp: program_uisp_tgy
+read_tgy:
+	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
-read:
+read_usbasp:
+	avrdude -c usbasp -u -p m8 -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
+
+read_dragon:
 	avrdude -c dragon_isp -p m8 -P usb -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
 read_dapa:
 	avrdude -c dapa -p m8 -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
-read_usbasp:
-	avrdude -c usbasp -u -p m8 -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
-
 read_uisp:
 	uisp -dprog=dapa --download -v of=flash.hex
-
-terminal_dapa:
-	avrdude -c dapa -p m8 -t
