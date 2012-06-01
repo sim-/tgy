@@ -54,10 +54,15 @@ Tested boards by target:
     - Pulso Advance Plus DLU40A with opto-isolated inverted PWM input
 - hk200a:
     - Hobby King SS Series 190-200A (HK-SS200ALV)
+- kda:
+    - Keda 12A rev B with inverted PWM input (30A should also work)
 - rb50a.hex
     - Hobby King Red Brick 50A (RB50-ESC)
 - rb70a.hex
     - Hobby King Red Brick 70A (RB70A)
+    - Hobby King Red Brick 200A (RB200A) TQFP black board
+- rb200a.hex
+    - Hobby King Red Brick 200A (RB200A-BTO) MLF green board
 - rct50a:
     - RCTimer 50A
 - tp:
