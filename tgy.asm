@@ -1975,7 +1975,7 @@ com1com6:	; An on, Cn off
 ; even to an armed ESC, as long as the low end has not been calibrated
 ; or set to start at pulses shorter than the linker timing.
 ;
-; All transmissions have a leader of three 0xff bytes (last bit is 0).
+; All transmissions have a leader of three 0xff bytes plus one 0-bit.
 ; Bit encoding starts at the least significant bit and is 8 bits wide.
 ; 1-bits are encoded as 64.0us high, 72.8us low (135.8us total).
 ; 0-bits are encoded as 27.8us high, 34.5us low, 34.4us high, 37.9 low
@@ -1984,7 +1984,7 @@ com1com6:	; An on, Cn off
 ; The last 0-bit low time is 32.6us instead of 37.9us, for some reason.
 ;
 ; We always learn the actual timing from the host's leader. It seems to
-; be possible to respond a faster or slower, but faster will cause drops
+; be possible to respond faster or slower, but faster will cause drops
 ; between the host and its serial-to-USB conversion at 9600baud. It does
 ; seem to work to use an average of high and low times as the actual bit
 ; timing, but since it doesn't quite fit in one byte at clk/8 at 16MHz,
@@ -2154,7 +2154,7 @@ boot_rx_no_tx:	sbic	PIND, rcp_in
 		out	TIFR, r20
 boot_rx_time2:	in	r14, TIFR
 		sbrc	r14, TOV2
-boot_exit:	rjmp	0x0			; Low too long -- exit boot loader
+boot_exit:	rjmp	FLASHEND + 1		; Low too long -- exit boot loader
 		sbis	PIND, rcp_in		; Loop whlle low
 		rjmp	boot_rx_time2
 		out	TCNT2, r16
@@ -2169,13 +2169,13 @@ boot_rx_time3:	in	r14, TIFR
 		out	TIFR, r20		; Start measuring low time
 boot_rx_time4:	in	r14, TIFR
 		sbrc	r14, TOV2
-		rjmp	0x0			; Low too long, exit boot loader
+		rjmp	FLASHEND + 1		; Low too long, exit boot loader
 		sbis	PIND, rcp_in		; Loop whlle low, waiting for high edge
 		rjmp	boot_rx_time4
 		in	r2, TCNT2		; Save learned low time
 		mov	r0, r2
 		add	r0, r3
-	; C:r0 now contains the number of timer0 ticks for one bit.
+	; C:r0 now contains the number of timer2 ticks for one bit.
 	; 7/8ths of this should be just enough to see two high to
 	; low transitions for 0-bits, or one high-to-low for 1-bits.
 	; Subtract 1/8th to get a time at which we check the edge
@@ -2198,7 +2198,7 @@ boot_rx:	out	TCNT2, r8
 		out	TIFR, r20
 boot_rx0:	in	r14, TIFR
 		sbrc	r14, TOV2
-		rjmp	0x0			; Low too long, exit boot loader
+		rjmp	FLASHEND + 1		; Low too long, exit boot loader
 		sbis	PIND, rcp_in
 		rjmp	boot_rx0
 		out	TCNT2, r8		; Count falling edges for 75% of one bit time
