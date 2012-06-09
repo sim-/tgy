@@ -90,7 +90,7 @@ Notes
   are MOSI, MISO, SCLK, GND, VCC, and RESET. If it has 4 pads, it is
   probably a newer SiLabs-based one, for which this code will not work.
   (Except HK_261000001 which has 4 pads but has an AVR.)
-- I build and maintain this in Linux with avra (1.3.0 or newer). Patches
+- I build and maintain this in Linux with AVRA (1.3.0 or newer). Patches
   welcome for AVR Studio APS files, etc.
 - The TowerPro/Turnigy Plush type boards typically do not come with
   external oscillators, which means their frequency drifts a bit with
@@ -102,12 +102,29 @@ Notes
   desired on multi-rotor platforms; however, people still want to use
   this on planes, cars, boats, etc., so I suppose I'll add it.
 
+Building from Source
+--------------------
+AVRA 1.3.0 or newer or avrasm2, part of the AVR Tools, should assemble
+this source. AVRA should also build on a Mac. "make all" will emit a
+.hex file for every build target; "make binary_zip" will make a release
+.zip file. There are some other make targets for programming.
+
+In AVR Studio, the Makefile is not supported, and just loading tgy.asm
+and attempting to build it will not define the constant indicating the
+board type / build target. You must either edit tgy.asm or add an option
+for the assembler command line to define the board symbol, unless
+building the default "tgy" board type. For example, this option should
+emit the bs_nfet target: -D bs_nfet_esc=bs_nfet_esc
+Look near the top of tgy.asm for the includes and board information.
+
 WARNING
 -------
 Never just randomly try build targets until one works, especially not
-when directly powered from a LiPo! :P Many boards have completely
-inverted FET banks and different pin assignments, so toggling one pin
-could immediately fry multiple FETs.
+when directly powered from a LiPo! :P Many boards have inverted FET
+drives and different pin assignments. Toggling one wrong pin can fry
+multiple FETs. Some boards, like the Mystery 20A ESC, may all look the
+same on the outside by have different FETs as well. Be careful and check
+your board before flashing.
 
 Installation
 ------------
