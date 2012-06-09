@@ -40,6 +40,7 @@ Tested boards by target:
     - AfroESC 2 (prototype)
 - birdie70a:
     - Hobby King Birdie 70A (BIRD-60A)
+    - Hobby King Red Brick 200A (RB200A, black board)
 - bs:
     - Hobby King 6A (HK_261000001)
     - Hobby King 10A (HK_261000002)
@@ -60,6 +61,7 @@ Tested boards by target:
     - Hobby King Red Brick 50A (RB50-ESC)
 - rb70a.hex
     - Hobby King Red Brick 70A (RB70A)
+    - Hobby King Red Brick 200A (RB200A-BTO, black board)
 - rct50a:
     - RCTimer 50A
 - tp:
