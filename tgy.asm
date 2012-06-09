@@ -102,8 +102,6 @@
 .include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PWM)
 .elif defined(rb70a_esc)
 .include "rb70a.inc"		; Red Brick 70A with all nFETs (INT0 PWM)
-.elif defined(rb200a_esc)
-.include "rb200a.inc"		; Red Brick 200A (black) with all nFETs (INT0 PWM)
 .elif defined(rct50a_esc)
 .include "rct50a.inc"		; RCTimer 50A with all nFETs (INT0 PWM)
 .elif defined(tp_esc)
