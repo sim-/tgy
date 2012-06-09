@@ -1,5 +1,6 @@
 ;********************************************
 ;* Birdie 70A with all FETs on PORTD        *
+;* Also Red Brick 200A green (RB200A)       *
 ;* Original fuses are lfuse:0xbf hfuse:0xc1 *
 ;********************************************
 
