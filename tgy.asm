@@ -171,7 +171,7 @@
 .equ	TIMING_RUN	= 0x1000 ; 1024us per commutation
 .equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
 .equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
-.equ	TIMING_MAX	= 0x0050 ; 20us per commutation
+.equ	TIMING_MAX	= 0x00e0 ; 20us per commutation
 
 .equ	timeoutSTART	= 48000 ; 48ms per commutation
 .equ	timeoutMIN	= 36000	; 36ms per commutation
@@ -1372,7 +1372,7 @@ set_com_timing_and_wait:
 		lds	YL, com_timing_l
 		lds	YH, com_timing_h
 		lds	temp5, com_timing_x
-		rcall	set_ocr1a
+set_ocr1a_wait:	rcall	set_ocr1a
 wait_OCT1_tot:	sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
 		sbrc	flags0, OCT1_PENDING
@@ -1387,6 +1387,21 @@ start_timeout_start:
 		ret
 ;-----bko-----------------------------------------------------------------
 start_timeout:
+	; 125us is the time of one 8kHz PWM cycle; wait a little more for
+	; the commutation current to demagnetize on some motors, to avoid
+	; being fooled by current still flowing in the previous coil.
+	; The trade-off here is between being able to start a motor which
+	; is already spinning and being able to start a motor with higher
+	; inductance. Even if this fails and we do get fooled, TIMING_MAX
+	; set lower than this oscillation should catch any run-away spiral
+	; up to TIMING_MAX and resolve the situation by reducing the limit
+	; (sys_control) to zero. If all else fails, reduce PWR_MIN_START.
+		ldi	YL, byte1(225 * CPU_MHZ)
+		ldi	YH, byte2(225 * CPU_MHZ)
+		ldi	temp1, byte3(225 * CPU_MHZ)
+		mov	temp5, temp1
+		rcall	set_ocr1a_wait
+
 		lds	YL, wt_OCT1_tot_l	; Load the start commutation
 		lds	YH, wt_OCT1_tot_h	; timeout into YL:YH:temp5 and
 		lds	temp5, wt_OCT1_tot_x	; subtract a "random" amount
