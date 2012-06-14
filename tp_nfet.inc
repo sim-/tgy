@@ -1,6 +1,6 @@
 ;***********************************************************
 ;* TowerPro 25A 2009+ "type 3" boards with inverted nFETs  *
-;* Phase A and B sense on ADC6, ADC7; based on tp-18a as   *
+;* Phase A and B sense on ADC5, ADC4; based on tp-18a as   *
 ;* modified by Eduardo Reginato Lavratti (agressiva)       *
 ;***********************************************************
 
