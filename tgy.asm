@@ -129,6 +129,7 @@
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
+.equ	BEACON		= 1	; Beep periodically when RC signal is lost
 
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 .equ	CPU_MHZ		= F_CPU / 1000000
@@ -1600,6 +1601,16 @@ init_startup:
 .endif
 wait_for_power_on:
 		wdr
+.if BEACON
+		tst	rc_timeout
+		brne	wait_for_power_on1
+		rcall	wait30ms
+		dec	temp4
+		brne	wait_for_power_on1
+		rcall	beep_f3
+		ldi	temp4, 80
+wait_for_power_on1:
+.endif
 		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_power_on
 		rcall	evaluate_rc
