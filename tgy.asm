@@ -168,6 +168,9 @@
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
+.equ	BRAKE_POWER	= MAX_POWER*2/3	; Brake force is exponential, so start fairly high
+.equ	BRAKE_SPEED	= 3		; Speed to reach MAX_POWER, 0 (slowest) - 8 (fastest)
+
 .equ	TIMING_MIN	= 0x8000 ; 8192us per commutation
 .equ	TIMING_RUN	= 0x1000 ; 1024us per commutation
 .equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
@@ -223,6 +226,7 @@
 	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
 	.equ	NO_CALIBRATION	= 7	; if set, disallow calibration (unsafe reset cause)
+	.equ	SET_DUTY	= 7	; if set when armed, set duty during evaluate_rc
 
 .def	flags1	= r17	; state flags
 	.equ	POWER_OFF	= 0	; switch fets on disabled
@@ -515,6 +519,46 @@ init_bitbeep2:	sbrs	nfet_on, 0
 ;
 ; The pwm_*_high entry points are only called when the particular on/off
 ; cycle is longer than 8 bits. This is tracked in tcnt2h.
+
+.if MOTOR_BRAKE
+pwm_brake_again:
+		dec	tcnt2h
+		out	SREG, i_sreg
+		reti
+
+pwm_brake_on:	in	i_sreg, SREG
+		cpse	tcnt2h, ZH
+		rjmp	pwm_brake_again
+		nFET_brake i_temp1
+		ldi	i_temp1, 0xff
+		cp	off_duty_l, i_temp1	; Check for 0 off-time
+		cpc	off_duty_h, ZH
+		breq	pwm_brake_on1
+		ldi	ZL, pwm_brake_off	; Not full on, so turn it off next
+		subi	nfet_on, 1 << BRAKE_SPEED
+		brne	pwm_brake_on1
+		neg	duty_l			; Increase duty
+		sbc	duty_h, i_temp1		; i_temp1 is 0xff aka -1
+		com	duty_l
+		com	off_duty_l		; Decrease off duty
+		sbc	off_duty_l, ZH
+		sbc	off_duty_h, ZH
+		com	off_duty_l
+pwm_brake_on1:	mov	tcnt2h, duty_h
+		out	SREG, i_sreg
+		out	TCNT2, duty_l
+		reti
+
+pwm_brake_off:	in	i_sreg, SREG
+		cpse	tcnt2h, ZH
+		rjmp	pwm_brake_again
+		ldi	ZL, pwm_brake_on
+		mov	tcnt2h, off_duty_h
+		all_nFETs_off i_temp1
+		out	SREG, i_sreg
+		out	TCNT2, off_duty_l
+		reti
+.endif
 
 pwm_on_high:
 		in	i_sreg, SREG
@@ -1069,7 +1113,9 @@ rc_not_full:	ldi	temp1, RCP_TOT		; Check rc_timeout
 		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
 		sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
+		sbrc	flags0, SET_DUTY
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
+		ret
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
 evaluate_rc_i2c:
@@ -1596,8 +1642,19 @@ i_rc_puls3:
 ;-----bko-----------------------------------------------------------------
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
+		cbr	flags0, (1<<SET_DUTY)
 .if MOTOR_BRAKE
-		nFET_brake temp1
+		ldi	YL, low(BRAKE_POWER)
+		ldi	YH, high(BRAKE_POWER)
+		ldi	temp1, low(MAX_POWER)
+		ldi	temp2, high(MAX_POWER)
+		sub	temp1, YL		; Calculate OFF duty
+		sbc	temp2, YH
+		rcall	set_new_duty_set_off
+		ldi	ZL, low(pwm_brake_off)	; Enable PWM brake mode
+		ldi	nfet_on, 0		; Abused as duty update divisor
+		ldi	temp1, T2CLK
+		out	TCCR2, temp1		; Enable PWM, cleared later by switch_power_off
 .endif
 wait_for_power_on:
 		wdr
@@ -1613,7 +1670,7 @@ wait_for_power_on1:
 .endif
 		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_power_on
-		rcall	evaluate_rc
+		rcall	evaluate_rc		; Only get rc_duty, don't set duty
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
@@ -1636,6 +1693,7 @@ FETs_off_wt:	dec	temp1
 		movw	sys_control_l, YL	; align to a timing harmonic
 
 		sts	goodies, ZH
+		sbr	flags0, (1<<SET_DUTY)
 		sbr	flags1, (1<<STARTUP)
 		ldi	temp1, 4
 		sts	timing_count, temp1
