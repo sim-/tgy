@@ -17,7 +17,7 @@ Features
   throttle jitter
 - Immediate PWM input to PWM output for best possible multicopter
   response (eg: ideal for tricopters, quadcopters, etc., but NOT where
-  where slow-start or really any significant current limiting is needed!)
+  soft start or really any significant current limiting is needed!)
 - Accepts any PWM update rate (minimum ~5microseconds PWM low time)
 - Optimized interrupt code (very low minimum PWM and reduced full
   throttle bump)
