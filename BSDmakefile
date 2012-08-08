@@ -1,6 +1,6 @@
 # This Makefile is compatible with both BSD and GNU make
 
-ASM = avra 
+ASM?= avra 
 
 .SUFFIXES: .inc .hex
 
