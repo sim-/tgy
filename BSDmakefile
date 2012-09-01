@@ -4,7 +4,11 @@ ASM?= avra
 
 .SUFFIXES: .inc .hex
 
-all: afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
+TARGET = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
+
+all: $(TARGET)
+
+$(TARGET): tgy.asm
 
 .inc.hex:
 	$(ASM) -o $@ -D $*_esc -e /dev/null -d $*.obj tgy.asm
