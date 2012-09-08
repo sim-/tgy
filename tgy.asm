@@ -219,7 +219,7 @@
 
 .def	flags0	= r16	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
-;	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
+	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
@@ -286,9 +286,6 @@ zero_wt_l:	.byte	1	; time to wait for zero-crossing while running
 zero_wt_h:	.byte	1
 zero_wt_x:	.byte	1
 zc_filter_time:	.byte	1	; number of times to check zero-crossing
-start_rcpuls_l:	.byte	1
-start_rcpuls_h:	.byte	1
-start_rcpuls_x:	.byte	1
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 timing_duty_l:	.byte	1	; duty cycle limit based on timing
@@ -350,7 +347,7 @@ eeprom_end:	.byte	1
 		ijmp		; t2ovfl_int
 		rjmp rcp_int	; icp1_int
 		rjmp t1oca_int	; t1oca_int
-		reti		; t1ocb_int
+		rjmp t1ocb_int	; t1ocb_int
 		rjmp t1ovfl_int	; t1ovfl_int
 		reti		; t0ovfl_int
 		reti		; spi_int
@@ -608,6 +605,12 @@ t1oca_int1:	sts	ocr1ax, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
+; timer output compare interrupt
+t1ocb_int:	in	i_sreg, SREG
+		cbr	flags0, (1<<OCT1B_PENDING)	; signal OCT1B passed
+		out	SREG, i_sreg
+		reti
+;-----bko-----------------------------------------------------------------
 ; timer1 overflow interrupt (happens every 4096µs)
 t1ovfl_int:	in	i_sreg, SREG
 		lds	i_temp1, tcnt1x
@@ -644,19 +647,18 @@ rcp_int:
 		.endif
 		rjmp	falling_edge		; bit is clear = falling edge
 rising_edge:					; Flags not saved here!
-		sts	start_rcpuls_l, i_temp1	; Save pulse start time
-		rcp_int_falling_edge i_temp1	; Set next int to falling edge
-		sts	start_rcpuls_h, i_temp2
-		lds	i_temp1, tcnt1x
-		sts	start_rcpuls_x, i_temp1
-		sbrc	i_temp2, 7
-		reti
-		in	i_temp2, TIFR
-		sbrs	i_temp2, TOV1
-		reti
 		in	i_sreg, SREG
-		inc	i_temp1			; Compensate for postponed tcnt1x update
-		sts	start_rcpuls_x, i_temp1
+		; Stuff this rise time plus MAX_RC_PULS into OCR1B.
+		; We use this both to save the time it went high and
+		; to get an interrupt to indicate high timeout.
+		subi	i_temp1, byte1(-MAX_RC_PULS*CPU_MHZ)
+		sbci	i_temp2, byte1(-1 - byte2(MAX_RC_PULS*CPU_MHZ))
+		out	OCR1BH, i_temp2
+		out	OCR1BL, i_temp1
+		rcp_int_falling_edge i_temp1	; Set next int to falling edge
+		ldi	i_temp1, (1<<OCF1B)	; Clear any pending interrupt
+		out	TIFR, i_temp1
+		sbr	flags0, (1<<OCT1B_PENDING)
 		out	SREG, i_sreg
 		reti
 
@@ -666,43 +668,21 @@ rcpint_fail:	cpse	rc_timeout, ZH
 
 falling_edge:
 		in	i_sreg, SREG
-		rcp_int_rising_edge XH		; Set next int to rising edge
-		lds	XH, tcnt1x		; We borrow XH and ZH (normally 0)
-		sbrc	i_temp2, 7		; as additional registers and
-		rjmp	falling_edge1		; clear them before returning.
-		in	ZH, TIFR
-		sbrc	ZH, TOV1
-		inc	XH			; Compensate for postponed tcnt1x update
-falling_edge1:	lds	ZH, start_rcpuls_l
-		sub	i_temp1, ZH
-		lds	ZH, start_rcpuls_h
-		sbc	i_temp2, ZH
-		lds	ZH, start_rcpuls_x
-		sbc	XH, ZH
-
+		sbrs	flags0, OCT1B_PENDING	; Too long high would clear OCT1B_PENDING
+		rjmp	rcpint_fail
+		movw	rx_l, i_temp1		; Guaranteed to be valid, store immediately
+		in	i_temp1, OCR1BL		; No atomic temp register used to read OCR1* registers
+		in	i_temp2, OCR1BH
+		subi	i_temp1, byte1(MAX_RC_PULS*CPU_MHZ)	; Put back to start time
+		sbci	i_temp2, byte2(MAX_RC_PULS*CPU_MHZ)
+		sub	rx_l, i_temp1		; Subtract start time from current time
+		sbc	rx_h, i_temp2
 .if byte3(MAX_RC_PULS*CPU_MHZ)
-.error "MAX_RC_PULS too high: adjust it or the pulse length checking code"
+.error "MAX_RC_PULS*CPU_MHZ too high to fit in two bytes -- adjust it or the rcp_int code"
 .endif
-		cpi	i_temp1, byte1(MAX_RC_PULS*CPU_MHZ)
-		ldi	ZH, byte2(MAX_RC_PULS*CPU_MHZ)
-		cpc	i_temp2, ZH
-		ldi	ZH, 0			; Return ZH to 0; clr clobbers flags
-		cpc	XH, ZH
-		ldi	XH, 0			; Return XH to 0
-		brsh	rcpint_fail		; throw away (too long pulse)
-
-.if 0
-		cpi	i_temp1, byte1(180*CPU_MHZ)
-		ldi	XH, byte2(180*CPU_MHZ)
-		cpc	i_temp2, XH
-		ldi	XH, 0			; Return XH to 0
-		brlo	rcpint_fail		; throw away (too short pulse)
-.endif
-
-		movw	rx_l, i_temp1
 		sbr	flags1, (1<<EVAL_RC)
-
-rcpint_exit:	out	SREG, i_sreg
+rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
+		out	SREG, i_sreg
 		reti
 	.endif
 ;-----bko-----------------------------------------------------------------
@@ -1552,9 +1532,9 @@ control_start:
 		rcall	puls_scale
 
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIFR, temp1		; clear TOIE1, OCIE1A & TOIE2
-		out	TIMSK, temp1		; enable TOIE1, OCIE1A & TOIE2 interrupts
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<TOIE2)
+		out	TIFR, temp1		; clear TOIE1, OCIE1A, OCIE1B, and TOIE2
+		out	TIMSK, temp1		; enable TOIE1, OCIE1A, OCIE1B, and TOIE2 interrupts
 
 		.if defined(HK_PROGRAM_CARD)
 	; This program card seems to send data at 1200 baud N81,
