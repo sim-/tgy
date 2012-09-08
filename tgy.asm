@@ -925,7 +925,7 @@ lsl_temp567:
 		brne	lsl_temp567
 		ret
 ;-----bko-----------------------------------------------------------------
-; Multiply temp1:temp2 by temp3:temp4 and adds high 16 bits of result to Y.
+; Multiply temp1:temp2 by temp3:temp4 and add high 16 bits of result to Y.
 ; Clobbers temp5, temp6, temp7.
 mul_y_12x34:
 		mul	temp1, temp3		; Scale raw pulse length to POWER_RANGE: 16x16->32 (bottom 16 discarded)
@@ -1588,8 +1588,8 @@ control_start:
 		in	temp1, UDR
 		in	temp1, UDR
 		in	temp1, UDR
-                sbi     UCSRA, RXC              ; clear flag
-                sbi     UCSRB, RXCIE            ; enable reception irq
+		sbi	UCSRA, RXC		; clear flag
+		sbi	UCSRB, RXCIE		; enable reception irq
 		.endif
 		.if USE_I2C
 		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
@@ -1642,7 +1642,7 @@ i_rc_puls3:
 ;-----bko-----------------------------------------------------------------
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
-		cbr	flags0, (1<<SET_DUTY)
+		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
 .if MOTOR_BRAKE
 		ldi	YL, low(BRAKE_POWER)
 		ldi	YH, high(BRAKE_POWER)
@@ -2515,7 +2515,7 @@ scmd_multi1:	st	X+, r16			; Fill return bufferwith zeroes
 		ldi	r25, 4
 		cpc	r23, r25		; Only support NumRx == 4
 		brne	scmd_multi3
-		std	Z+8, r22		; Echo bacl command
+		std	Z+8, r22		; Echo back command
 		ld	r24, Y+			; Address high
 		cpi	r24, 0
 		brne	scmd_multi3
