@@ -41,7 +41,7 @@
 ;
 ; NOTE: We do 16-bit PWM on timer2 at full CPU clock rate resolution, using
 ; tcnt2h to simulate the high byte. An input FULL to STOP range of 800 plus
-; a MIN_DUTY of 63 (a POWER_RANGE of 863) gives 800 unique PWM steps at an
+; a MIN_DUTY of 58 (a POWER_RANGE of 858) gives 800 unique PWM steps at an
 ; about 18kHz on a 16MHz CPU clock. The output frequency is slightly lower
 ; than F_CPU / POWER_RANGE due to cycles used in the interrupt as TCNT2 is
 ; reloaded.
@@ -125,6 +125,7 @@
 .equ	TIME_HALFADD	= 0	; Update half timing method
 .equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
 
+.equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
 .equ	MOTOR_BRAKE	= 0	; Enable brake
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
@@ -157,7 +158,7 @@
 .equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
 ; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
-.equ	MIN_DUTY	= 63 * CPU_MHZ / 16
+.equ	MIN_DUTY	= 58 * CPU_MHZ / 16
 
 ; Number of PWM steps (too high and PWM frequency drops into audible range)
 .equ	POWER_RANGE	= 800 * CPU_MHZ / 16 + MIN_DUTY
@@ -208,8 +209,8 @@
 .def	temp7		= r14		; really aux temporary (limited operations)
 ;.def			= r15
 
-.def	nfet_on		= r18
-.def	nfet_off	= r19
+;.def	nfet_on		= r18
+;.def	nfet_off	= r19
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r21		; interrupt temporary
 .def	temp3		= r22		; main temporary (L)
@@ -238,6 +239,11 @@
 	.equ	STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
 
+.def	flags2	= r18
+	.equ	A_FET		= 0	; if set, A FET is being PWMed
+	.equ	B_FET		= 1	; if set, B FET is being PWMed
+	.equ	C_FET		= 2	; if set, C FET is being PWMed
+	.equ	ALL_FETS	= (1<<A_FET)+(1<<B_FET)+(1<<C_FET)
 ;.def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
@@ -250,8 +256,8 @@
 
 ; here the XYZ registers are placed ( r26-r31)
 
-; XL: I/O address of PWM nFET port
-; XH: I/O address of PWM nFET port
+; XL: general temporary
+; XH: general temporary
 ; YL: general temporary
 ; YH: general temporary
 ; ZL: Next PWM interrupt vector (low)
@@ -477,15 +483,15 @@ init_no_wdrf:
 	; Unknown reset cause: Beep out all 8 bits
 	; Sometimes I can cause this by touching the oscillator.
 init_bitbeep1:	rcall	wait240ms
-		mov	nfet_on, i_sreg
-		ldi	nfet_off, 8
-init_bitbeep2:	sbrs	nfet_on, 0
+		mov	i_temp1, i_sreg
+		ldi	i_temp2, 8
+init_bitbeep2:	sbrs	i_temp1, 0
 		rcall	beep_f2
-		sbrc	nfet_on, 0
+		sbrc	i_temp1, 0
 		rcall	beep_f4
 		rcall	wait120ms
-		lsr	nfet_on
-		dec	nfet_off
+		lsr	i_temp1
+		dec	i_temp2
 		brne	init_bitbeep2
 		rjmp	init_bitbeep1		; Loop forever
 
@@ -532,7 +538,8 @@ pwm_brake_on:	in	i_sreg, SREG
 		cpc	off_duty_h, ZH
 		breq	pwm_brake_on1
 		ldi	ZL, pwm_brake_off	; Not full on, so turn it off next
-		subi	nfet_on, 1 << BRAKE_SPEED
+		ldi	i_temp2, 1 << BRAKE_SPEED
+		sub	sys_control_l, i_temp2
 		brne	pwm_brake_on1
 		neg	duty_l			; Increase duty
 		sbc	duty_h, i_temp1		; i_temp1 is 0xff aka -1
@@ -573,7 +580,20 @@ pwm_off_again:	out	SREG, i_sreg
 		reti
 
 pwm_on:
-		st	X, nfet_on
+		.if COMP_PWM
+		sbrc	flags2, A_FET
+		ApFET_off
+		sbrc	flags2, B_FET
+		BpFET_off
+		sbrc	flags2, C_FET
+		CpFET_off
+		.endif
+		sbrc	flags2, A_FET
+		AnFET_on
+		sbrc	flags2, B_FET
+		BnFET_on
+		sbrc	flags2, C_FET
+		CnFET_on
 		ldi	ZL, pwm_off
 		cpse	duty_h, ZH
 		ldi	ZL, pwm_off_high
@@ -582,12 +602,27 @@ pwm_on:
 		reti
 
 pwm_off:
+		wdr				; 1 cycle: watchdog reset
+		sbrc	flags1, FULL_POWER	; 2 cycles to skip if not full power
+		rjmp	pwm_on			; None of this off stuff if full power
 		ldi	ZL, pwm_on		; 1 cycle
 		cpse	off_duty_h, ZH		; 1 cycle if not zero, 2 if zero
 		ldi	ZL, pwm_on_high		; 1 cycle
 		mov	tcnt2h, off_duty_h	; 1 cycle
-		wdr				; 1 cycle
-		st	X, nfet_off		; 2 cycles (off at 7 cycles from entry)
+		sbrc	flags2, A_FET		; 1 cycle if not, 2 cycles if skip
+		AnFET_off			; 2 cycles (off at 10 cycles from entry)
+		sbrc	flags2, B_FET		; Offset by 2 cycles here,
+		BnFET_off			; but still equal on-time
+		sbrc	flags2, C_FET
+		CnFET_off
+		.if COMP_PWM
+		sbrc	flags2, A_FET
+		ApFET_on
+		sbrc	flags2, B_FET
+		BpFET_on
+		sbrc	flags2, C_FET
+		CpFET_on
+		.endif
 		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
 
@@ -1632,7 +1667,7 @@ init_startup:
 		sbc	temp2, YH
 		rcall	set_new_duty_set_off
 		ldi	ZL, low(pwm_brake_off)	; Enable PWM brake mode
-		ldi	nfet_on, 0		; Abused as duty update divisor
+		clr	sys_control_l		; Abused as duty update divisor
 		ldi	temp1, T2CLK
 		out	TCCR2, temp1		; Enable PWM, cleared later by switch_power_off
 .endif
@@ -1689,7 +1724,7 @@ FETs_off_wt:	dec	temp1
 		rcall	com6com1		; Set comparator phase and nFET vector
 
 		ldi	temp1, T2CLK
-		out	TCCR2, temp1		; Enable PWM (ZL and XL have been set)
+		out	TCCR2, temp1		; Enable PWM (ZL has been set)
 
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
@@ -1823,205 +1858,145 @@ wait_for_edge4:	dec	temp1			; Zero-cross has happened
 ; *** commutation utilities ***
 com1com2:	; Bp off, Ap on
 		set_comp_phase_b temp1
-		.if CnFET_port == BpFET_port
-		BpFET_off_reg nfet_on
-		BpFET_off_reg nfet_off
-		.endif
 		BpFET_off
-		sbrc	flags1, POWER_OFF
-		ret
-		.if CnFET_port == ApFET_port
-		ApFET_on_reg nfet_on
-		ApFET_on_reg nfet_off
-		.endif
+		sbrs	flags1, POWER_OFF
 		ApFET_on
 		ret
 
 com2com1:	; Bp on, Ap off
 		set_comp_phase_a temp1
-		.if CnFET_port == ApFET_port
-		ApFET_off_reg nfet_on
-		ApFET_off_reg nfet_off
-		.endif
 		ApFET_off
-		sbrc	flags1, POWER_OFF
-		ret
-		.if CnFET_port == BpFET_port
-		BpFET_on_reg nfet_on
-		BpFET_on_reg nfet_off
-		.endif
+		sbrs	flags1, POWER_OFF
 		BpFET_on
 		ret
 
 com2com3:	; Cn off, Bn on
 		set_comp_phase_c temp1
 		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<B_FET)
+		.if COMP_PWM
+		CpFET_off
+		.endif
 		in	temp1, CnFET_port
 		CnFET_off
 		in	temp2, CnFET_port
-		in	nfet_on, BnFET_port
 		cpse	temp1, temp2
 		BnFET_on
-		sbrs	flags1, POWER_OFF
-		BnFET_on_reg nfet_on
-		mov	nfet_off, nfet_on
-		sbrs	flags1, FULL_POWER
-		BnFET_off_reg nfet_off
-		ldi	XL, BnFET_port+0x20
 		sei
 		ret
 
 com3com2:	; Cn on, Bn off
 		set_comp_phase_b temp1
 		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<C_FET)
+		.if COMP_PWM
+		BpFET_off
+		.endif
 		in	temp1, BnFET_port
 		BnFET_off
 		in	temp2, BnFET_port
-		in	nfet_on, CnFET_port
 		cpse	temp1, temp2
 		CnFET_on
-		sbrs	flags1, POWER_OFF
-		CnFET_on_reg nfet_on
-		mov	nfet_off, nfet_on
-		sbrs	flags1, FULL_POWER
-		CnFET_off_reg nfet_off
-		ldi	XL, CnFET_port+0x20
 		sei
 		ret
 
 com3com4:	; Ap off, Cp on
 		set_comp_phase_a temp1
-		.if BnFET_port == ApFET_port
-		ApFET_off_reg nfet_on
-		ApFET_off_reg nfet_off
-		.endif
 		ApFET_off
-		sbrc	flags1, POWER_OFF
-		ret
-		.if BnFET_port == CpFET_port
-		CpFET_on_reg nfet_on
-		CpFET_on_reg nfet_off
-		.endif
+		sbrs	flags1, POWER_OFF
 		CpFET_on
 		ret
 
 com4com3:	; Ap on, Cp off
 		set_comp_phase_c temp1
-		.if BnFET_port == CpFET_port
-		CpFET_off_reg nfet_on
-		CpFET_off_reg nfet_off
-		.endif
 		CpFET_off
-		sbrc	flags1, POWER_OFF
-		ret
-		.if BnFET_port == ApFET_port
-		ApFET_on_reg nfet_on
-		ApFET_on_reg nfet_off
-		.endif
+		sbrs	flags1, POWER_OFF
 		ApFET_on
 		ret
 
 com4com5:	; Bn off, An on
 		set_comp_phase_b temp1
 		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<A_FET)
+		.if COMP_PWM
+		BpFET_off
+		.endif
 		in	temp1, BnFET_port
 		BnFET_off
 		in	temp2, BnFET_port
-		in	nfet_on, AnFET_port
 		cpse	temp1, temp2
 		AnFET_on
-		sbrs	flags1, POWER_OFF
-		AnFET_on_reg nfet_on
-		mov	nfet_off, nfet_on
-		sbrs	flags1, FULL_POWER
-		AnFET_off_reg nfet_off
-		ldi	XL, AnFET_port+0x20
 		sei
 		ret
 
 com5com4:	; Bn on, An off
 		set_comp_phase_a temp1
 		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<B_FET)
+		.if COMP_PWM
+		ApFET_off
+		.endif
 		in	temp1, AnFET_port
 		AnFET_off
 		in	temp2, AnFET_port
-		in	nfet_on, BnFET_port
 		cpse	temp1, temp2
 		BnFET_on
-		sbrs	flags1, POWER_OFF
-		BnFET_on_reg nfet_on
-		mov	nfet_off, nfet_on
-		sbrs	flags1, FULL_POWER
-		BnFET_off_reg nfet_off
-		ldi	XL, BnFET_port+0x20
 		sei
 		ret
 
 com5com6:	; Cp off, Bp on
 		set_comp_phase_c temp1
-		.if AnFET_port == CpFET_port
-		CpFET_off_reg nfet_on
-		CpFET_off_reg nfet_off
-		.endif
 		CpFET_off
-		sbrc	flags1, POWER_OFF
-		ret
-		.if AnFET_port == BpFET_port
-		BpFET_on_reg nfet_on
-		BpFET_on_reg nfet_off
-		.endif
+		sbrs	flags1, POWER_OFF
 		BpFET_on
 		ret
 
 com6com5:	; Cp on, Bp off
 		set_comp_phase_b temp1
-		.if AnFET_port == BpFET_port
-		BpFET_off_reg nfet_on
-		BpFET_off_reg nfet_off
-		.endif
 		BpFET_off
-		sbrc	flags1, POWER_OFF
-		ret
-		.if AnFET_port == CpFET_port
-		CpFET_on_reg nfet_on
-		CpFET_on_reg nfet_off
-		.endif
+		sbrs	flags1, POWER_OFF
 		CpFET_on
 		ret
 
 com6com1:	; An off, Cn on
 		set_comp_phase_a temp1
 		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<C_FET)
+		.if COMP_PWM
+		ApFET_off
+		.endif
 		in	temp1, AnFET_port
 		AnFET_off
 		in	temp2, AnFET_port
-		in	nfet_on, CnFET_port
 		cpse	temp1, temp2
 		CnFET_on
-		sbrs	flags1, POWER_OFF
-		CnFET_on_reg nfet_on
-		mov	nfet_off, nfet_on
-		sbrs	flags1, FULL_POWER
-		CnFET_off_reg nfet_off
-		ldi	XL, CnFET_port+0x20
 		sei
 		ret
 
 com1com6:	; An on, Cn off
 		set_comp_phase_c temp1
 		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<A_FET)
+		.if COMP_PWM
+		CpFET_off
+		.endif
 		in	temp1, CnFET_port
 		CnFET_off
 		in	temp2, CnFET_port
-		in	nfet_on, AnFET_port
 		cpse	temp1, temp2
 		AnFET_on
-		sbrs	flags1, POWER_OFF
-		AnFET_on_reg nfet_on
-		mov	nfet_off, nfet_on
-		sbrs	flags1, FULL_POWER
-		AnFET_off_reg nfet_off
-		ldi	XL, AnFET_port+0x20
 		sei
 		ret
 
