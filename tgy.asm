@@ -220,14 +220,13 @@
 
 .def	flags0	= r16	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
-;	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
+	.equ	SET_DUTY	= 1	; if set when armed, set duty during evaluate_rc
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
 	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
 	.equ	NO_CALIBRATION	= 7	; if set, disallow calibration (unsafe reset cause)
-	.equ	SET_DUTY	= 7	; if set when armed, set duty during evaluate_rc
 
 .def	flags1	= r17	; state flags
 	.equ	POWER_OFF	= 0	; switch fets on disabled
@@ -1119,8 +1118,10 @@ rc_do_scale:	ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
 		ldi	YL, byte1(MAX_POWER)
 		ldi	YH, byte2(MAX_POWER)
 rc_not_full:	ldi	temp1, RCP_TOT		; Check rc_timeout
+		sbrc	flags0, SET_DUTY
+		ldi	temp1, 2		; Shorter rc_timeout when driving
 		cp	rc_timeout, temp1
-		adc	rc_timeout, ZH		; Increment if not at RCP_TOT
+		adc	rc_timeout, ZH		; Increment rc_timeout if not at limit
 		sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrc	flags0, SET_DUTY
@@ -1653,7 +1654,7 @@ i_rc_puls3:
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
-.if MOTOR_BRAKE
+		.if MOTOR_BRAKE
 		ldi	YL, low(BRAKE_POWER)
 		ldi	YH, high(BRAKE_POWER)
 		ldi	temp1, low(MAX_POWER)
@@ -1665,19 +1666,22 @@ init_startup:
 		clr	sys_control_l		; Abused as duty update divisor
 		ldi	temp1, T2CLK
 		out	TCCR2, temp1		; Enable PWM, cleared later by switch_power_off
-.endif
+		.endif
+		.if BEACON
+		clr	temp4			; Wait 256 30ms periods before first beep
+		.endif
 wait_for_power_on:
 		wdr
-.if BEACON
+		.if BEACON
 		tst	rc_timeout
 		brne	wait_for_power_on1
 		rcall	wait30ms
 		dec	temp4
 		brne	wait_for_power_on1
 		rcall	beep_f3
-		ldi	temp4, 80
+		ldi	temp4, 80		; Beep every 256 - 80 30ms periods
 wait_for_power_on1:
-.endif
+		.endif
 		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_power_on
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
@@ -1685,9 +1689,8 @@ wait_for_power_on1:
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
 		breq	wait_for_power_on
-		ldi	temp1, RCP_TOT - 1	; allow some racing with t1ovfl_int
-		cp	rc_timeout, temp1
-		brcs	wait_for_power_on
+		tst	rc_timeout
+		breq	wait_for_power_on
 
 start_from_running:
 		rcall	switch_power_off
