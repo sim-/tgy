@@ -1215,8 +1215,8 @@ puls_find_multiplicand:
 		subi	temp3, byte1(RCP_DEADBAND * CPU_MHZ)
 		sbci	temp4, byte2(RCP_DEADBAND * CPU_MHZ)
 		.endif
-		ldi	temp1, byte1(1999)
-		ldi	temp2, byte2(1999)
+		ldi	temp1, byte1((POWER_RANGE - MIN_DUTY) * 65536 / MAX_RC_PULS / CPU_MHZ)
+		ldi	temp2, byte2((POWER_RANGE - MIN_DUTY) * 65536 / MAX_RC_PULS / CPU_MHZ)
 puls_find1:	adiw	temp1, 1
 		wdr
 		cpi	temp2, 0xff
