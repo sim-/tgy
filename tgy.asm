@@ -220,7 +220,7 @@
 
 .def	flags0	= r16	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
-	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
+;	.equ	OCT1B_PENDING	= 1	; if set, output compare interrupt B is pending
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
@@ -353,7 +353,7 @@ eeprom_end:	.byte	1
 		ijmp		; t2ovfl_int
 		rjmp rcp_int	; icp1_int
 		rjmp t1oca_int	; t1oca_int
-		rjmp t1ocb_int	; t1ocb_int
+		reti		; t1ocb_int
 		rjmp t1ovfl_int	; t1ovfl_int
 		reti		; t0ovfl_int
 		reti		; spi_int
@@ -640,12 +640,6 @@ t1oca_int1:	sts	ocr1ax, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; timer output compare interrupt
-t1ocb_int:	in	i_sreg, SREG
-		cbr	flags0, (1<<OCT1B_PENDING)	; signal OCT1B passed
-		out	SREG, i_sreg
-		reti
-;-----bko-----------------------------------------------------------------
 ; timer1 overflow interrupt (happens every 4096µs)
 t1ovfl_int:	in	i_sreg, SREG
 		lds	i_temp1, tcnt1x
@@ -671,7 +665,6 @@ rcp_int:
 		in	i_sreg, TCCR1B		; abuse i_sreg to hold value
 		sbrs	i_sreg, ICES1		; evaluate edge of this interrupt
 		.else
-;-----bko-----------------------------------------------------------------
 		in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
 		.if USE_INT0 == 1
@@ -680,8 +673,8 @@ rcp_int:
 		sbic	PIND, rcp_in		; inverted signalling
 		.endif
 		.endif
-		rjmp	falling_edge		; bit is clear = falling edge
-rising_edge:					; Flags not saved here!
+		rjmp	falling_edge
+rising_edge:
 		in	i_sreg, SREG
 		; Stuff this rise time plus MAX_RC_PULS into OCR1B.
 		; We use this both to save the time it went high and
@@ -691,20 +684,22 @@ rising_edge:					; Flags not saved here!
 		out	OCR1BH, i_temp2
 		out	OCR1BL, i_temp1
 		rcp_int_falling_edge i_temp1	; Set next int to falling edge
-		ldi	i_temp1, (1<<OCF1B)	; Clear any pending interrupt
+		ldi	i_temp1, (1<<OCF1B)	; Clear OCF1B flag
 		out	TIFR, i_temp1
-		sbr	flags0, (1<<OCT1B_PENDING)
 		out	SREG, i_sreg
 		reti
 
-rcpint_fail:	cpse	rc_timeout, ZH
+rcpint_fail:
+		in	i_sreg, SREG
+		cpse	rc_timeout, ZH
 		dec	rc_timeout
 		rjmp	rcpint_exit
 
 falling_edge:
-		in	i_sreg, SREG
-		sbrs	flags0, OCT1B_PENDING	; Too long high would clear OCT1B_PENDING
+		in	i_sreg, TIFR
+		sbrc	i_sreg, OCF1B		; Too long high would set OCF1B
 		rjmp	rcpint_fail
+		in	i_sreg, SREG
 		movw	rx_l, i_temp1		; Guaranteed to be valid, store immediately
 		in	i_temp1, OCR1BL		; No atomic temp register used to read OCR1* registers
 		in	i_temp2, OCR1BH
@@ -1567,9 +1562,9 @@ control_start:
 		rcall	puls_scale
 
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)+(1<<TOIE2)
-		out	TIFR, temp1		; clear TOIE1, OCIE1A, OCIE1B, and TOIE2
-		out	TIMSK, temp1		; enable TOIE1, OCIE1A, OCIE1B, and TOIE2 interrupts
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
+		out	TIFR, temp1		; clear TOIE1, OCIE1A, and TOIE2
+		out	TIMSK, temp1		; enable TOIE1, OCIE1A, and TOIE2 interrupts
 
 		.if defined(HK_PROGRAM_CARD)
 	; This program card seems to send data at 1200 baud N81,
