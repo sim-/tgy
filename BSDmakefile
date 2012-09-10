@@ -2,14 +2,18 @@
 
 ASM?= avra
 
+.SUFFIXES: .inc .hex
+
 ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
 
-.SUFFIXES: .inc .asm .hex
+all: $(ALL_TARGETT)
+
+$(ALL_TARGETS): tgy.asm
 
 .inc.hex:
 	test -e $*.asm || ln -s tgy.asm $*.asm
 	$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm
-	test -L && rm -f $*.asm
+	test -L $*.asm && rm -f $*.asm || true
 
 all: $(ALL_TARGETS)
 all_targets: all
