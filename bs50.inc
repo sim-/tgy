@@ -1,8 +1,8 @@
 ;***************************************************************
 ;* For HK Blue Series 50A -- the same as "bs40a" but with      *
 ;* with other pin numbers.                                     *
-;* Fuses should be set to -U lfuse:w:0x3f:m -U hfuse:w:0xc7:m  *
-;* https://github.com/sim-/tgy                                 *
+;* Fuses should be set to -U lfuse:w:0x2e:m -U hfuse:w:0xc9:m  *
+;* https://github.com/tudelft-atmos/tgy                        *
 ;***************************************************************
 
 .equ	F_CPU		= 16000000
