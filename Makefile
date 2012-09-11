@@ -4,7 +4,7 @@ build: tgy.hex
 	avra --define $(patsubst %.hex,%_esc,$@) $<
 	$(if $(patsubst tgy.hex,,$@),mv -f tgy.hex $@)
 
-ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex bs50.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
 
 all: $(ALL_TARGETS)
 all_targets: all
@@ -34,6 +34,9 @@ program_dapa_%: %.hex
 program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<
 
+program_mkii_%: %.hex
+	avrdude -c avrispmkII -P usb -u -p m8 -U flash:w:$<:i
+
 bootload_usbasp:
 	avrdude -c usbasp -u -p m8 -U hfuse:w:$(shell avrdude -c usbasp -u -p m8 -U hfuse:r:-:h | sed -n '/^0x/{s/.$$/a/;p}'):m
 
@@ -53,3 +56,7 @@ read_dapa:
 
 read_uisp:
 	uisp -dprog=dapa --download -v of=flash.hex
+
+read_mkii:
+	avrdude -c avrispmkII -P usb -u -p m8 -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
+
