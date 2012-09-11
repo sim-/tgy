@@ -121,16 +121,14 @@
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
-.equ	TIME_ACCUMULATE	= 0	; Accumulate 4 commutations timing method
-.equ	TIME_HALFADD	= 0	; Update half timing method
-.equ	TIME_QUARTERADD	= 1	; Update quarter timing method (original)
-
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
+.equ	MOTOR_ADVANCE	= 18	; Degrees of timing advance (0 - 30, 30 meaning no delay)
 .equ	MOTOR_BRAKE	= 0	; Enable brake
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
+.equ	MOTOR_DEBUG	= 0
 
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 .equ	CPU_MHZ		= F_CPU / 1000000
@@ -268,28 +266,28 @@
 .org SRAM_START
 
 orig_osccal:	.byte	1	; original OSCCAL value
-goodies:	.byte	1
+goodies:	.byte	1	; Number of rounds without timeout
+powerskip:	.byte	1	; Skip power through this number of steps
 ocr1ax:		.byte	1	; 3rd byte of OCR1A
 tcnt1x:		.byte	1	; 3rd byte of TCNT1
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
 last_tcnt1_x:	.byte	1
-timing_l:	.byte	1	; holds time of 4 commutations
-timing_h:	.byte	1
-timing_x:	.byte	1
-timing_count:	.byte	1
-wt_comp_scan_l:	.byte	1	; time from switch to comparator scan (blanking time)
-wt_comp_scan_h:	.byte	1
-wt_comp_scan_x:	.byte	1
-com_timing_l:	.byte	1	; time from zero-crossing to switch of the appropriate FET
-com_timing_h:	.byte	1
-com_timing_x:	.byte	1
+l2_tcnt1_l:	.byte	1	; last last timer1 value
+l2_tcnt1_h:	.byte	1
+l2_tcnt1_x:	.byte	1
+t_minblank_l:	.byte	1	; time from switch to comparator scan start
+t_minblank_h:	.byte	1
+t_minblank_x:	.byte	1
+t_maxblank_l: 	.byte	1	; expected ZC point - latest possible demagnetization
+t_maxblank_h: 	.byte	1
+t_maxblank_x: 	.byte	1
+t_zc_wait_l:	.byte	1	; time to wait for zero-crossing while running
+t_zc_wait_h:	.byte	1
+t_zc_wait_x:	.byte	1
 wt_OCT1_tot_l:	.byte	1	; time for each startup commutation
 wt_OCT1_tot_h:	.byte	1
 wt_OCT1_tot_x:	.byte	1
-zero_wt_l:	.byte	1	; time to wait for zero-crossing while running
-zero_wt_h:	.byte	1
-zero_wt_x:	.byte	1
 zc_filter_time:	.byte	1	; number of times to check zero-crossing
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
@@ -372,6 +370,29 @@ eeprom_defaults_w:
 	.db byte1((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2), byte2((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
 
 ;-----bko-----------------------------------------------------------------
+; Timing and motor debugging
+.macro flag_on
+	.if MOTOR_DEBUG
+		sbi	PORTB, 4
+	.endif
+.endmacro
+.macro flag_off
+	.if MOTOR_DEBUG
+		cbi	PORTB, 4
+	.endif
+.endmacro
+.macro sync_on
+	.if MOTOR_DEBUG
+		sbi	PORTB, 3
+	.endif
+.endmacro
+.macro sync_off
+	.if MOTOR_DEBUG
+		cbi	PORTB, 3
+	.endif
+.endmacro
+
+;-----bko-----------------------------------------------------------------
 ; init after reset
 
 reset:		clr	r0
@@ -401,7 +422,7 @@ clear_loop1:	cp	ZL, r0
 	; portB - all FETs off
 		ldi	temp1, INIT_PB
 		out	PORTB, temp1
-		ldi	temp1, DIR_PB
+		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4)
 		out	DDRB, temp1
 
 	; portC reads comparator inputs
@@ -598,6 +619,10 @@ pwm_on:
 		ldi	ZL, pwm_off_high
 		mov	tcnt2h, duty_h
 		out	TCNT2, duty_l
+		reti
+
+pwm_wdr:					; Just reset watchdog
+		wdr
 		reti
 
 pwm_off:
@@ -1233,108 +1258,69 @@ puls_find1:	adiw	temp1, 1
 puls_find_fail:	ret
 ;-----bko-----------------------------------------------------------------
 update_timing:
-		rcall	set_ocr1a		; Returns TCNT1L/H/X in temp1, temp2, temp3
-	; tcnt1x may not be updated until many instructions later, even though
-	; interrupts have been enabled, because the AVR always executes one
-	; non-interrupt instruction between interrupts, and several other
-	; higher-priority interrupts may (have) come up. So, we must save
-	; tcnt1x and TIFR with interrupts disabled, then do a correction.
-		sbrc	temp2, 7		; If highest bit of TCNT1H is set,
-		rjmp	update_timing1		; we assume tcnt1x must be right.
-		sbrc	temp4, TOV1		; If TOV1 is/was pending,
-		inc	temp3			; increment our copy of tcnt1x.
-update_timing1:
+		cli
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		lds	temp3, tcnt1x
+		in	temp4, TIFR
+		sei
+		cpi	temp2, 0x80		; tcnt1x is right when TCNT1h[7] set;
+		sbrc	temp4, TOV1		; otherwise, if TOV1 is/was pending,
+		adc	temp3, ZH		; increment our copy of tcnt1x.
 
-.if TIME_ACCUMULATE
-		lds	temp4, timing_count
-		cpi	temp4, 4
-		brsh	update_timing2
-		inc	temp4
-		sts	timing_count, temp4
-		ret
-update_timing2:
-.endif
-	; calculate this commutation time
-		lds	YL, last_tcnt1_l
+	; Calculate the timing from the last two zero-crossings
+		lds	YL, last_tcnt1_l	; last -> Y
 		lds	YH, last_tcnt1_h
-		lds	temp5, last_tcnt1_x
+		lds	temp7, last_tcnt1_x
 		sts	last_tcnt1_l, temp1
 		sts	last_tcnt1_h, temp2
 		sts	last_tcnt1_x, temp3
-		sub	temp1, YL
-		sbc	temp2, YH
-		sbc	temp3, temp5
+		lds	temp5, l2_tcnt1_l	; last2 -> temp5
+		lds	temp6, l2_tcnt1_h
+		lds	temp4, l2_tcnt1_x
+		sts	l2_tcnt1_l, YL
+		sts	l2_tcnt1_h, YH
+		sts	l2_tcnt1_x, temp7
 
-	; calculate next waiting times - timing(-l-h-x) holds the time of 4 commutations
+	; Cancel DC bias by starting our timing from the average of the
+	; last two zero-crossings. Commutation phases always alternate.
+	; Next start = (cur(c) - last2(a)) / 2 + last(b)
+	; -> start=(c-b+(c-a)/2)/2+b
+	;
+	;                  (c - a)
+	;         (c - b + -------)
+	;                     2
+	; start = ----------------- + b
+	;                 2
 
-.if TIME_ACCUMULATE
-	; Accumulation method: Wait for 4 commutations, and that's all.
-		movw	YL, temp1		; Copy new timing to YL:YH:temp5
-		mov	temp5, temp3
-.else
-		lds	YL, timing_l		; Load old timing into YL:YH:temp5
-		lds	YH, timing_h
-		lds	temp5, timing_x
+		sub	temp1, temp5		; c' = c - a
+		sbc	temp2, temp6
+		sbc	temp3, temp4
 
-.if TIME_HALFADD
-	; Half method: New timing is sum of half of old and twice of last commutation time
-		lsr	temp5
-		ror	YH
-		ror	YL
-		lsl	temp1
-		rol	temp2
-		rol	temp3
-		add	YL, temp1
-		adc	YH, temp2
-		adc	temp5, temp3
-.elif TIME_QUARTERADD
-	; Quarter method: Subtract quart from old timing, add new commutation time
-		lsr	temp5			; build a quater
-		ror	YH
-		ror	YL
-		lsr	temp5
-		ror	YH
-		ror	YL
-		sub	temp1, YL		; subtract old quarter from new timing
-		sbc	temp2, YH
-		sbc	temp3, temp5
-		lds	YL, timing_l
-		lds	YH, timing_h
-		lds	temp5, timing_x
-		add	YL, temp1		; add the new timing difference
-		adc	YH, temp2
-		adc	temp5, temp3
-.endif
-.endif
 	; Limit maximum RPM (fastest timing)
-		cpi	YL, byte1(TIMING_MAX*CPU_MHZ)
-		ldi	temp4, byte2(TIMING_MAX*CPU_MHZ)
-		cpc	YH, temp4
-		ldi	temp4, byte3(TIMING_MAX*CPU_MHZ)
-		cpc	temp5, temp4
-		brcc	update_timing3
+		cpi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
+		ldi	temp4, byte2(TIMING_MAX*CPU_MHZ/2)
+		cpc	temp2, temp4
+		ldi	temp4, byte3(TIMING_MAX*CPU_MHZ/2)
+		cpc	temp3, temp4
+		brcc	update_timing1
+		ldi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
+		ldi	temp2, byte2(TIMING_MAX*CPU_MHZ/2)
+		ldi	temp3, byte3(TIMING_MAX*CPU_MHZ/2)
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
-		rjmp	update_timing5
-update_timing3:
-	; Limit minimum RPM (slowest timing)
-		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ)
-		cp	temp5, temp4
-		brcs	update_timing5
-		mov	temp5, temp4
-		ldi	YH, byte2(TIMING_MIN*CPU_MHZ)
-		ldi	YL, byte1(TIMING_MIN*CPU_MHZ)
-update_timing5:
-.if TIME_ACCUMULATE
-		sts	timing_count, ZH
-.endif
-		sts	timing_l, YL		; save new timing
-		sts	timing_h, YH
-		sts	timing_x, temp5
+		rjmp	update_timing2
+update_timing1:
 
-		sts	zero_wt_l, YL		; save zero crossing timeout
-		sts	zero_wt_h, YH
-		sts	zero_wt_x, temp5
+	; Limit minimum RPM (slowest timing)
+		cpi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
+		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ/2)
+		cpc	temp3, temp4
+		brcs	update_timing2
+		ldi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
+		ldi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
+		ldi	temp1, byte1(TIMING_MIN*CPU_MHZ/2)
+update_timing2:
 
 	; Calculate a hopefully sane duty cycle limit from this timing,
 	; to prevent excessive current if high duty is requested when the
@@ -1342,74 +1328,145 @@ update_timing5:
 	; sensor. The actual current will depend on motor KV and voltage,
 	; so this is just an approximation. It would be nice if we could
 	; do this with math instead of two constants, but we need a divide.
+	; Clobbers only temp4. Fastest in case of fastest timing.
+		cpi	temp2, byte2(TIMING_RANGE2*CPU_MHZ/2)
+		ldi	temp4, byte3(TIMING_RANGE2*CPU_MHZ/2)
+		cpc	temp3, temp4
+		ldi	temp4, low(MAX_POWER)
+		sts	timing_duty_l, temp4
+		ldi	temp4, high(MAX_POWER)
+		brcs	update_timing4
+		cpi	temp2, byte2(TIMING_RANGE1*CPU_MHZ/2)
+		ldi	temp4, byte3(TIMING_RANGE1*CPU_MHZ/2)
+		cpc	temp3, temp4
+		ldi	temp4, low(PWR_MAX_RPM2)
+		sts	timing_duty_l, temp4
+		ldi	temp4, high(PWR_MAX_RPM2)
+		brcs	update_timing4
+		ldi	temp4, low(PWR_MAX_RPM1)
+		sts	timing_duty_l, temp4
+		ldi	temp4, high(PWR_MAX_RPM1)
+update_timing4:	sts	timing_duty_h, temp4
 
-		ldi	temp1, low(MAX_POWER)
-		ldi	temp2, high(MAX_POWER)
-		cpi	YH, byte2(TIMING_RANGE2*CPU_MHZ)
-		ldi	temp4, byte3(TIMING_RANGE2*CPU_MHZ)
-		cpc	temp5, temp4
-		brcs	update_timing6
-		ldi	temp1, low(PWR_MAX_RPM2)
-		ldi	temp2, high(PWR_MAX_RPM2)
-		cpi	YH, byte2(TIMING_RANGE1*CPU_MHZ)
-		ldi	temp4, byte3(TIMING_RANGE1*CPU_MHZ)
-		cpc	temp5, temp4
-		brcs	update_timing6
-		ldi	temp1, low(PWR_MAX_RPM1)
-		ldi	temp2, high(PWR_MAX_RPM1)
-update_timing6:	sts	timing_duty_l, temp1	; Save new duty limit by timing
-		sts	timing_duty_h, temp2
-
-		mov	temp1, YH		; Copy high and check extended byte
-		tst	temp5			; We work with 1/256th of timing
-		breq	update_timing7
-		ldi	temp1, 0xff
-.if TIMING_MAX*CPU_MHZ / 0xff < 3
+		mov	temp4, temp2		; Copy high and check extended byte
+		cpse	temp3, ZH		; We work with 1/256th of timing
+		ldi	temp4, 0xff
+.if TIMING_MAX*CPU_MHZ / 0x100 < 3
 .error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
 .endif
-update_timing7:	sts	zc_filter_time, temp1	; Save zero cross filter time
+		sts	zc_filter_time, temp4	; Save zero cross filter time
 
-		lsr	temp5			; shift back to timing for one commutation
-		ror	YH
-		ror	YL
-		lsr	temp5
-		ror	YH
-		ror	YL
+		lsr	temp3			; c'>>= 1 (shift to 60 degrees)
+		ror	temp2
+		ror	temp1
 
-		lsr	temp5			; a quarter is the next wait before scan
-		ror	YH
-		ror	YL
-		lsr	temp5
-		ror	YH
-		ror	YL
+		lds	temp5, last_tcnt1_l	; restore original c as a'
+		lds	temp6, last_tcnt1_h
+		lds	temp4, last_tcnt1_x
+		sub	temp5, YL		; a'-= b
+		sbc	temp6, YH
+		sbc	temp4, temp7
 
-		sts	wt_comp_scan_l, YL	; save zero-cross blanking wait time (15°)
-		sts	wt_comp_scan_h, YH
-		sts	wt_comp_scan_x, temp5
+		add	temp5, temp1		; a'+= c'
+		adc	temp6, temp2
+		adc	temp4, temp3
+		lsr	temp4			; a'>>= 1
+		ror	temp6
+		ror	temp5
+		add	YL, temp5		; b+= a' -> YL:YH:temp7 become next start
+		adc	YH, temp6
+		adc	temp7, temp4
 
-		sts	com_timing_l, YL	; use the same value for commutation timing (15°)
-		sts	com_timing_h, YH
-		sts	com_timing_x, temp5
+		movw	temp5, YL		; Copy YL:YH:temp7 to temp5
+		mov	temp4, temp7
+		add	temp5, temp1
+		adc	temp6, temp2
+		adc	temp4, temp3
+		add	temp5, temp1
+		adc	temp6, temp2
+		adc	temp4, temp3
+		sts	t_zc_wait_l, temp5	; save zero crossing timeout (120 degrees)
+		sts	t_zc_wait_h, temp6
+		sts	t_zc_wait_x, temp4
+
+		ldi	temp4, (30 - MOTOR_ADVANCE) * 256 / 60
+		rcall	update_timing_add_degrees
+		push	YL
+		push	YH
+		push	temp7
+		ldi	temp4, 13 * 256 / 60
+		rcall	update_timing_add_degrees
+		sts	t_minblank_l, YL
+		sts	t_minblank_h, YH
+		sts	t_minblank_x, temp7
+		ldi	temp4, 29 * 256 / 60
+		rcall	update_timing_add_degrees
+		sts	t_maxblank_l, YL
+		sts	t_maxblank_h, YH
+		sts	t_maxblank_x, temp7
+
+		pop	temp7
+		pop	YH
+		pop	YL
+		rcall	set_ocr1a_abs		; Set commutation timeout
 
 		sbrc	flags1, EVAL_RC
 		rjmp	evaluate_rc		; Set new duty either way
 		rjmp	set_new_duty
 ;-----bko-----------------------------------------------------------------
-calc_next_timing_and_wait:
-		sbrc	flags1, STARTUP
-		rjmp	start_timeout
-
-		lds	YL, wt_comp_scan_l	; holds wait-before-scan value
-		lds	YH, wt_comp_scan_h
-		lds	temp5, wt_comp_scan_x
-		rcall	update_timing
-
-		rcall	wait_OCT1_tot		; Wait for zero blanking completion
-
-		lds	YL, zero_wt_l		; Set OCT1 for zero-crossing timeout
-		lds	YH, zero_wt_h
-		lds	temp5, zero_wt_x
-set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
+; Multiply the 24-bit timing in temp1:temp2:temp3 by temp4 and add the top
+; 24-bits to YL:YH:temp7.
+update_timing_add_degrees:
+		mul	temp1, temp4
+		add	YL, temp6		; Discard byte 1 already
+		adc	YH, ZH
+		adc	temp7, ZH
+		mul	temp2, temp4
+		add	YL, temp5
+		adc	YH, temp6
+		adc	temp7, ZH
+		mul	temp3, temp4
+		add	YH, temp5
+		adc	temp7, temp6
+		ret
+;-----bko-----------------------------------------------------------------
+; Set OCT1_PENDING until the absolute time specified by YL:YH:temp7 passes.
+; Returns current TCNT1(L:H:X) value in temp1:temp2:temp3.
+;
+; tcnt1x may not be updated until many instructions later, even with
+; interrupts enabled, because the AVR always executes one non-interrupt
+; instruction between interrupts, and several other higher-priority
+; interrupts may (have) come up. So, we must save tcnt1x and TIFR with
+; interrupts disabled, then do a correction.
+set_ocr1a_abs:
+		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
+		out	TIMSK, temp4		; Disable OCIE1A temporarily
+		ldi	temp4, (1<<OCF1A)
+		cli
+		out	OCR1AH, YH
+		out	OCR1AL, YL
+		out	TIFR, temp4		; Clear any pending OCF1A interrupt
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		lds	temp3, tcnt1x
+		in	temp4, TIFR
+		sei
+		sbr	flags0, (1<<OCT1_PENDING)
+		cpi	temp2, 0x80		; tcnt1x is right when TCNT1h[7] set;
+		sbrc	temp4, TOV1		; otherwise, if TOV1 is/was pending,
+		adc	temp3, ZH		; increment our copy of tcnt1x.
+		sub	YL, temp1		; Check that time might have already
+		sbc	YH, temp2		; passed -- if so, clear pending flag.
+		sbc	temp7, temp3
+		sts	ocr1ax, temp7
+		brpl	set_ocr1a_abs1		; Skip set if time has passed
+		cbr	flags0, (1<<OCT1_PENDING)
+set_ocr1a_abs1:	ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
+		out	TIMSK, temp4		; Enable OCIE1A again
+		ret
+;-----bko-----------------------------------------------------------------
+; Set OCT1_PENDING until the relative time specified by YL:YH:temp7 passes.
+set_ocr1a_rel:	adiw	YL, 7			; Compensate for timer increment during in-add-out
 		ldi	temp4, (1<<OCF1A)
 		cli
 		in	temp1, TCNT1L
@@ -1419,66 +1476,16 @@ set_ocr1a:	adiw	YL, 7			; Compensate for timer increment during in-add-out
 		out	OCR1AH, YH
 		out	OCR1AL, YL
 		out	TIFR, temp4		; Clear any pending OCF1A interrupt (7 cycles from TCNT1 read)
-		sts	ocr1ax, temp5
+		sts	ocr1ax, temp7
 		sbr	flags0, (1<<OCT1_PENDING)
-		lds	temp3, tcnt1x
-		in	temp4, TIFR
-		sei				; We could use reti here, but that's
-		ret				; 4 more cycles of interrupt latency
+		sei
+		ret
 ;-----bko-----------------------------------------------------------------
-set_com_timing_and_wait:
-		lds	YL, com_timing_l
-		lds	YH, com_timing_h
-		lds	temp5, com_timing_x
-set_ocr1a_wait:	rcall	set_ocr1a
 wait_OCT1_tot:	sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
 		sbrc	flags0, OCT1_PENDING
 		rjmp	wait_OCT1_tot		; Wait for commutation time
 		ret
-;-----bko-----------------------------------------------------------------
-start_timeout_start:
-		ldi	YL, byte1(timeoutSTART*CPU_MHZ)
-		ldi	YH, byte2(timeoutSTART*CPU_MHZ)
-		ldi	temp1, byte3(timeoutSTART*CPU_MHZ)
-		mov	temp5, temp1
-		ret
-;-----bko-----------------------------------------------------------------
-start_timeout:
-	; 125us is the time of one 8kHz PWM cycle; wait a little more for
-	; the commutation current to demagnetize on some motors, to avoid
-	; being fooled by current still flowing in the previous coil.
-	; The trade-off here is between being able to start a motor which
-	; is already spinning and being able to start a motor with higher
-	; inductance. Even if this fails and we do get fooled, TIMING_MAX
-	; set lower than this oscillation should catch any run-away spiral
-	; up to TIMING_MAX and resolve the situation by reducing the limit
-	; (sys_control) to zero. If all else fails, reduce PWR_MIN_START.
-		ldi	YL, byte1(225 * CPU_MHZ)
-		ldi	YH, byte2(225 * CPU_MHZ)
-		ldi	temp1, byte3(225 * CPU_MHZ)
-		mov	temp5, temp1
-		rcall	set_ocr1a_wait
-
-		lds	YL, wt_OCT1_tot_l	; Load the start commutation
-		lds	YH, wt_OCT1_tot_h	; timeout into YL:YH:temp5 and
-		lds	temp5, wt_OCT1_tot_x	; subtract a "random" amount
-		in	temp1, TCNT0
-		andi	temp1, 0x1f
-		sub	YH, temp1
-		sbc	temp5, ZH
-		brcs	start_timeout1
-		cpi	YL, byte1(timeoutMIN*CPU_MHZ)
-		ldi	temp1, byte2(timeoutMIN*CPU_MHZ)
-		cpc	YH, temp1
-		ldi	temp1, byte3(timeoutMIN*CPU_MHZ)
-		cpc	temp5, temp1
-		brcc	start_timeout2
-start_timeout1:	rcall	start_timeout_start
-start_timeout2:	sts	wt_OCT1_tot_l, YL	; Return with YL:YH:temp5 set
-		sts	wt_OCT1_tot_h, YH	; to new wt_OCT1_tot value
-		sts	wt_OCT1_tot_x, temp5
-		rjmp	update_timing
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
@@ -1551,7 +1558,7 @@ switch_power_off:
 		out	TCCR2, ZH		; Disable PWM
 		ldi	temp1, (1<<TOV2)
 		out	TIFR, temp1		; Clear pending PWM interrupts
-		ldi	ZL, low(pwm_off)	; Set PWM interrupt vector
+		ldi	ZL, low(pwm_wdr)	; Stop PWM switching
 		all_pFETs_off temp1
 		all_nFETs_off temp1
 		ret
@@ -1697,32 +1704,19 @@ start_from_running:
 		comp_init temp1			; init comparator
 		RED_off
 
-		ldi	temp1, 27		; wait about 5mikosec
-FETs_off_wt:	dec	temp1
-		brne	FETs_off_wt
-
-		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
-		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
-		movw	sys_control_l, YL	; align to a timing harmonic
-
-		sts	goodies, ZH
+		rcall	wait_timeout		; Set sys_control (start power), STARTUP flag
 		sbr	flags0, (1<<SET_DUTY)
-		sbr	flags1, (1<<STARTUP)
-		ldi	temp1, 4
-		sts	timing_count, temp1
-		rcall	start_timeout_start
 		rcall	update_timing		; Clears POWER_OFF, sets duty, sets last_tcnt1
-		rcall	start_timeout_start
-		sts	timing_l, YL		; Reset timing to timeoutSTART
-		sts	timing_h, YH
-		sts	timing_x, temp1
-		sts	timing_count, ZH
 
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
-
+		cbr	flags2, ALL_FETS	; Disable PWM (powerskip) 6 cycles at start
+		ldi	temp1, 6		; to see if motor is running and align to it.
+		sts	powerskip, temp1
+		ldi	temp1, ENOUGH_GOODIES	; If we can start without a timeout, not need
+		sts	goodies, temp1		; for blanking. Prime goodies.
 		ldi	temp1, T2CLK
-		out	TCCR2, temp1		; Enable PWM (ZL has been set)
+		out	TCCR2, temp1		; Enable PWM (ZL has been set to pwm_wdr)
 
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
@@ -1736,16 +1730,15 @@ run_forward:	rcall	wait_for_high
 		rcall	com2com3
 		rcall	wait_for_high
 		rcall	com3com4
+		sync_on
 		rcall	wait_for_low
 		rcall	com4com5
+		sync_off
 		rcall	wait_for_high
 		rcall	com5com6
 		rcall	wait_for_low
 		rcall	com6com1
 		rjmp	run6
-
-run_to_start:	rcall	switch_power_off
-		rjmp	start_from_running
 
 run_reverse:	rcall	wait_for_low
 		rcall	com1com6
@@ -1753,32 +1746,29 @@ run_reverse:	rcall	wait_for_low
 		rcall	com6com5
 		rcall	wait_for_low
 		rcall	com5com4
+		sync_on
 		rcall	wait_for_high
 		rcall	com4com3
+		sync_off
 		rcall	wait_for_low
 		rcall	com3com2
 		rcall	wait_for_high
 		rcall	com2com1
 run6:
-		tst	rc_timeout
-		breq	restart_control
-
-.if MOTOR_BRAKE
+		.if MOTOR_BRAKE
 		; Brake immediately whenever power is off
 		sbrc	flags1, POWER_OFF
 		rjmp	run_to_brake
-.else
-		; If timing is too slow and power is off, return to init_startup
-		lds	temp1, timing_x
-		cpi	temp1, byte3(TIMING_MIN*CPU_MHZ)
+		.else
+		; If last commutation timed out and power is off, return to init_startup
+		lds	temp1, goodies
+		cpi	temp1, 0
 		sbrc	flags1, POWER_OFF
-		brsh	run_to_brake
-.endif
-		cp	sys_control_l, ZH
-		cpc	sys_control_h, ZH
-		breq	run_to_start
-
+		breq	run_to_brake
+		.endif
 		movw	YL, sys_control_l
+		adiw	YL, 0			; Test for zero
+		breq	start_from_running
 		lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
 		brcc	run6_2
@@ -1821,8 +1811,28 @@ restart_control:
 run_to_brake:	rjmp	init_startup
 
 ;-----bko-----------------------------------------------------------------
+demag_timeout:
+		ldi	ZL, low(pwm_wdr)	; Stop PWM switching
+		; Interrupts will not turn on any FETs now
+		.if COMP_PWM
+		; Turn off complementary PWM if it was on,
+		; but leave on the high side commutation FET.
+		sbrc	flags2, A_FET
+		ApFET_off
+		sbrc	flags2, B_FET
+		BpFET_off
+		sbrc	flags2, C_FET
+		CpFET_off
+		.endif
+		all_nFETs_off temp1
+		cbr	flags2, ALL_FETS
+		rjmp	wait_commutation
+;-----bko-----------------------------------------------------------------
 wait_timeout:	sts	goodies, ZH
 		sbr	flags1, (1<<STARTUP)
+		ldi	YL, low(PWR_MIN_START)	; Reduce power since this
+		ldi	YH, high(PWR_MIN_START)	; should only happen in a
+		movw	sys_control_l, YL	; motor stall situation.
 		ret
 ;-----bko-----------------------------------------------------------------
 wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
@@ -1830,28 +1840,145 @@ wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
 ;-----bko-----------------------------------------------------------------
 wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ;-----bko-----------------------------------------------------------------
-wait_for_edge:	rcall	calc_next_timing_and_wait
-		lds	temp1, zc_filter_time
-wait_for_edge2:	lds	temp2, zc_filter_time
-wait_for_edge3:	sbrs	flags0, OCT1_PENDING
+; Here we wait for the zero-crossing on the undriven phase to synchronize
+; with the motor timing. The voltage of the undriven phase should cross
+; the average of all three phases at half of the way into the 60-degree
+; commutation period.
+;
+; The voltage on the undriven phase is affected by noise from PWM (mutual
+; inductance) and also the demagnetization from the previous commutation
+; step. Demagnetization time is proportional to motor current, and in
+; extreme cases, may take more than 30 degrees to complete. To avoid
+; sensing erroneous early zero-crossings in this case and losing motor
+; synchronization, we check that demagnetization has finished after the
+; minimum blanking period. If we do not see it by the maximum blanking
+; period (about 30 degrees since we commutated last), we turn off power
+; and ontinue as if the ZC had occurred. PWM is enabled again after the
+; next commutation step.
+;
+; Normally, we wait for the blanking window to pass, look for the
+; comparator to swing as the sign of the zero crossing, wait for the
+; timing delay, and then commutate.
+;
+; Simulations show that the demagnetization period shows up on the phase
+; being monitored by the comparator with no PWM-induced noise. As such,
+; we do not need any filtering. However, it may not show up immediately
+; due to filtering capacitors, hence the initial blind minimum blanking
+; period.
+;
+wait_for_edge:
+		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
+		tst	temp1
+		breq	wait_pwm_enable
+		dec	temp1
+		sts	powerskip, temp1
+		sbrs	flags1, STARTUP
+		rjmp	wait_for_blank
+	; Special case when powerskipping during start: skip blanking, use
+	; timeoutMIN, skip demag check, and use a short zc_filter_time.
+	; The idea here is to learn the timing of a possibly-spinning motor
+	; while not driving it, which would induce demagnetization and PWM
+	; noise that we cannot ignore until we konw the timing. If this
+	; times out, we enable power and start as normal.
+		ldi	YL, byte1(timeoutMIN*CPU_MHZ)
+		ldi	YH, byte2(timeoutMIN*CPU_MHZ)
+		ldi	temp4, byte3(timeoutMIN*CPU_MHZ)
+		mov	temp7, temp4
+		rcall	set_ocr1a_rel
+		ldi	XL, 4
+		mov	XH, XL
+		rjmp	wait_for_edge2
+wait_pwm_enable:
+		cpi	ZL, low(pwm_wdr)
+		brne	wait_pwm_running
+		ldi	ZL, low(pwm_off)	; Re-enable PWM if disabled for powerskip or sync loss avoidance
+wait_pwm_running:
+		sbrs	flags1, STARTUP
+		rjmp	wait_for_blank
+	; Powered startup: skip blanking and commutation wait,
+	; and use a fixed zc_filter_time until goodies reaches
+	; ENOUGH_GOODIES and we clear the STARTUP flag.
+		lds	YL, wt_OCT1_tot_l	; Load the start commutation
+		lds	YH, wt_OCT1_tot_h	; timeout into YL:YH:temp7 and
+		lds	temp7, wt_OCT1_tot_x	; subtract a "random" amount
+		in	temp4, TCNT0
+		andi	temp4, 0x1f
+		sub	YH, temp4
+		sbc	temp7, ZH
+		brcs	start_timeout1
+		cpi	YL, byte1(timeoutMIN*CPU_MHZ)
+		ldi	temp4, byte2(timeoutMIN*CPU_MHZ)
+		cpc	YH, temp4
+		ldi	temp4, byte3(timeoutMIN*CPU_MHZ)
+		cpc	temp7, temp4
+		brcc	start_timeout2
+start_timeout1:	ldi	YL, byte1(timeoutSTART*CPU_MHZ)
+		ldi	YH, byte2(timeoutSTART*CPU_MHZ)
+		ldi	temp4, byte3(timeoutSTART*CPU_MHZ)
+		mov	temp7, temp4
+start_timeout2:	sts	wt_OCT1_tot_l, YL
+		sts	wt_OCT1_tot_h, YH
+		sts	wt_OCT1_tot_x, temp7
+		rcall	set_ocr1a_rel
+		ldi	temp4, 0xff		; Force full zc_filter_time.
+		sts	zc_filter_time, temp4
+		rjmp	wait_for_demag
+
+wait_for_blank:
+		lds	YL, t_minblank_l
+		lds	YH, t_minblank_h
+		lds	temp7, t_minblank_x
+		rcall	set_ocr1a_abs		; Wait for the blanking period
+		rcall	wait_OCT1_tot
+
+		lds	YL, t_maxblank_l
+		lds	YH, t_maxblank_h
+		lds	temp7, t_maxblank_x
+		rcall	set_ocr1a_abs		; Wait up until the expected ZC point
+
+wait_for_demag:
+		sbrs	flags0, OCT1_PENDING
+		rjmp	demag_timeout
+		sbrc	flags1, EVAL_RC
+		rcall	evaluate_rc
+		in	temp3, ACSR
+		eor	temp3, flags1
+		sbrc	temp3, ACO		; Check for opposite level (demagnetization)
+		rjmp	wait_for_demag
+
+		lds	YL, t_zc_wait_l
+		lds	YH, t_zc_wait_h
+		lds	temp7, t_zc_wait_x
+		sbrs	flags1, STARTUP
+		rcall	set_ocr1a_abs
+
+wait_for_edge1:	lds	XH, zc_filter_time
+		mov	XL, XH
+wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
+		sbrc	flags1, EVAL_RC
+		rcall	evaluate_rc
 		in	temp3, ACSR
 		eor	temp3, flags1
 		sbrc	temp3, ACO
-		rjmp	wait_for_edge4
-		cp	temp1, temp2		; Not yet crossed
-		adc	temp1, ZH		; Increment temp1 if < temp2
-		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_edge3
-		push	temp1
-		rcall	evaluate_rc
-		pop	temp1
-		rjmp	wait_for_edge2		; Restore temp2 and loop
-wait_for_edge4:	dec	temp1			; Zero-cross has happened
-		brne	wait_for_edge3		; Check again unless temp1 is zero
-		sbrs	flags1, STARTUP		; Skip commutation wait during startup
-		rjmp	set_com_timing_and_wait
+		cp	XL, XH			; Not yet crossed
+		adc	XL, ZH			; Increment if not at zc_filter
+		rjmp	wait_for_edge2
+wait_for_edge3:	dec	XL			; Zero-cross has happened
+		brne	wait_for_edge2		; Check again unless temp1 is zero
+
+wait_commutation:
+		rcall	update_timing
+		flag_on
+		sbrs	flags1, STARTUP
+		rcall	wait_OCT1_tot
+		flag_off
+		cpse	rc_timeout, ZH
 		ret
+		pop	temp1			; Throw away return address
+		pop	temp1
+		rjmp	restart_control		; Restart control immediately on RC timeout
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
 com1com2:	; Bp off, Ap on
