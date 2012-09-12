@@ -1713,10 +1713,14 @@ start_from_running:
 		comp_init temp1			; init comparator
 		RED_off
 
+		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
+		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
+		movw	sys_control_l, YL	; align to a timing harmonic
+
 		sbr	flags0, (1<<SET_DUTY)
-		; Set sys_control (start power) and STARTUP flag and call
-		; udpate_timing which calls set_new_duty which clears
-		; POWER_OFF, sets duty, and sets last_tcnt1.
+		; Set STARTUP flag and call update_timing which will set
+		; last_tcnt1 and set the duty (limited by STARTUP) and
+		; clear POWER_OFF.
 		rcall	wait_timeout
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
@@ -1785,7 +1789,7 @@ run6:
 		inc	temp1
 		sts	goodies, temp1
 		; Build up sys_control to PWR_MAX_START in steps.
-		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 3) / 4
+		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 7) / 8
 		ldi	temp1, low(PWR_MAX_START)
 		ldi	temp2, high(PWR_MAX_START)
 		rjmp	run6_3
@@ -1839,9 +1843,6 @@ demag_timeout:
 ;-----bko-----------------------------------------------------------------
 wait_timeout:	sts	goodies, ZH
 		sbr	flags1, (1<<STARTUP)
-		ldi	YL, low(PWR_MIN_START)	; Reduce power since this
-		ldi	YH, high(PWR_MIN_START)	; should only happen in a
-		movw	sys_control_l, YL	; motor stall situation.
 		rjmp	wait_commutation	; Update timing and duty.
 ;-----bko-----------------------------------------------------------------
 wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
