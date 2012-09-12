@@ -709,8 +709,8 @@ rising_edge:
 		; Stuff this rise time plus MAX_RC_PULS into OCR1B.
 		; We use this both to save the time it went high and
 		; to get an interrupt to indicate high timeout.
-		subi	i_temp1, byte1(-MAX_RC_PULS*CPU_MHZ)
-		sbci	i_temp2, byte1(-1 - byte2(MAX_RC_PULS*CPU_MHZ))
+		subi	i_temp1, byte1(-MAX_RC_PULS * CPU_MHZ)
+		sbci	i_temp2, byte1(-byte2(MAX_RC_PULS * CPU_MHZ + 0xff))
 		out	OCR1BH, i_temp2
 		out	OCR1BL, i_temp1
 		rcp_int_falling_edge i_temp1	; Set next int to falling edge
@@ -733,8 +733,8 @@ falling_edge:
 		movw	rx_l, i_temp1		; Guaranteed to be valid, store immediately
 		in	i_temp1, OCR1BL		; No atomic temp register used to read OCR1* registers
 		in	i_temp2, OCR1BH
-		subi	i_temp1, byte1(MAX_RC_PULS*CPU_MHZ)	; Put back to start time
-		sbci	i_temp2, byte2(MAX_RC_PULS*CPU_MHZ)
+		subi	i_temp1, byte1(MAX_RC_PULS * CPU_MHZ)	; Put back to start time
+		sbci	i_temp2, byte2(MAX_RC_PULS * CPU_MHZ)
 		sub	rx_l, i_temp1		; Subtract start time from current time
 		sbc	rx_h, i_temp2
 .if byte3(MAX_RC_PULS*CPU_MHZ)
@@ -1054,7 +1054,7 @@ rc_prog6:	wdr
 	; Check for excessive drift with an emulated signed comparison -
 	; add the drift amount to offset the negative side to 0
 		subi	temp1, byte1(-MAX_DRIFT_PULS * CPU_MHZ)
-		sbci	temp2, -1 - byte2(MAX_DRIFT_PULS * CPU_MHZ)
+		sbci	temp2, byte1(-byte2(MAX_DRIFT_PULS * CPU_MHZ + 0xff))
 	; ..then subtract the 2*drift + 1 -- carry will be clear if
 	; we drifted outside of the range
 		subi	temp1, byte1(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
@@ -1797,7 +1797,7 @@ run6_2:		cbr	flags1, (1<<STARTUP)
 		.equ SLOW_THROTTLE_STEPS = (POWER_RANGE + 31) / 32
 		.if SLOW_THROTTLE_STEPS > 63
 		subi	YL, byte1(-SLOW_THROTTLE_STEPS)
-		sbci	YH, -1 - byte2(SLOW_THROTTLE_STEPS)
+		sbci	YH, byte1(-byte2(SLOW_THROTTLE_STEPS + 0xff))
 		.else
 		adiw	YL, SLOW_THROTTLE_STEPS
 		.endif
