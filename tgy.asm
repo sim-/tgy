@@ -106,6 +106,8 @@
 #include "rct50a.inc"		; RCTimer 50A with all nFETs (INT0 PWM)
 #elif defined(tp_esc)
 #include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PWM)
+#elif defined(tp_8khz_esc)
+#include "tp_8khz.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PWM) at 8kHz PWM
 #elif defined(tp_i2c_esc)
 #include "tp_i2c.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (I2C)
 #elif defined(tp_nfet_esc)
@@ -156,10 +158,14 @@
 .equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
 ; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
+.if !defined(MIN_DUTY)
 .equ	MIN_DUTY	= 58 * CPU_MHZ / 16
+.endif
 
 ; Number of PWM steps (too high and PWM frequency drops into audible range)
+.if !defined(POWER_RANGE)
 .equ	POWER_RANGE	= 800 * CPU_MHZ / 16 + MIN_DUTY
+.endif
 
 .equ	MAX_POWER	= (POWER_RANGE-1)
 .equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit while starting (to start)
@@ -1529,7 +1535,9 @@ set_new_duty13:
 		cpc	YH, ZH
 		breq	set_new_duty_zero
 		; Not off and not full power
-		; Halve PWM frequency when starting (helps hard drive startup)
+		; At higher PWM frequencies, halve the frequency
+		; when starting -- this helps hard drive startup
+		.if POWER_RANGE < 1000 * CPU_MHZ / 16
 		lds	temp3, goodies
 		cpi	temp3, ENOUGH_GOODIES
 		brcc	set_new_duty_set
@@ -1537,6 +1545,7 @@ set_new_duty13:
 		rol	temp2
 		lsl	YL
 		rol	YH
+		.endif
 set_new_duty_set:
 		cbr	flags1, (1<<POWER_OFF)
 set_new_duty_set_off:
