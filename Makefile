@@ -1,18 +1,24 @@
-build: tgy.hex
+# This Makefile is compatible with both BSD and GNU make
 
-%.hex: tgy.asm $(wildcard *.inc)
-	avra --define $(patsubst %.hex,%_esc,$@) $<
-	$(if $(patsubst tgy.hex,,$@),mv -f tgy.hex $@)
+ASM?= avra
+
+.SUFFIXES: .inc .hex
 
 ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
 
 all: $(ALL_TARGETS)
-all_targets: all
+
+$(ALL_TARGETS): tgy.asm
+
+.inc.hex:
+	test -e $*.asm || ln -s tgy.asm $*.asm
+	$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm
+	test -L $*.asm && rm -f $*.asm || true
 
 test: all
 
 clean:
-	rm -f $(ALL_TARGETS)
+	-rm -f $(ALL_TARGETS) *.obj *.eep.hex *.eeprom
 
 binary_zip: $(ALL_TARGETS)
 	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`.zip"; \
@@ -35,7 +41,7 @@ program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<
 
 bootload_usbasp:
-	avrdude -c usbasp -u -p m8 -U hfuse:w:$(shell avrdude -c usbasp -u -p m8 -U hfuse:r:-:h | sed -n '/^0x/{s/.$$/a/;p}'):m
+	avrdude -c usbasp -u -p m8 -U hfuse:w:`avrdude -c usbasp -u -p m8 -U hfuse:r:-:h | sed -n '/^0x/{s/.$$/a/;p}'`:m
 
 read: read_tgy
 
