@@ -1713,10 +1713,11 @@ start_from_running:
 		comp_init temp1			; init comparator
 		RED_off
 
-		rcall	wait_timeout		; Set sys_control (start power), STARTUP flag
 		sbr	flags0, (1<<SET_DUTY)
-		rcall	update_timing		; Clears POWER_OFF, sets duty, sets last_tcnt1
-
+		; Set sys_control (start power) and STARTUP flag and call
+		; udpate_timing which calls set_new_duty which clears
+		; POWER_OFF, sets duty, and sets last_tcnt1.
+		rcall	wait_timeout
 		rcall	com5com6		; Enable pFET if not POWER_OFF
 		rcall	com6com1		; Set comparator phase and nFET vector
 		cbr	flags2, ALL_FETS	; Disable PWM (powerskip) 6 cycles at start
@@ -1834,7 +1835,6 @@ demag_timeout:
 		CpFET_off
 		.endif
 		all_nFETs_off temp1
-		cbr	flags2, ALL_FETS
 		rjmp	wait_commutation
 ;-----bko-----------------------------------------------------------------
 wait_timeout:	sts	goodies, ZH
@@ -1842,7 +1842,7 @@ wait_timeout:	sts	goodies, ZH
 		ldi	YL, low(PWR_MIN_START)	; Reduce power since this
 		ldi	YH, high(PWR_MIN_START)	; should only happen in a
 		movw	sys_control_l, YL	; motor stall situation.
-		ret
+		rjmp	wait_commutation	; Update timing and duty.
 ;-----bko-----------------------------------------------------------------
 wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
 		rjmp	wait_for_edge
