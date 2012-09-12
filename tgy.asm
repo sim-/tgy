@@ -1953,6 +1953,9 @@ wait_for_demag:
 		rcall	set_ocr1a_abs
 
 wait_for_edge1:	lds	XH, zc_filter_time
+		.if CPU_MHZ < 16
+		lsr	XH
+		.endif
 		mov	XL, XH
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
