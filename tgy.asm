@@ -1739,14 +1739,14 @@ run1:		sbrc	flags1, REVERSE
 
 run_forward:	rcall	wait_for_high
 		rcall	com1com2
+		sync_off
 		rcall	wait_for_low
 		rcall	com2com3
 		rcall	wait_for_high
 		rcall	com3com4
-		sync_on
 		rcall	wait_for_low
 		rcall	com4com5
-		sync_off
+		sync_on
 		rcall	wait_for_high
 		rcall	com5com6
 		rcall	wait_for_low
@@ -1755,11 +1755,11 @@ run_forward:	rcall	wait_for_high
 
 run_reverse:	rcall	wait_for_low
 		rcall	com1com6
+		sync_on
 		rcall	wait_for_high
 		rcall	com6com5
 		rcall	wait_for_low
 		rcall	com5com4
-		sync_on
 		rcall	wait_for_high
 		rcall	com4com3
 		sync_off
@@ -1979,8 +1979,8 @@ wait_for_edge3:	dec	XL			; Zero-cross has happened
 		brne	wait_for_edge2		; Check again unless temp1 is zero
 
 wait_commutation:
-		rcall	update_timing
 		flag_on
+		rcall	update_timing
 		sbrs	flags1, STARTUP
 		rcall	wait_OCT1_tot
 		flag_off
