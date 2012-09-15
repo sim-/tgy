@@ -1788,7 +1788,7 @@ run6:
 		inc	temp1
 		sts	goodies, temp1
 		; Build up sys_control to PWR_MAX_START in steps.
-		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 7) / 8
+		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 3) / 4
 		ldi	temp1, low(PWR_MAX_START)
 		ldi	temp2, high(PWR_MAX_START)
 		rjmp	run6_3
