@@ -1896,8 +1896,7 @@ wait_for_edge:
 		mov	temp7, temp4
 		rcall	set_ocr1a_rel
 		ldi	XL, 4
-		mov	XH, XL
-		rjmp	wait_for_edge2
+		rjmp	wait_for_edge1
 wait_pwm_enable:
 		cpi	ZL, low(pwm_wdr)
 		brne	wait_pwm_running
@@ -1930,9 +1929,8 @@ start_timeout2:	sts	wt_OCT1_tot_l, YL
 		sts	wt_OCT1_tot_h, YH
 		sts	wt_OCT1_tot_x, temp7
 		rcall	set_ocr1a_rel
-		ldi	temp4, 0xff		; Force full zc_filter_time.
-		sts	zc_filter_time, temp4
-		rjmp	wait_for_demag
+		ldi	XL, 0xff		; Force full zc_filter_time.
+		rjmp	wait_for_edge1
 
 wait_for_blank:
 		lds	YL, t_minblank_l
@@ -1962,11 +1960,12 @@ wait_for_demag:
 		sbrs	flags1, STARTUP
 		rcall	set_ocr1a_abs
 
-wait_for_edge1:	lds	XH, zc_filter_time
-		.if CPU_MHZ < 16
-		lsr	XH
+		lds	XL, zc_filter_time
+wait_for_edge1:
+		.if CPU_MHZ < 12
+		lsr	XL
 		.endif
-		mov	XL, XH
+		mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
