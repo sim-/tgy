@@ -1531,8 +1531,7 @@ set_new_duty13:
 		sbc	temp2, YH
 		breq	set_new_duty_full
 		cbr	flags1, (1<<FULL_POWER)
-		cp	YL, ZH
-		cpc	YH, ZH
+		adiw	YL, 0
 		breq	set_new_duty_zero
 		; Not off and not full power
 		; At higher PWM frequencies, halve the frequency
@@ -1878,9 +1877,8 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ;
 wait_for_edge:
 		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
-		tst	temp1
-		breq	wait_pwm_enable
-		dec	temp1
+		sbci	temp1, 1
+		brcs	wait_pwm_enable
 		sts	powerskip, temp1
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
