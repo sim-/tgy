@@ -8,7 +8,7 @@ ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu4
 
 all: $(ALL_TARGETS)
 
-$(ALL_TARGETS): tgy.asm
+$(ALL_TARGETS): tgy.asm boot.inc
 
 .inc.hex:
 	test -e $*.asm || ln -s tgy.asm $*.asm
