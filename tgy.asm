@@ -1864,7 +1864,7 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ;
 wait_for_edge:
 		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
-		sbci	temp1, 1
+		subi	temp1, 1
 		brcs	wait_pwm_enable
 		sts	powerskip, temp1
 		sbrs	flags1, STARTUP
