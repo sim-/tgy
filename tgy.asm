@@ -1360,6 +1360,9 @@ update_timing4:	sts	timing_duty_h, temp4
 .if TIMING_MAX*CPU_MHZ / 0x100 < 3
 .error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
 .endif
+.if CPU_MHZ < 12
+		lsr	temp4
+.endif
 		sts	zc_filter_time, temp4	; Save zero cross filter time
 
 		lsr	temp3			; c'>>= 1 (shift to 60 degrees)
@@ -1927,7 +1930,7 @@ start_timeout2:	sts	wt_OCT1_tot_l, YL
 		sts	wt_OCT1_tot_h, YH
 		sts	wt_OCT1_tot_x, temp7
 		rcall	set_ocr1a_rel
-		ldi	XL, 0xff		; Force full zc_filter_time.
+		ldi	XL, 0xff * CPU_MHZ / 16	; Force full zc_filter_time.
 		rjmp	wait_for_edge1
 
 wait_for_blank:
@@ -1952,18 +1955,14 @@ wait_for_demag:
 		sbrc	temp3, ACO		; Check for opposite level (demagnetization)
 		rjmp	wait_for_demag
 
-		lds	YL, t_zc_wait_l
-		lds	YH, t_zc_wait_h
-		lds	temp7, t_zc_wait_x
-		sbrs	flags1, STARTUP
-		rcall	set_ocr1a_abs
+		rcall	load_timing
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 120 degrees
 
 		lds	XL, zc_filter_time
-wait_for_edge1:
-		.if CPU_MHZ < 12
-		lsr	XL
-		.endif
-		mov	XH, XL
+wait_for_edge1:	mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
