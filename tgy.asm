@@ -282,15 +282,12 @@ last_tcnt1_x:	.byte	1
 l2_tcnt1_l:	.byte	1	; last last timer1 value
 l2_tcnt1_h:	.byte	1
 l2_tcnt1_x:	.byte	1
-t_minblank_l:	.byte	1	; time from switch to comparator scan start
-t_minblank_h:	.byte	1
-t_minblank_x:	.byte	1
-t_maxblank_l: 	.byte	1	; expected ZC point - latest possible demagnetization
-t_maxblank_h: 	.byte	1
-t_maxblank_x: 	.byte	1
-t_zc_wait_l:	.byte	1	; time to wait for zero-crossing while running
-t_zc_wait_h:	.byte	1
-t_zc_wait_x:	.byte	1
+timing_l:	.byte	1	; interval of 2 commutations
+timing_h:	.byte	1
+timing_x:	.byte	1
+com_time_l:	.byte	1	; time of last commutation
+com_time_h:	.byte	1
+com_time_x:	.byte	1
 wt_OCT1_tot_l:	.byte	1	; time for each startup commutation
 wt_OCT1_tot_h:	.byte	1
 wt_OCT1_tot_x:	.byte	1
@@ -1365,6 +1362,10 @@ update_timing4:	sts	timing_duty_h, temp4
 .endif
 		sts	zc_filter_time, temp4	; Save zero cross filter time
 
+		sts	timing_l, temp1		; Store timing (120 degrees)
+		sts	timing_h, temp2
+		sts	timing_x, temp3
+
 		lsr	temp3			; c'>>= 1 (shift to 60 degrees)
 		ror	temp2
 		ror	temp1
@@ -1382,42 +1383,16 @@ update_timing4:	sts	timing_duty_h, temp4
 		lsr	temp4			; a'>>= 1
 		ror	temp6
 		ror	temp5
-		add	YL, temp5		; b+= a' -> YL:YH:temp7 become next start
+		add	YL, temp5		; b+= a' -> YL:YH:temp7 become filtered ZC time
 		adc	YH, temp6
 		adc	temp7, temp4
 
-		movw	temp5, YL		; Copy YL:YH:temp7 to temp5
-		mov	temp4, temp7
-		add	temp5, temp1
-		adc	temp6, temp2
-		adc	temp4, temp3
-		add	temp5, temp1
-		adc	temp6, temp2
-		adc	temp4, temp3
-		sts	t_zc_wait_l, temp5	; save zero crossing timeout (120 degrees)
-		sts	t_zc_wait_h, temp6
-		sts	t_zc_wait_x, temp4
-
 		ldi	temp4, (30 - MOTOR_ADVANCE) * 256 / 60
 		rcall	update_timing_add_degrees
-		push	YL
-		push	YH
-		push	temp7
-		ldi	temp4, 13 * 256 / 60
-		rcall	update_timing_add_degrees
-		sts	t_minblank_l, YL
-		sts	t_minblank_h, YH
-		sts	t_minblank_x, temp7
-		ldi	temp4, 29 * 256 / 60
-		rcall	update_timing_add_degrees
-		sts	t_maxblank_l, YL
-		sts	t_maxblank_h, YH
-		sts	t_maxblank_x, temp7
-
-		pop	temp7
-		pop	YH
-		pop	YL
-		rcall	set_ocr1a_abs		; Set commutation timeout
+		sts	com_time_l, YL		; Store start of next commutation
+		sts	com_time_h, YH
+		sts	com_time_x, temp7
+		rcall	set_ocr1a_abs		; Set timer for start of next commutation
 
 		sbrc	flags1, EVAL_RC
 		rjmp	evaluate_rc		; Set new duty either way
@@ -1438,6 +1413,18 @@ update_timing_add_degrees:
 		add	YH, temp5
 		adc	temp7, temp6
 		ret
+load_timing:
+		lds	temp1, timing_l
+		lds	temp2, timing_h
+		lds	temp3, timing_x
+		lds	YL, com_time_l
+		lds	YH, com_time_h
+		lds	temp7, com_time_x
+		ret
+set_timing_degrees:
+		rcall	load_timing
+		rcall	update_timing_add_degrees
+		rjmp	set_ocr1a_abs
 ;-----bko-----------------------------------------------------------------
 ; Set OCT1_PENDING until the absolute time specified by YL:YH:temp7 passes.
 ; Returns current TCNT1(L:H:X) value in temp1:temp2:temp3.
@@ -1934,17 +1921,12 @@ start_timeout2:	sts	wt_OCT1_tot_l, YL
 		rjmp	wait_for_edge1
 
 wait_for_blank:
-		lds	YL, t_minblank_l
-		lds	YH, t_minblank_h
-		lds	temp7, t_minblank_x
-		rcall	set_ocr1a_abs		; Wait for the blanking period
-		rcall	wait_OCT1_tot
+		ldi	temp4, 13 * 256 / 120
+		rcall	set_timing_degrees
+		rcall	wait_OCT1_tot		; Wait for the minimum blanking period
 
-		lds	YL, t_maxblank_l
-		lds	YH, t_maxblank_h
-		lds	temp7, t_maxblank_x
-		rcall	set_ocr1a_abs		; Wait up until the expected ZC point
-
+		ldi	temp4, (13+29) * 256 / 120
+		rcall	set_timing_degrees	; Set timeout for maximum blanking period
 wait_for_demag:
 		sbrs	flags0, OCT1_PENDING
 		rjmp	demag_timeout
