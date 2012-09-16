@@ -1357,9 +1357,6 @@ update_timing4:	sts	timing_duty_h, temp4
 .if TIMING_MAX*CPU_MHZ / 0x100 < 3
 .error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
 .endif
-.if CPU_MHZ < 12
-		lsr	temp4
-.endif
 		sts	zc_filter_time, temp4	; Save zero cross filter time
 
 		sts	timing_l, temp1		; Store timing (120 degrees)
