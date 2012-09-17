@@ -1449,9 +1449,8 @@ set_new_duty13:
 		; At higher PWM frequencies, halve the frequency
 		; when starting -- this helps hard drive startup
 		.if POWER_RANGE < 1000 * CPU_MHZ / 16
-		lds	temp3, goodies
-		cpi	temp3, ENOUGH_GOODIES
-		brcc	set_new_duty_set
+		sbrs	flags1, STARTUP
+		rjmp	set_new_duty_set
 		lsl	temp1
 		rol	temp2
 		lsl	YL
