@@ -291,7 +291,6 @@ com_time_x:	.byte	1
 wt_OCT1_tot_l:	.byte	1	; time for each startup commutation
 wt_OCT1_tot_h:	.byte	1
 wt_OCT1_tot_x:	.byte	1
-zc_filter_time:	.byte	1	; number of times to check zero-crossing
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 timing_duty_l:	.byte	1	; duty cycle limit based on timing
@@ -1366,14 +1365,6 @@ update_timing2:
 		ldi	temp4, high(PWR_MAX_RPM1)
 update_timing4:	sts	timing_duty_h, temp4
 
-		mov	temp4, temp2		; Copy high and check extended byte
-		cpse	temp3, ZH		; We work with 1/256th of timing
-		ldi	temp4, 0xff
-.if TIMING_MAX*CPU_MHZ / 0x100 < 3
-.error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
-.endif
-		sts	zc_filter_time, temp4	; Save zero cross filter time
-
 		sts	timing_l, temp1		; Store timing (120 degrees)
 		sts	timing_h, temp2
 		sts	timing_x, temp3
@@ -1875,8 +1866,8 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; timing of a possibly-spinning motor while not driving it, which would
 ; induce demagnetization and PWM noise that we cannot ignore until we
 ; know the timing. We use twice the timeout that would otherwise bring
-; zc_filter_time to 0xff. A motor spinning twice the speed or slower will
-; fall through to regular startup with zc_filter_time at 0xff. This lets
+; ZC check count to 0xff. A motor spinning twice the speed or slower will
+; fall through to regular startup with ZC check count at 0xff. This lets
 ; us start from braking, RC timeout, or power-up without misaligning.
 ;
 wait_for_edge:
@@ -1900,7 +1891,7 @@ wait_pwm_running:
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
 	; Powered startup: skip blanking and commutation wait,
-	; and use a fixed zc_filter_time until goodies reaches
+	; and use a fixed ZC check count until goodies reaches
 	; ENOUGH_GOODIES and we clear the STARTUP flag.
 		lds	YL, wt_OCT1_tot_l	; Load the start commutation
 		lds	YH, wt_OCT1_tot_h	; timeout into YL:YH:temp7 and
@@ -1924,7 +1915,7 @@ start_timeout2:	sts	wt_OCT1_tot_l, YL
 		sts	wt_OCT1_tot_h, YH
 		sts	wt_OCT1_tot_x, temp7
 		rcall	set_ocr1a_rel
-		ldi	XL, 0xff * CPU_MHZ / 16	; Force full zc_filter_time.
+		ldi	XL, 0xff * CPU_MHZ / 16	; Force full ZC check count
 		rjmp	wait_for_edge1
 
 wait_for_blank:
@@ -1945,12 +1936,17 @@ wait_for_demag:
 		rjmp	wait_for_demag
 
 		rcall	load_timing
+		mov	XL, temp2		; Copy high and check extended byte
+		cpse	temp3, ZH		; to calculate the ZC check count
+		ldi	XL, 0xff
+.if TIMING_MAX*CPU_MHZ / 0x100 < 3
+.error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
+.endif
 		add	YL, temp1
 		adc	YH, temp2
 		adc	temp7, temp3
 		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 120 degrees
 
-		lds	XL, zc_filter_time
 wait_for_edge1:	mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
