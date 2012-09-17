@@ -1862,6 +1862,14 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; due to filtering capacitors, hence the initial blind minimum blanking
 ; period.
 ;
+; Special case: powerskipping during start. The idea here is to learn the
+; timing of a possibly-spinning motor while not driving it, which would
+; induce demagnetization and PWM noise that we cannot ignore until we
+; know the timing. We use twice the timeout that would otherwise bring
+; zc_filter_time to 0xff. A motor spinning twice the speed or slower will
+; fall through to regular startup with zc_filter_time at 0xff. This lets
+; us start from braking, RC timeout, or power-up without misaligning.
+;
 wait_for_edge:
 		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
 		subi	temp1, 1
@@ -1869,16 +1877,9 @@ wait_for_edge:
 		sts	powerskip, temp1
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
-	; Special case when powerskipping during start: skip blanking, use
-	; timeoutMIN, skip demag check, and use a short zc_filter_time.
-	; The idea here is to learn the timing of a possibly-spinning motor
-	; while not driving it, which would induce demagnetization and PWM
-	; noise that we cannot ignore until we konw the timing. If this
-	; times out, we enable power and start as normal.
-		ldi	YL, byte1(timeoutMIN*CPU_MHZ)
-		ldi	YH, byte2(timeoutMIN*CPU_MHZ)
-		ldi	temp4, byte3(timeoutMIN*CPU_MHZ)
-		mov	temp7, temp4
+		ldi	YL, byte1(0xff * 0x100)	; Timing is 120 degrees, so wait for
+		ldi	YH, byte2(0xff * 0x100)	; what would be 0xff at 60 degrees
+		mov	temp7, ZH
 		rcall	set_ocr1a_rel
 		ldi	XL, 4
 		rjmp	wait_for_edge1
