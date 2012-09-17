@@ -732,8 +732,7 @@ rising_edge:
 
 rcpint_fail:
 		in	i_sreg, SREG
-		cpse	rc_timeout, ZH
-		dec	rc_timeout
+		clr	rc_timeout
 		rjmp	rcpint_exit
 
 falling_edge:
@@ -1156,15 +1155,16 @@ rc_do_scale:	ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
 		brlo	rc_not_full
 		ldi	YL, byte1(MAX_POWER)
 		ldi	YH, byte2(MAX_POWER)
-rc_not_full:	ldi	temp1, RCP_TOT		; Check rc_timeout
-		sbrc	flags0, SET_DUTY
-		ldi	temp1, 2		; Shorter rc_timeout when driving
-		cp	rc_timeout, temp1
-		adc	rc_timeout, ZH		; Increment rc_timeout if not at limit
-		sts	rc_duty_l, YL
+rc_not_full:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
-		sbrc	flags0, SET_DUTY
+		sbrs	flags0, SET_DUTY
+		rjmp	rc_no_set_duty
+		ldi	temp1, 2
+		mov	rc_timeout, temp1	; Short rc_timeout when driving
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
+rc_no_set_duty:	ldi	temp1, RCP_TOT
+		cp	rc_timeout, temp1
+		adc	rc_timeout, ZH
 		ret
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
