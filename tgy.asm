@@ -180,7 +180,7 @@
 .equ	TIMING_RUN	= 0x1000 ; 1024us per commutation
 .equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
 .equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
-.equ	TIMING_MAX	= 0x00e0 ; 20us per commutation
+.equ	TIMING_MAX	= 0x00e0 ; 56us per commutation
 
 .equ	timeoutSTART	= 48000 ; 48ms per commutation
 .equ	timeoutMIN	= 36000	; 36ms per commutation
