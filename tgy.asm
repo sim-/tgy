@@ -395,6 +395,25 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 
+;-- Macros ---------------------------------------------------------------
+.macro adiwx
+	.if @2 > 63
+		subi	@0, byte1(-@2)
+		sbci	@1, byte1(-byte2(@2 + 0xff))
+	.else
+		adiw	@0, @2
+	.endif
+.endmacro
+
+.macro sbiwx
+	.if @2 > 63
+		subi	@0, byte1(@2)
+		sbci	@1, byte2(@2)
+	.else
+		sbiw	@0, @2
+	.endif
+.endmacro
+
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
@@ -706,8 +725,7 @@ rising_edge:
 		; Stuff this rise time plus MAX_RC_PULS into OCR1B.
 		; We use this both to save the time it went high and
 		; to get an interrupt to indicate high timeout.
-		subi	i_temp1, byte1(-MAX_RC_PULS * CPU_MHZ)
-		sbci	i_temp2, byte1(-byte2(MAX_RC_PULS * CPU_MHZ + 0xff))
+		adiwx	i_temp1, i_temp2, MAX_RC_PULS * CPU_MHZ
 		out	OCR1BH, i_temp2
 		out	OCR1BL, i_temp1
 		rcp_int_falling_edge i_temp1	; Set next int to falling edge
@@ -730,8 +748,7 @@ falling_edge:
 		movw	rx_l, i_temp1		; Guaranteed to be valid, store immediately
 		in	i_temp1, OCR1BL		; No atomic temp register used to read OCR1* registers
 		in	i_temp2, OCR1BH
-		subi	i_temp1, byte1(MAX_RC_PULS * CPU_MHZ)	; Put back to start time
-		sbci	i_temp2, byte2(MAX_RC_PULS * CPU_MHZ)
+		sbiwx	i_temp1, i_temp2, MAX_RC_PULS * CPU_MHZ	; Put back to start time
 		sub	rx_l, i_temp1		; Subtract start time from current time
 		sbc	rx_h, i_temp2
 .if byte3(MAX_RC_PULS*CPU_MHZ)
@@ -1050,12 +1067,10 @@ rc_prog6:	wdr
 		sbc	temp2, temp4		; to find the drift since the starting pulse
 	; Check for excessive drift with an emulated signed comparison -
 	; add the drift amount to offset the negative side to 0
-		subi	temp1, byte1(-MAX_DRIFT_PULS * CPU_MHZ)
-		sbci	temp2, byte1(-byte2(MAX_DRIFT_PULS * CPU_MHZ + 0xff))
+		adiwx	temp1, temp2, MAX_DRIFT_PULS * CPU_MHZ
 	; ..then subtract the 2*drift + 1 -- carry will be clear if
 	; we drifted outside of the range
-		subi	temp1, byte1(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
-		sbci	temp2, byte2(2 * MAX_DRIFT_PULS * CPU_MHZ + 1)
+		sbiwx	temp1, temp2, 2 * MAX_DRIFT_PULS * CPU_MHZ + 1
 		brcc	rc_prog0		; Wait and start over if input moved
 		dec	tcnt2h
 		brne	rc_prog6		; Loop until average accumulated
@@ -1775,7 +1790,7 @@ run6:
 		inc	temp1
 		sts	goodies, temp1
 		; Build up sys_control to PWR_MAX_START in steps.
-		adiw	YL, ((PWR_MAX_START - PWR_MIN_START) + 3) / 4
+		adiwx	YL, YH, (PWR_MAX_START - PWR_MIN_START + 3) / 4
 		ldi	temp1, low(PWR_MAX_START)
 		ldi	temp2, high(PWR_MAX_START)
 		rjmp	run6_3
@@ -1785,13 +1800,7 @@ run6_2:		cbr	flags1, (1<<STARTUP)
 		; If SLOW_THROTTLE is disabled, this only limits
 		; initial start ramp-up; once running, sys_control
 		; will stay at MAX_POWER unless timing is lost.
-		.equ SLOW_THROTTLE_STEPS = (POWER_RANGE + 31) / 32
-		.if SLOW_THROTTLE_STEPS > 63
-		subi	YL, byte1(-SLOW_THROTTLE_STEPS)
-		sbci	YH, byte1(-byte2(SLOW_THROTTLE_STEPS + 0xff))
-		.else
-		adiw	YL, SLOW_THROTTLE_STEPS
-		.endif
+		adiwx	YL, YH, (POWER_RANGE + 31) / 32
 		ldi	temp1, low(MAX_POWER)
 		ldi	temp2, high(MAX_POWER)
 run6_3:		cp	YL, temp1
