@@ -1510,8 +1510,8 @@ set_timing_degrees:
 ; interrupts may (have) come up. So, we must save tcnt1x and TIFR with
 ; interrupts disabled, then do a correction.
 set_ocr1a_abs:
-		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
-		out	TIMSK, temp4		; Disable OCIE1A temporarily
+		ldi	temp4, (1<<TOIE2)
+		out	TIMSK, temp4		; Disable TOIE1 and OCIE1A temporarily
 		ldi	temp4, (1<<OCF1A)
 		cli
 		out	OCR1AH, YH
@@ -1519,10 +1519,10 @@ set_ocr1a_abs:
 		out	TIFR, temp4		; Clear any pending OCF1A interrupt
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
-		lds	temp3, tcnt1x
-		in	temp4, TIFR
 		sei
 		sbr	flags0, (1<<OCT1_PENDING)
+		lds	temp3, tcnt1x
+		in	temp4, TIFR
 		cpi	temp2, 0x80		; tcnt1x is right when TCNT1h[7] set;
 		sbrc	temp4, TOV1		; otherwise, if TOV1 is/was pending,
 		adc	temp3, ZH		; increment our copy of tcnt1x.
@@ -1533,7 +1533,7 @@ set_ocr1a_abs:
 		brpl	set_ocr1a_abs1		; Skip set if time has passed
 		cbr	flags0, (1<<OCT1_PENDING)
 set_ocr1a_abs1:	ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIMSK, temp4		; Enable OCIE1A again
+		out	TIMSK, temp4		; Enable TOIE1 and OCIE1A again
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Set OCT1_PENDING until the relative time specified by YL:YH:temp7 passes.
