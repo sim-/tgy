@@ -205,12 +205,12 @@
 .def	rx_h		= r7		; received throttle high
 .def	tcnt2h		= r8		; timer2 high byte
 .def	i_sreg		= r9		; status register save in interrupts
-;.def			= r10
+.def	temp7		= r10		; really aux temporary (limited operations)
 .def	rc_timeout	= r11
 .def	sys_control_l	= r12		; duty limit low (word register aligned)
 .def	sys_control_h	= r13		; duty limit high
-.def	temp7		= r14		; really aux temporary (limited operations)
-;.def			= r15
+.def	timing_duty_l	= r14		; timing duty limit low
+.def	timing_duty_h	= r15		; timing duty limit high
 
 ;.def	nfet_on		= r18
 ;.def	nfet_off	= r19
@@ -292,8 +292,6 @@ wt_OCT1_tot_h:	.byte	1
 wt_OCT1_tot_x:	.byte	1
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
-timing_duty_l:	.byte	1	; duty cycle limit based on timing
-timing_duty_h:	.byte	1
 fwd_scale_l:	.byte	1	; 16.16 multipliers to scale input RC pulse to POWER_RANGE
 fwd_scale_h:	.byte	1
 rev_scale_l:	.byte	1
@@ -1317,26 +1315,19 @@ update_timing:
 		cpi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
 		ldi	temp4, byte2(TIMING_MAX*CPU_MHZ/2)
 		cpc	temp2, temp4
+		.if byte3(TIMING_MAX*CPU_MHZ/2)
 		ldi	temp4, byte3(TIMING_MAX*CPU_MHZ/2)
 		cpc	temp3, temp4
+		.else
+		cpc	temp3, ZH
+		.endif
 		brcc	update_timing1
 		ldi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
 		ldi	temp2, byte2(TIMING_MAX*CPU_MHZ/2)
 		ldi	temp3, byte3(TIMING_MAX*CPU_MHZ/2)
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
-		rjmp	update_timing2
 update_timing1:
-
-	; Limit minimum RPM (slowest timing)
-		cpi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
-		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ/2)
-		cpc	temp3, temp4
-		brcs	update_timing2
-		ldi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
-		ldi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
-		ldi	temp1, byte1(TIMING_MIN*CPU_MHZ/2)
-update_timing2:
 
 	; Calculate a hopefully sane duty cycle limit from this timing,
 	; to prevent excessive current if high duty is requested when the
@@ -1345,24 +1336,41 @@ update_timing2:
 	; so this is just an approximation. It would be nice if we could
 	; do this with math instead of two constants, but we need a divide.
 	; Clobbers only temp4. Fastest in case of fastest timing.
-		cpi	temp2, byte2(TIMING_RANGE2*CPU_MHZ/2)
+		.if (TIMING_RANGE2*CPU_MHZ/2) & 0xff00
 		ldi	temp4, byte3(TIMING_RANGE2*CPU_MHZ/2)
+		cpi	temp2, byte2(TIMING_RANGE2*CPU_MHZ/2)
 		cpc	temp3, temp4
-		ldi	temp4, low(MAX_POWER)
-		sts	timing_duty_l, temp4
-		ldi	temp4, high(MAX_POWER)
+		.else
+		cpi	temp3, byte3(TIMING_RANGE2*CPU_MHZ/2)
+		.endif
+		ldi	XL, low(MAX_POWER)
+		ldi	XH, high(MAX_POWER)
 		brcs	update_timing4
-		cpi	temp2, byte2(TIMING_RANGE1*CPU_MHZ/2)
+		.if (TIMING_RANGE1*CPU_MHZ/2) & 0xff00
 		ldi	temp4, byte3(TIMING_RANGE1*CPU_MHZ/2)
+		cpi	temp2, byte2(TIMING_RANGE1*CPU_MHZ/2)
 		cpc	temp3, temp4
-		ldi	temp4, low(PWR_MAX_RPM2)
-		sts	timing_duty_l, temp4
-		ldi	temp4, high(PWR_MAX_RPM2)
+		.else
+		cpi	temp3, byte3(TIMING_RANGE1*CPU_MHZ/2)
+		.endif
+		ldi	XL, low(PWR_MAX_RPM2)
+		ldi	XH, high(PWR_MAX_RPM2)
 		brcs	update_timing4
-		ldi	temp4, low(PWR_MAX_RPM1)
-		sts	timing_duty_l, temp4
-		ldi	temp4, high(PWR_MAX_RPM1)
-update_timing4:	sts	timing_duty_h, temp4
+	; Limit minimum RPM (slowest timing)
+		.if (TIMING_MIN*CPU_MHZ/2) & 0xff00
+		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ/2)
+		cpi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
+		cpc	temp3, temp4
+		.else
+		cpi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
+		.endif
+		brcs	update_timing2
+		ldi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
+		ldi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
+		ldi	temp1, byte1(TIMING_MIN*CPU_MHZ/2)
+update_timing2:	ldi	XL, low(PWR_MAX_RPM1)
+		ldi	XH, high(PWR_MAX_RPM1)
+update_timing4:	movw	timing_duty_l, XL
 
 		sts	timing_l, temp1		; Store timing (120 degrees)
 		sts	timing_h, temp2
@@ -1398,101 +1406,13 @@ update_timing4:	sts	timing_duty_h, temp4
 
 		sbrc	flags1, EVAL_RC
 		rjmp	evaluate_rc		; Set new duty either way
-		rjmp	set_new_duty
-;-----bko-----------------------------------------------------------------
-; Multiply the 24-bit timing in temp1:temp2:temp3 by temp4 and add the top
-; 24-bits to YL:YH:temp7.
-update_timing_add_degrees:
-		mul	temp1, temp4
-		add	YL, temp6		; Discard byte 1 already
-		adc	YH, ZH
-		adc	temp7, ZH
-		mul	temp2, temp4
-		add	YL, temp5
-		adc	YH, temp6
-		adc	temp7, ZH
-		mul	temp3, temp4
-		add	YH, temp5
-		adc	temp7, temp6
-		ret
-load_timing:
-		lds	temp1, timing_l
-		lds	temp2, timing_h
-		lds	temp3, timing_x
-		lds	YL, com_time_l
-		lds	YH, com_time_h
-		lds	temp7, com_time_x
-		ret
-set_timing_degrees:
-		rcall	load_timing
-		rcall	update_timing_add_degrees
-		rjmp	set_ocr1a_abs
-;-----bko-----------------------------------------------------------------
-; Set OCT1_PENDING until the absolute time specified by YL:YH:temp7 passes.
-; Returns current TCNT1(L:H:X) value in temp1:temp2:temp3.
-;
-; tcnt1x may not be updated until many instructions later, even with
-; interrupts enabled, because the AVR always executes one non-interrupt
-; instruction between interrupts, and several other higher-priority
-; interrupts may (have) come up. So, we must save tcnt1x and TIFR with
-; interrupts disabled, then do a correction.
-set_ocr1a_abs:
-		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
-		out	TIMSK, temp4		; Disable OCIE1A temporarily
-		ldi	temp4, (1<<OCF1A)
-		cli
-		out	OCR1AH, YH
-		out	OCR1AL, YL
-		out	TIFR, temp4		; Clear any pending OCF1A interrupt
-		in	temp1, TCNT1L
-		in	temp2, TCNT1H
-		lds	temp3, tcnt1x
-		in	temp4, TIFR
-		sei
-		sbr	flags0, (1<<OCT1_PENDING)
-		cpi	temp2, 0x80		; tcnt1x is right when TCNT1h[7] set;
-		sbrc	temp4, TOV1		; otherwise, if TOV1 is/was pending,
-		adc	temp3, ZH		; increment our copy of tcnt1x.
-		sub	YL, temp1		; Check that time might have already
-		sbc	YH, temp2		; passed -- if so, clear pending flag.
-		sbc	temp7, temp3
-		sts	ocr1ax, temp7
-		brpl	set_ocr1a_abs1		; Skip set if time has passed
-		cbr	flags0, (1<<OCT1_PENDING)
-set_ocr1a_abs1:	ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIMSK, temp4		; Enable OCIE1A again
-		ret
-;-----bko-----------------------------------------------------------------
-; Set OCT1_PENDING until the relative time specified by YL:YH:temp7 passes.
-set_ocr1a_rel:	adiw	YL, 7			; Compensate for timer increment during in-add-out
-		ldi	temp4, (1<<OCF1A)
-		cli
-		in	temp1, TCNT1L
-		in	temp2, TCNT1H
-		add	YL, temp1
-		adc	YH, temp2
-		out	OCR1AH, YH
-		out	OCR1AL, YL
-		out	TIFR, temp4		; Clear any pending OCF1A interrupt (7 cycles from TCNT1 read)
-		sts	ocr1ax, temp7
-		sbr	flags0, (1<<OCT1_PENDING)
-		sei
-		ret
-;-----bko-----------------------------------------------------------------
-wait_OCT1_tot:	sbrc	flags1, EVAL_RC
-		rcall	evaluate_rc
-		sbrc	flags0, OCT1_PENDING
-		rjmp	wait_OCT1_tot		; Wait for commutation time
-		ret
 ;-----bko-----------------------------------------------------------------
 set_new_duty:	lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
-set_new_duty_l:	lds	temp1, timing_duty_l
-		lds	temp2, timing_duty_h
-		cp	YL, temp1
-		cpc	YH, temp2
+set_new_duty_l:	cp	YL, timing_duty_l
+		cpc	YH, timing_duty_h
 		brcs	set_new_duty10
-		movw	YL, temp1		; Limit duty to timing_duty
+		movw	YL, timing_duty_l	; Limit duty to timing_duty
 set_new_duty10:	cp	YL, sys_control_l
 		cpc	YH, sys_control_h
 		brcs	set_new_duty11
@@ -1553,6 +1473,91 @@ set_new_duty_zero:
 		; Power off
 		sbr	flags1, (1<<POWER_OFF)
 		rjmp	set_new_duty_set_off
+;-----bko-----------------------------------------------------------------
+; Multiply the 24-bit timing in temp1:temp2:temp3 by temp4 and add the top
+; 24-bits to YL:YH:temp7.
+update_timing_add_degrees:
+		mul	temp1, temp4
+		add	YL, temp6		; Discard byte 1 already
+		adc	YH, ZH
+		adc	temp7, ZH
+		mul	temp2, temp4
+		add	YL, temp5
+		adc	YH, temp6
+		adc	temp7, ZH
+		mul	temp3, temp4
+		add	YH, temp5
+		adc	temp7, temp6
+		ret
+load_timing:
+		lds	temp1, timing_l
+		lds	temp2, timing_h
+		lds	temp3, timing_x
+		lds	YL, com_time_l
+		lds	YH, com_time_h
+		lds	temp7, com_time_x
+		ret
+set_timing_degrees:
+		rcall	load_timing
+		rcall	update_timing_add_degrees
+	; Fall through to set_ocr1a_abs
+;-----bko-----------------------------------------------------------------
+; Set OCT1_PENDING until the absolute time specified by YL:YH:temp7 passes.
+; Returns current TCNT1(L:H:X) value in temp1:temp2:temp3.
+;
+; tcnt1x may not be updated until many instructions later, even with
+; interrupts enabled, because the AVR always executes one non-interrupt
+; instruction between interrupts, and several other higher-priority
+; interrupts may (have) come up. So, we must save tcnt1x and TIFR with
+; interrupts disabled, then do a correction.
+set_ocr1a_abs:
+		ldi	temp4, (1<<TOIE1)+(1<<TOIE2)
+		out	TIMSK, temp4		; Disable OCIE1A temporarily
+		ldi	temp4, (1<<OCF1A)
+		cli
+		out	OCR1AH, YH
+		out	OCR1AL, YL
+		out	TIFR, temp4		; Clear any pending OCF1A interrupt
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		lds	temp3, tcnt1x
+		in	temp4, TIFR
+		sei
+		sbr	flags0, (1<<OCT1_PENDING)
+		cpi	temp2, 0x80		; tcnt1x is right when TCNT1h[7] set;
+		sbrc	temp4, TOV1		; otherwise, if TOV1 is/was pending,
+		adc	temp3, ZH		; increment our copy of tcnt1x.
+		sub	YL, temp1		; Check that time might have already
+		sbc	YH, temp2		; passed -- if so, clear pending flag.
+		sbc	temp7, temp3
+		sts	ocr1ax, temp7
+		brpl	set_ocr1a_abs1		; Skip set if time has passed
+		cbr	flags0, (1<<OCT1_PENDING)
+set_ocr1a_abs1:	ldi	temp4, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
+		out	TIMSK, temp4		; Enable OCIE1A again
+		ret
+;-----bko-----------------------------------------------------------------
+; Set OCT1_PENDING until the relative time specified by YL:YH:temp7 passes.
+set_ocr1a_rel:	adiw	YL, 7			; Compensate for timer increment during in-add-out
+		ldi	temp4, (1<<OCF1A)
+		cli
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		add	YL, temp1
+		adc	YH, temp2
+		out	OCR1AH, YH
+		out	OCR1AL, YL
+		out	TIFR, temp4		; Clear any pending OCF1A interrupt (7 cycles from TCNT1 read)
+		sts	ocr1ax, temp7
+		sbr	flags0, (1<<OCT1_PENDING)
+		sei
+		ret
+;-----bko-----------------------------------------------------------------
+wait_OCT1_tot:	sbrc	flags1, EVAL_RC
+		rcall	evaluate_rc
+		sbrc	flags0, OCT1_PENDING
+		rjmp	wait_OCT1_tot		; Wait for commutation time
+		ret
 ;-----bko-----------------------------------------------------------------
 switch_power_off:
 		out	TCCR2, ZH		; Disable PWM
