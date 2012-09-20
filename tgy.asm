@@ -112,6 +112,8 @@
 #include "tp_i2c.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (I2C)
 #elif defined(tp_nfet_esc)
 #include "tp_nfet.inc"		; TowerPro 25A with all nFETs "type 3" (INT0 PWM)
+#elif defined(tp70a_esc)
+#include "tp70a.inc"		; TowerPro 70A with BL8003 FET drivers (INT0 PWM)
 #elif defined(tgy6a_esc)
 #include "tgy6a.inc"		; Turnigy Plush 6A (INT0 PWM)
 #else

@@ -71,6 +71,8 @@ Tested boards by target:
     - tp at 8kHz PWM (workaround for DYS/HK-SS clones with PWM noise problems)
 - tp_i2c:
     - tp modified for I2C input (old ADC4 routed to ADC1)
+- tp70a:
+    - TowerPro 70A with BL8003 FET drivers (inverted low side)
 - tgy (these boards typically have no external resonator):
     - Original TowerPro 18A
     - Original Turnigy Basic and Turnigy Plush 10A, 18A, and 25A (Hobbywing OEM)

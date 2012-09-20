@@ -4,7 +4,7 @@ ASM?= avra
 
 .SUFFIXES: .inc .hex
 
-ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy.hex
 
 all: $(ALL_TARGETS)
 
