@@ -682,5 +682,4 @@ boot_spm:	rcall	boot_spm_wait
 		out	SPMCR, r22		; Set SPM mode
 		spm
 		ret
-.endif
 .exit
