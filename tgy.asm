@@ -492,8 +492,9 @@ eeprom_default:	lpm	temp1, Z+
 eeprom_good:
 
 	; Check reset cause
-		sbrs	i_sreg, PORF		; Power-on reset
-		rjmp	init_no_porf
+		bst	i_sreg, PORF		; Power-on reset
+		cpse	i_sreg, ZH		; or zero
+		brtc	init_no_porf
 		rcall	beep_f1			; Usual startup beeps
 		rcall	beep_f2
 		rcall	beep_f3
@@ -1685,6 +1686,22 @@ init_startup:
 		.endif
 wait_for_power_on:
 		wdr
+		.if BOOT_LOADER
+	; If we have a boot loader, loop while input pin high.
+	; If high for >2ms, the watchdog timer will kick us into
+	; reset and we will enter the boot loader.
+wait_for_low_or_boot:
+		.if USE_ICP
+		sbic	PINB, rcp_in		; Skip if ICP pin low
+		.else
+		.if USE_INT0 == 1
+		sbic	PIND, rcp_in		; Skip if INT0 pin low
+		.else
+		sbis	PIND, rcp_in		; Skip if INT0 pin high (inverted)
+		.endif
+		.endif
+		rjmp	wait_for_low_or_boot
+		.endif
 		.if BEACON
 		tst	rc_timeout
 		brne	wait_for_power_on1

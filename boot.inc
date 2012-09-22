@@ -350,9 +350,17 @@ stk_rx_restart:	ldi	ZL, low(stk_rx_start)
 		ldi	ZH, high(stk_rx_start)
 		ldi	YL, low(RX_BUFFER)
 		ldi	YH, high(RX_BUFFER)
+	; Since we've replied or at least received something, we should
+	; set the reset reason register (MCUCSR). We may have browned
+	; out while the input pin is high, or the main program may have
+	; used a watchdog timeout to jump to the boot loader, so be nice
+	; and clear it once we know we were meant to be here. It seems
+	; bits can only be cleared, not set, so clear all but power-on
+	; reset and external reset.
+		ldi	r23, (1<<PORF)+(1<<EXTRF)
+		out	MCUCSR, r23
 		rjmp	boot_rx_cont
 		lds	r0, 0			; Future expansion nops
-		lds	r0, 0
 		lds	r0, 0
 		lds	r0, 0
 		lds	r0, 0
