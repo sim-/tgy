@@ -71,6 +71,8 @@ Tested boards by target:
     - tp at 8kHz PWM (workaround for DYS/HK-SS clones with PWM noise problems)
 - tp_i2c:
     - tp modified for I2C input (old ADC4 routed to ADC1)
+- tp_nfet:
+    - Newer TowerPro 25A with inverted low side (BL8003 drivers)
 - tp70a:
     - TowerPro 70A with BL8003 FET drivers (inverted low side)
 - tgy (these boards typically have no external resonator):
@@ -80,8 +82,6 @@ Tested boards by target:
     - Hobby King SS models with "-HW" in part number
 - tgy6a:
     - Original Turnigy Plush 6A
-- tp_nfet:
-    - Newer TowerPro 25A
 
 Notes
 -----
