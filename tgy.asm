@@ -373,22 +373,22 @@ eeprom_defaults_w:
 ;-----bko-----------------------------------------------------------------
 ; Timing and motor debugging
 .macro flag_on
-	.if MOTOR_DEBUG
+	.if MOTOR_DEBUG && (DIR_PB & (1<<4)) == 0
 		sbi	PORTB, 4
 	.endif
 .endmacro
 .macro flag_off
-	.if MOTOR_DEBUG
+	.if MOTOR_DEBUG && (DIR_PB & (1<<4)) == 0
 		cbi	PORTB, 4
 	.endif
 .endmacro
 .macro sync_on
-	.if MOTOR_DEBUG
+	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
 		sbi	PORTB, 3
 	.endif
 .endmacro
 .macro sync_off
-	.if MOTOR_DEBUG
+	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
 		cbi	PORTB, 3
 	.endif
 .endmacro
