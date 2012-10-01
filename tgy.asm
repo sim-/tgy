@@ -1764,13 +1764,10 @@ start_from_running:
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; clear POWER_OFF.
 		rcall	wait_timeout
-		rcall	com5com6		; Enable pFET if not POWER_OFF
-		rcall	com6com1		; Set comparator phase and nFET vector
-		cbr	flags2, ALL_FETS	; Disable PWM (powerskip) 6 cycles at start
-		ldi	temp1, 6		; to see if motor is running and align to it.
-		sts	powerskip, temp1
-		ldi	temp1, ENOUGH_GOODIES	; If we can start without a timeout, not need
-		sts	goodies, temp1		; for blanking. Prime goodies.
+		ldi	temp1, 6		; Do not enable FETs during first cycle to
+		sts	powerskip, temp1	; see if motor is running, and align to it.
+		ldi	temp1, ENOUGH_GOODIES	; If we can follow without a timeout, do not
+		sts	goodies, temp1		; continue in startup mode (long ZC filtering).
 		ldi	temp1, T2CLK
 		out	TCCR2, temp1		; Enable PWM (ZL has been set to pwm_wdr)
 
@@ -2018,6 +2015,9 @@ wait_commutation:
 		sbrs	flags1, STARTUP
 		rcall	wait_OCT1_tot
 		flag_off
+		lds	temp1, powerskip
+		cpse	temp1, ZH
+		sbr	flags1, (1<<POWER_OFF)	; Disable power when powerskipping
 		cpse	rc_timeout, ZH
 		ret
 		pop	temp1			; Throw away return address
