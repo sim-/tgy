@@ -879,19 +879,19 @@ beep_on:	out	PORTB, temp5		; Restore ON state
 		out	PORTC, temp6
 		out	PORTD, temp7
 		out	TCNT0, ZH
-beep_BpCn10:	in	temp1, TCNT0
+beep1:		in	temp1, TCNT0
 		cpi	temp1, 2*CPU_MHZ	; 32µs on
-		brlo	beep_BpCn10
+		brlo	beep1
 		all_nFETs_off temp3
 		all_pFETs_off temp3
 		ldi	temp3, CPU_MHZ		; 2040µs off
-beep_BpCn12:	out	TCNT0, ZH
+beep2:		out	TCNT0, ZH
 		wdr
-beep_BpCn13:	in	temp1, TCNT0
+beep3:		in	temp1, TCNT0
 		cp	temp1, temp4
-		brlo	beep_BpCn13
+		brlo	beep3
 		dec	temp3
-		brne	beep_BpCn12
+		brne	beep2
 		dec	temp2
 		brne	beep_on
 		ret
@@ -900,18 +900,18 @@ wait240ms:	rcall	wait120ms
 wait120ms:	rcall	wait60ms
 wait60ms:	rcall	wait30ms
 wait30ms:	ldi	temp2, 15
-beep_BpCn20:	ldi	temp3, CPU_MHZ
-beep_BpCn21:	out	TCNT0, ZH
+wait1:		ldi	temp3, CPU_MHZ
+wait2:		out	TCNT0, ZH
 		ldi	temp1, (1<<TOV0)	; Clear TOV0 by setting it
 		out	TIFR, temp1
 		wdr
-beep_BpCn22:	in	temp1, TIFR
+wait3:		in	temp1, TIFR
 		sbrs	temp1, TOV0
-		rjmp	beep_BpCn22
+		rjmp	wait3
 		dec	temp3
-		brne	beep_BpCn21
+		brne	wait2
 		dec	temp2
-		brne	beep_BpCn20
+		brne	wait1
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Read from or write to the EEPROM block. To avoid duplication, we use the
