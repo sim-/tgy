@@ -1393,6 +1393,7 @@ update_timing4:	movw	timing_duty_l, XL
 		ror	temp2
 		ror	temp1
 
+.if defined(DC_BIAS_CANCEL)
 		lds	temp5, last_tcnt1_l	; restore original c as a'
 		lds	temp6, last_tcnt1_h
 		lds	temp4, last_tcnt1_x
@@ -1409,6 +1410,11 @@ update_timing4:	movw	timing_duty_l, XL
 		add	YL, temp5		; b+= a' -> YL:YH:temp7 become filtered ZC time
 		adc	YH, temp6
 		adc	temp7, temp4
+.else
+		lds	YL, last_tcnt1_l	; restore original c as a'
+		lds	YH, last_tcnt1_h
+		lds	temp7, last_tcnt1_x
+.endif
 
 		ldi	temp4, (30 - MOTOR_ADVANCE) * 256 / 60
 		rcall	update_timing_add_degrees
@@ -1992,7 +1998,10 @@ wait_for_demag:
 		add	YL, temp1
 		adc	YH, temp2
 		adc	temp7, temp3
-		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 120 degrees
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
 
 wait_for_edge1:	mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
