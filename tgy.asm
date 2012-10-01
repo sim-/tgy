@@ -277,6 +277,8 @@ goodies:	.byte	1	; Number of rounds without timeout
 powerskip:	.byte	1	; Skip power through this number of steps
 ocr1ax:		.byte	1	; 3rd byte of OCR1A
 tcnt1x:		.byte	1	; 3rd byte of TCNT1
+rct_boot:	.byte	1	; Counter which increments while rc_timeout is 0
+rct_beacon:	.byte	1	; Counter which increments while rc_timeout is 0
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
 last_tcnt1_x:	.byte	1
@@ -692,10 +694,18 @@ t1ovfl_int:	in	i_sreg, SREG
 		sts	tcnt1x, i_temp1
 		andi	i_temp1, 15			; Every 16 overflows
 		brne	t1ovfl_int1
-		cpse	rc_timeout, ZH
+		tst	rc_timeout
+		breq	t1ovfl_int2
 		dec	rc_timeout
 t1ovfl_int1:	out	SREG, i_sreg
 		reti
+t1ovfl_int2:	lds	i_temp1, rct_boot
+		inc	i_temp1
+		sts	rct_boot, i_temp1
+		lds	i_temp1, rct_beacon
+		inc	i_temp1
+		sts	rct_beacon, i_temp1
+		rjmp	t1ovfl_int1
 ;-----bko-----------------------------------------------------------------
 ; NOTE: This interrupt uses the 16-bit atomic timer read/write register
 ; by reading TCNT1L and TCNT1H, so this interrupt must be disabled before
@@ -1571,6 +1581,30 @@ switch_power_off:
 		all_nFETs_off temp1
 		ret
 ;-----bko-----------------------------------------------------------------
+.if BOOT_LOADER
+boot_loader_test:
+		.if USE_ICP
+		sbis	PINB, rcp_in		; Skip clear if ICP pin high
+		.elseif USE_INT0 == 1
+		sbis	PIND, rcp_in		; Skip clear if INT0 pin high
+		.else
+		sbic	PIND, rcp_in		; Skip clear if INT0 pin low (inverted)
+		.endif
+		sts	rct_boot, ZH		; Clear rct_count when low
+		lds	temp1, rct_boot
+		sbrs	temp1, 5 		; Wait 32 * 16 * 65536us (~2s) before jumping
+		ret
+boot_loader_jump:
+		cli
+		out	DDRB, ZH		; Tristate pins
+		out	DDRC, ZH
+		out	DDRD, ZH
+		ldi	temp1, (1<<WDCE)+(1<<WDE)
+		out	WDTCR, temp1
+		out	WDTCR, ZH		; Disable watchdog
+		rjmp	THIRDBOOTSTART
+.endif
+;-----bko-----------------------------------------------------------------
 control_start:
 	; status led on
 		GRN_on
@@ -1633,12 +1667,18 @@ control_start:
 
 i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
+		sts	rct_boot, ZH
+		sts	rct_beacon, ZH
 i_rc_puls2:	wdr
 		.if defined(HK_PROGRAM_CARD)
 		.endif
-		sbrs	flags1, EVAL_RC
+		sbrc	flags1, EVAL_RC
+		rjmp	i_rc_puls_rx
+		.if BOOT_LOADER
+		rcall	boot_loader_test
+		.endif
 		rjmp	i_rc_puls2
-		rcall	evaluate_rc_init
+i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
@@ -1682,46 +1722,33 @@ init_startup:
 		ldi	temp1, T2CLK
 		out	TCCR2, temp1		; Enable PWM, cleared later by switch_power_off
 		.endif
-		.if BEACON
-		clr	temp4			; Wait 256 30ms periods before first beep
-		.endif
+wait_for_power_on_init:
+		sts	rct_boot, ZH
+		sts	rct_beacon, ZH
 wait_for_power_on:
 		wdr
+		sbrc	flags1, EVAL_RC
+		rjmp	wait_for_power_rx
+		tst	rc_timeout
+		brne	wait_for_power_on	; Tight loop unless rc_timeout is zero
 		.if BOOT_LOADER
-	; If we have a boot loader, loop while input pin high.
-	; If high for >2ms, the watchdog timer will kick us into
-	; reset and we will enter the boot loader.
-wait_for_low_or_boot:
-		.if USE_ICP
-		sbic	PINB, rcp_in		; Skip if ICP pin low
-		.else
-		.if USE_INT0 == 1
-		sbic	PIND, rcp_in		; Skip if INT0 pin low
-		.else
-		sbis	PIND, rcp_in		; Skip if INT0 pin high (inverted)
-		.endif
-		.endif
-		rjmp	wait_for_low_or_boot
+		rcall	boot_loader_test
 		.endif
 		.if BEACON
-		tst	rc_timeout
-		brne	wait_for_power_on1
-		rcall	wait30ms
-		dec	temp4
-		brne	wait_for_power_on1
+		lds	temp1, rct_beacon
+		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
+		brne	wait_for_power_on
+		ldi	temp1, 60
+		sts	rct_beacon, temp1	; Double rate after the first beep
 		rcall	beep_f3
-		ldi	temp4, 80		; Beep every 256 - 80 30ms periods
-wait_for_power_on1:
-		.endif
-		sbrs	flags1, EVAL_RC
 		rjmp	wait_for_power_on
+		.endif
+wait_for_power_rx:
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
-		lds	YL, rc_duty_l
-		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
-		breq	wait_for_power_on
+		breq	wait_for_power_on_init
 		tst	rc_timeout
-		breq	wait_for_power_on
+		breq	wait_for_power_on_init
 
 start_from_running:
 		rcall	switch_power_off
