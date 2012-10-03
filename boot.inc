@@ -10,7 +10,7 @@
 ; even to an armed ESC, as long as the low end has not been calibrated
 ; or set to start at pulses shorter than the linker timing.
 ;
-; All transmissions have a leader of three 0xff bytes plus one 0-bit.
+; All transmissions have a leader of 23 1-bits followed by 1 0-bit.
 ; Bit encoding starts at the least significant bit and is 8 bits wide.
 ; 1-bits are encoded as 64.0us high, 72.8us low (135.8us total).
 ; 0-bits are encoded as 27.8us high, 34.5us low, 34.4us high, 37.9 low
@@ -263,7 +263,7 @@ boot_rx4:	in	r14, TIFR
 
 boot_tx_bytes:
 		out	OCR2, r4		; Set OCF2 at quarter timing
-		ldi	r24, 24			; Leader is 24 1-bits, 1 0-bit
+		ldi	r24, 23			; Leader is 23 1-bits, 1 0-bit
 boot_tx_leader:
 		sbi	RCP_PORT, rcp_in	; Drive high
 		sbi	RCP_DDR, rcp_in
