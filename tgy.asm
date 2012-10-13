@@ -389,11 +389,15 @@ eeprom_defaults_w:
 .macro sync_on
 	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
 		sbi	PORTB, 3
+	.elif MOTOR_DEBUG && (DIR_PB & (1<<5)) == 0
+		sbi	PORTB, 5
 	.endif
 .endmacro
 .macro sync_off
 	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
 		cbi	PORTB, 3
+	.elif MOTOR_DEBUG && (DIR_PB & (1<<5)) == 0
+		cbi	PORTB, 5
 	.endif
 .endmacro
 
@@ -446,7 +450,7 @@ clear_loop1:	cp	ZL, r0
 	; portB - all FETs off
 		ldi	temp1, INIT_PB
 		out	PORTB, temp1
-		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4)
+		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5)
 		out	DDRB, temp1
 
 	; portC reads comparator inputs
