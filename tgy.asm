@@ -1784,41 +1784,201 @@ start_from_running:
 		out	TCCR2, temp1		; Enable PWM (ZL has been set to pwm_wdr)
 
 ;-----bko-----------------------------------------------------------------
+; *** commutation utilities ***
+
+.macro com1com2
+		; Bp off, Ap on
+		set_comp_phase_b temp1
+		BpFET_off
+		sbrs	flags1, POWER_OFF
+		ApFET_on
+.endmacro
+
+.macro com2com1
+		; Bp on, Ap off
+		set_comp_phase_a temp1
+		ApFET_off
+		sbrs	flags1, POWER_OFF
+		BpFET_on
+.endmacro
+
+.macro com2com3
+		; Cn off, Bn on
+		set_comp_phase_c temp1
+		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<B_FET)
+		.if COMP_PWM
+		CpFET_off
+		.endif
+		in	temp1, CnFET_port
+		CnFET_off
+		in	temp2, CnFET_port
+		cpse	temp1, temp2
+		BnFET_on
+		sei
+.endmacro
+
+.macro com3com2
+		; Cn on, Bn off
+		set_comp_phase_b temp1
+		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<C_FET)
+		.if COMP_PWM
+		BpFET_off
+		.endif
+		in	temp1, BnFET_port
+		BnFET_off
+		in	temp2, BnFET_port
+		cpse	temp1, temp2
+		CnFET_on
+		sei
+.endmacro
+
+.macro com3com4
+		; Ap off, Cp on
+		set_comp_phase_a temp1
+		ApFET_off
+		sbrs	flags1, POWER_OFF
+		CpFET_on
+.endmacro
+
+.macro com4com3
+		; Ap on, Cp off
+		set_comp_phase_c temp1
+		CpFET_off
+		sbrs	flags1, POWER_OFF
+		ApFET_on
+.endmacro
+
+.macro com4com5
+		; Bn off, An on
+		set_comp_phase_b temp1
+		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<A_FET)
+		.if COMP_PWM
+		BpFET_off
+		.endif
+		in	temp1, BnFET_port
+		BnFET_off
+		in	temp2, BnFET_port
+		cpse	temp1, temp2
+		AnFET_on
+		sei
+.endmacro
+
+.macro com5com4
+		; Bn on, An off
+		set_comp_phase_a temp1
+		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<B_FET)
+		.if COMP_PWM
+		ApFET_off
+		.endif
+		in	temp1, AnFET_port
+		AnFET_off
+		in	temp2, AnFET_port
+		cpse	temp1, temp2
+		BnFET_on
+		sei
+.endmacro
+
+.macro com5com6
+		; Cp off, Bp on
+		set_comp_phase_c temp1
+		CpFET_off
+		sbrs	flags1, POWER_OFF
+		BpFET_on
+.endmacro
+
+.macro com6com5
+		; Cp on, Bp off
+		set_comp_phase_b temp1
+		BpFET_off
+		sbrs	flags1, POWER_OFF
+		CpFET_on
+.endmacro
+
+.macro com6com1
+		; An off, Cn on
+		set_comp_phase_a temp1
+		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<C_FET)
+		.if COMP_PWM
+		ApFET_off
+		.endif
+		in	temp1, AnFET_port
+		AnFET_off
+		in	temp2, AnFET_port
+		cpse	temp1, temp2
+		CnFET_on
+		sei
+.endmacro
+
+.macro com1com6
+		; An on, Cn off
+		set_comp_phase_c temp1
+		cli
+		cbr	flags2, ALL_FETS
+		sbrs	flags1, POWER_OFF
+		sbr	flags2, (1<<A_FET)
+		.if COMP_PWM
+		CpFET_off
+		.endif
+		in	temp1, CnFET_port
+		CnFET_off
+		in	temp2, CnFET_port
+		cpse	temp1, temp2
+		AnFET_on
+		sei
+.endmacro
+
+;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
 
 run1:		sbrc	flags1, REVERSE
 		rjmp	run_reverse
 
 run_forward:	rcall	wait_for_high
-		rcall	com1com2
+		com1com2
 		sync_off
 		rcall	wait_for_low
-		rcall	com2com3
+		com2com3
 		rcall	wait_for_high
-		rcall	com3com4
+		com3com4
 		rcall	wait_for_low
-		rcall	com4com5
+		com4com5
 		sync_on
 		rcall	wait_for_high
-		rcall	com5com6
+		com5com6
 		rcall	wait_for_low
-		rcall	com6com1
+		com6com1
 		rjmp	run6
 
 run_reverse:	rcall	wait_for_low
-		rcall	com1com6
+		com1com6
 		sync_on
 		rcall	wait_for_high
-		rcall	com6com5
+		com6com5
 		rcall	wait_for_low
-		rcall	com5com4
+		com5com4
 		rcall	wait_for_high
-		rcall	com4com3
+		com4com3
 		sync_off
 		rcall	wait_for_low
-		rcall	com3com2
+		com3com2
 		rcall	wait_for_high
-		rcall	com2com1
+		com2com1
+
 run6:
 		.if MOTOR_BRAKE
 		; Brake immediately whenever power is off
@@ -1833,7 +1993,7 @@ run6:
 		.endif
 		movw	YL, sys_control_l
 		adiw	YL, 0			; Test for zero
-		breq	start_from_running
+		breq	restart_run
 		lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
 		brcc	run6_2
@@ -1868,6 +2028,7 @@ restart_control:
 		rcall	beep_f2
 		rcall	wait30ms
 run_to_brake:	rjmp	init_startup
+restart_run:	rjmp	start_from_running
 
 ;-----bko-----------------------------------------------------------------
 demag_timeout:
@@ -2038,151 +2199,6 @@ wait_commutation:
 		pop	temp1			; Throw away return address
 		pop	temp1
 		rjmp	restart_control		; Restart control immediately on RC timeout
-;-----bko-----------------------------------------------------------------
-; *** commutation utilities ***
-com1com2:	; Bp off, Ap on
-		set_comp_phase_b temp1
-		BpFET_off
-		sbrs	flags1, POWER_OFF
-		ApFET_on
-		ret
-
-com2com1:	; Bp on, Ap off
-		set_comp_phase_a temp1
-		ApFET_off
-		sbrs	flags1, POWER_OFF
-		BpFET_on
-		ret
-
-com2com3:	; Cn off, Bn on
-		set_comp_phase_c temp1
-		cli
-		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
-		sbr	flags2, (1<<B_FET)
-		.if COMP_PWM
-		CpFET_off
-		.endif
-		in	temp1, CnFET_port
-		CnFET_off
-		in	temp2, CnFET_port
-		cpse	temp1, temp2
-		BnFET_on
-		sei
-		ret
-
-com3com2:	; Cn on, Bn off
-		set_comp_phase_b temp1
-		cli
-		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
-		sbr	flags2, (1<<C_FET)
-		.if COMP_PWM
-		BpFET_off
-		.endif
-		in	temp1, BnFET_port
-		BnFET_off
-		in	temp2, BnFET_port
-		cpse	temp1, temp2
-		CnFET_on
-		sei
-		ret
-
-com3com4:	; Ap off, Cp on
-		set_comp_phase_a temp1
-		ApFET_off
-		sbrs	flags1, POWER_OFF
-		CpFET_on
-		ret
-
-com4com3:	; Ap on, Cp off
-		set_comp_phase_c temp1
-		CpFET_off
-		sbrs	flags1, POWER_OFF
-		ApFET_on
-		ret
-
-com4com5:	; Bn off, An on
-		set_comp_phase_b temp1
-		cli
-		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
-		sbr	flags2, (1<<A_FET)
-		.if COMP_PWM
-		BpFET_off
-		.endif
-		in	temp1, BnFET_port
-		BnFET_off
-		in	temp2, BnFET_port
-		cpse	temp1, temp2
-		AnFET_on
-		sei
-		ret
-
-com5com4:	; Bn on, An off
-		set_comp_phase_a temp1
-		cli
-		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
-		sbr	flags2, (1<<B_FET)
-		.if COMP_PWM
-		ApFET_off
-		.endif
-		in	temp1, AnFET_port
-		AnFET_off
-		in	temp2, AnFET_port
-		cpse	temp1, temp2
-		BnFET_on
-		sei
-		ret
-
-com5com6:	; Cp off, Bp on
-		set_comp_phase_c temp1
-		CpFET_off
-		sbrs	flags1, POWER_OFF
-		BpFET_on
-		ret
-
-com6com5:	; Cp on, Bp off
-		set_comp_phase_b temp1
-		BpFET_off
-		sbrs	flags1, POWER_OFF
-		CpFET_on
-		ret
-
-com6com1:	; An off, Cn on
-		set_comp_phase_a temp1
-		cli
-		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
-		sbr	flags2, (1<<C_FET)
-		.if COMP_PWM
-		ApFET_off
-		.endif
-		in	temp1, AnFET_port
-		AnFET_off
-		in	temp2, AnFET_port
-		cpse	temp1, temp2
-		CnFET_on
-		sei
-		ret
-
-com1com6:	; An on, Cn off
-		set_comp_phase_c temp1
-		cli
-		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
-		sbr	flags2, (1<<A_FET)
-		.if COMP_PWM
-		CpFET_off
-		.endif
-		in	temp1, CnFET_port
-		CnFET_off
-		in	temp2, CnFET_port
-		cpse	temp1, temp2
-		AnFET_on
-		sei
-		ret
 
 .if BOOT_LOADER
 .include "boot.inc"
