@@ -404,8 +404,12 @@ eeprom_defaults_w:
 ;-- Macros ---------------------------------------------------------------
 .macro adiwx
 	.if @2 > 63
+		.if byte1(-@2)
 		subi	@0, byte1(-@2)
 		sbci	@1, byte1(-byte2(@2 + 0xff))
+		.else
+		subi	@1, byte1(-byte2(@2 + 0xff))
+		.endif
 	.else
 		adiw	@0, @2
 	.endif
@@ -413,8 +417,12 @@ eeprom_defaults_w:
 
 .macro sbiwx
 	.if @2 > 63
+		.if byte1(@2)
 		subi	@0, byte1(@2)
 		sbci	@1, byte2(@2)
+		.else
+		subi	@1, byte2(@2)
+		.endif
 	.else
 		sbiw	@0, @2
 	.endif
