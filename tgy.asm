@@ -1784,6 +1784,8 @@ start_from_running:
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; clear POWER_OFF.
 		rcall	wait_timeout
+		ldi	temp1, 2		; Start with a short timeout to stop quickly
+		mov	rc_timeout, temp1	; if we see no further pulses after the first.
 		ldi	temp1, 6		; Do not enable FETs during first cycle to
 		sts	powerskip, temp1	; see if motor is running, and align to it.
 		ldi	temp1, ENOUGH_GOODIES	; If we can follow without a timeout, do not
