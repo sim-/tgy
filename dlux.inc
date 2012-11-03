@@ -156,12 +156,6 @@
 	out	ADMUX, @0
 .ENDMACRO
 
-.MACRO all_pFETs_off
-	CpFET_off
-	BpFET_off
-	ApFET_off
-.ENDMACRO
-
 ;*********************
 ; PORT B definitions *
 ;*********************
