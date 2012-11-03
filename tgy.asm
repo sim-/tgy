@@ -1605,7 +1605,7 @@ switch_power_off:
 boot_loader_test:
 		.if USE_ICP
 		sbis	PINB, rcp_in		; Skip clear if ICP pin high
-		.elseif USE_INT0 == 1
+		.elif USE_INT0 == 1
 		sbis	PIND, rcp_in		; Skip clear if INT0 pin high
 		.else
 		sbic	PIND, rcp_in		; Skip clear if INT0 pin low (inverted)
