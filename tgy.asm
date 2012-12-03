@@ -136,6 +136,7 @@
 .equ	MOTOR_BRAKE	= 0	; Enable brake
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
+.equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
 .equ	MOTOR_DEBUG	= 0
@@ -1043,7 +1044,7 @@ evaluate_rc_init:
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
 		.endif
-		.if USE_ICP || USE_INT0
+		.if RC_CALIBRATION && (USE_ICP || USE_INT0)
 		cbr	flags1, (1<<EVAL_RC)
 	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
 		ldi	YL, low(puls_high_l)	; Start with high pulse calibration
