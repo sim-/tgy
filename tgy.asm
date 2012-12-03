@@ -96,6 +96,8 @@
 #include "dlu40a.inc"		; Pulso Advance Plus 40A DLU40A inverted-PWM-opto (INT0 PWM)
 #elif defined(dlux_esc)
 #include "dlux.inc"		; HobbyKing Dlux Turnigy ESC 20A
+#elif defined(diy0_esc)
+#include "diy0.inc"		; HobbyKing DIY Open ESC (unreleased rev 0)
 #elif defined(hk200a_esc)
 #include "hk200a.inc"		; HobbyKing SS Series 190-200A with all nFETs (INT0 PWM)
 #elif defined(kda_esc)
