@@ -147,9 +147,11 @@
 ; Support listening on ICP pin (on AfroESCs)
 .if defined(USE_ICP) && USE_ICP
 .equ	RCP_PORT = PORTB
+.equ	RCP_PIN = PINB
 .equ	RCP_DDR = DDRB
 .else
 .equ	RCP_PORT = PORTD
+.equ	RCP_PIN = PIND
 .equ	RCP_DDR = DDRD
 .endif
 
@@ -183,21 +185,21 @@ boot_rx_time1:	cpi	XL, low(TX_BUFFER)
 		in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_tx_bytes
-boot_rx_no_tx:	sbic	PIND, rcp_in
+boot_rx_no_tx:	sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx_time1		; Loop while high, waiting for low edge
 		out	TCNT2, r16
 		out	TIFR, r20
 boot_rx_time2:	in	r14, TIFR
 		sbrc	r14, TOV2
 boot_exit:	rjmp	FLASHEND + 1		; Low too long -- exit boot loader
-		sbis	PIND, rcp_in		; Loop while low
+		sbis	RCP_PIN, rcp_in		; Loop while low
 		rjmp	boot_rx_time2
 		out	TCNT2, r16
 		out	TIFR, r20		; Start measuring high time
 boot_rx_time3:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; High too long, start over
-		sbic	PIND, rcp_in		; Loop while high, waiting for low edge
+		sbic	RCP_PIN, rcp_in		; Loop while high, waiting for low edge
 		rjmp	boot_rx_time3
 		in	r3, TCNT2		; Save learned high time
 		out	TCNT2, r16
@@ -205,7 +207,7 @@ boot_rx_time3:	in	r14, TIFR
 boot_rx_time4:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	FLASHEND + 1		; Low too long, exit boot loader
-		sbis	PIND, rcp_in		; Loop while low, waiting for high edge
+		sbis	RCP_PIN, rcp_in		; Loop while low, waiting for high edge
 		rjmp	boot_rx_time4
 		in	r2, TCNT2		; Save learned low time
 		mov	r0, r2
@@ -234,31 +236,31 @@ boot_rx:	out	TCNT2, r8
 boot_rx0:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	FLASHEND + 1		; Low too long, exit boot loader
-		sbis	PIND, rcp_in
+		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx0
 		out	TCNT2, r8		; Count falling edges for 7/8th of one bit time
 		out	TIFR, r20
 boot_rx1:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; High too long (or EOT), start over
-		sbic	PIND, rcp_in
+		sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx1
 		sec				; Receiving 1-bit
 boot_rx2:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_bit		; Timeout, must be 1-bit
-		sbis	PIND, rcp_in
+		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx2
 boot_rx3:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; Hmm, timed out during second high
-		sbic	PIND, rcp_in
+		sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx3
 		clc				; Receiving 0-bit
 boot_rx4:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_bit		; Timeout, must be 0-bit
-		sbis	PIND, rcp_in
+		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx4
 
 boot_tx_bytes:
