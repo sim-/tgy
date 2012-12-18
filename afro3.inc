@@ -80,8 +80,8 @@
 .equ	mux_temperature	= 6	; ADC6 temperature input (3.3k from +5V, 10k NTC to gnd)
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
-.equ	green_led	= 3	; o
-.equ	red_led		= 2	; o
+.equ	red_led		= 3	; o
+.equ	green_led	= 2	; o
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
 
