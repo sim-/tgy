@@ -67,7 +67,9 @@ Tested boards by target:
     - Hobby King Red Brick 70A (RB70A)
     - Hobby King Red Brick 200A (RB200A-BTO, black board)
 - rct50a:
-    - RCTimer 50A
+    - RCTimer 50A older MLF version
+- rct50a2:
+    - RCTimer 50A TQFP version
 - tp:
     - Original TowerPro 17A, 25A
     - Hobby King SS models without "-HW" in part number
