@@ -88,6 +88,8 @@
 #include "afro3.inc"		; AfroESC 3 (ICP PWM, I2C, UART)
 #elif defined(birdie70a_esc)
 #include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PWM)
+#elif defined(mkblctrl1_esc)
+#include "mkblctrl1.inc"	; MK BL-Ctrl v1.2 (ICP PWM, I2C, UART, high side PWM, sense hack)
 #elif defined(bs_esc)
 #include "bs.inc"		; HobbyKing BlueSeries / Mystery (INT0 PWM)
 #elif defined(bs_nfet_esc)
@@ -132,7 +134,9 @@
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
+.if !defined(MOTOR_ADVANCE)
 .equ	MOTOR_ADVANCE	= 18	; Degrees of timing advance (0 - 30, 30 meaning no delay)
+.endif
 .equ	MOTOR_BRAKE	= 0	; Enable brake
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
@@ -1679,6 +1683,12 @@ control_start:
 		.if USE_I2C
 		sbr	flags0, (1<<I2C_FIRST)+(1<<I2C_SPACE_LEFT)
 		ldi	temp1, I2C_ADDR + (MOTOR_ID << 1)
+		.if defined(MK_ADDRESS_PADS)
+		sbis	PINB, adr1		; Offset MOTOR_ID by address pads
+		subi	temp1, -1
+		sbis	PINB, adr2
+		subi	temp1, -2
+		.endif
 		out	TWAR, temp1
 		ldi	temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
 		out	TWCR, temp1
@@ -2125,6 +2135,14 @@ wait_pwm_enable:
 wait_pwm_running:
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
+.if defined(START_DELAY_US)
+		ldi	YL, byte1(START_DELAY_US*CPU_MHZ)
+		ldi	YH, byte2(START_DELAY_US*CPU_MHZ)
+		ldi	temp4, byte3(START_DELAY_US*CPU_MHZ)
+		mov	temp7, temp4
+		rcall	set_ocr1a_rel
+		rcall	wait_OCT1_tot
+.endif
 	; Powered startup: skip blanking and commutation wait,
 	; and use a fixed ZC check count until goodies reaches
 	; ENOUGH_GOODIES and we clear the STARTUP flag.
@@ -2167,7 +2185,11 @@ wait_for_demag:
 		rcall	evaluate_rc
 		in	temp3, ACSR
 		eor	temp3, flags1
+		.if defined(HIGH_SIDE_PWM)
+		sbrs	temp3, ACO		; Check for opposite level (demagnetization)
+		.else
 		sbrc	temp3, ACO		; Check for opposite level (demagnetization)
+		.endif
 		rjmp	wait_for_demag
 
 		rcall	load_timing
@@ -2192,7 +2214,11 @@ wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rcall	evaluate_rc
 		in	temp3, ACSR
 		eor	temp3, flags1
+		.if defined(HIGH_SIDE_PWM)
+		sbrs	temp3, ACO
+		.else
 		sbrc	temp3, ACO
+		.endif
 		rjmp	wait_for_edge3
 		cp	XL, XH			; Not yet crossed
 		adc	XL, ZH			; Increment if not at zc_filter

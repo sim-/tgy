@@ -59,6 +59,8 @@ Tested boards by target:
     - Hobby King SS Series 190-200A (HK-SS200ALV)
 - kda:
     - Keda 12A rev B with inverted PWM input (30A should also work)
+- mkblctrl1:
+    - MikroKopter BL-Ctrl v1.x (flashable by ISP only)
 - rb50a.hex
     - Hobby King Red Brick 50A (RB50-ESC)
 - rb70a.hex
