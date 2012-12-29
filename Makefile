@@ -10,6 +10,8 @@ all: $(ALL_TARGETS)
 
 $(ALL_TARGETS): tgy.asm boot.inc
 
+diy0.hex: tgy.asm boot.inc
+
 .inc.hex:
 	@test -e $*.asm || ln -s tgy.asm $*.asm
 	@echo "$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm"
