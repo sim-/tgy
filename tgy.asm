@@ -1144,7 +1144,7 @@ evaluate_rc:
 ;-----bko-----------------------------------------------------------------
 .if USE_ICP || USE_INT0
 evaluate_rc_puls:
-		cbr	flags1, (1<<EVAL_RC)
+		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
 		lds	YL, neutral_l
 		lds	YH, neutral_h
 		movw	temp1, rx_l		; Atomic copy of rc pulse length
@@ -1152,11 +1152,7 @@ evaluate_rc_puls:
 		sbc	temp2, YH
 		brcc	puls_plus
 		.if RC_PULS_REVERSE
-		.if MOTOR_REVERSE
-		cbr	flags1, (1<<REVERSE)
-		.else
 		sbr	flags1, (1<<REVERSE)
-		.endif
 		com	temp2
 		neg	temp1
 		sbci	temp2, -1
@@ -1169,11 +1165,6 @@ puls_zero:	clr	YL
 		clr	YH
 		rjmp	rc_not_full
 puls_plus:
-		.if MOTOR_REVERSE
-		sbr	flags1, (1<<REVERSE)
-		.else
-		cbr	flags1, (1<<REVERSE)
-		.endif
 		lds	temp3, fwd_scale_l
 		lds	temp4, fwd_scale_h
 puls_not_zero:
@@ -1972,7 +1963,11 @@ start_from_running:
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
 
-run1:		sbrc	flags1, REVERSE
+run1:		.if MOTOR_REVERSE
+		sbrs	flags1, REVERSE
+		else
+		sbrc	flags1, REVERSE
+		.endif
 		rjmp	run_reverse
 
 run_forward:	rcall	wait_for_high
