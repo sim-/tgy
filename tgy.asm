@@ -104,6 +104,8 @@
 #include "diy0.inc"		; HobbyKing DIY Open ESC (unreleased rev 0)
 #elif defined(hk200a_esc)
 #include "hk200a.inc"		; HobbyKing SS Series 190-200A with all nFETs (INT0 PWM)
+#elif defined(hm135a_esc)
+#include "hm135a.inc"		; Hacker/Jeti Master 135-O-F5B 135A inverted-PWM-opto (INT0 PWM)
 #elif defined(kda_esc)
 #include "kda.inc"		; Keda Model 12A - 30A (INT0 PWM)
 #elif defined(rb50a_esc)
