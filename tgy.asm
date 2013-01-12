@@ -128,8 +128,10 @@
 #include "tp70a.inc"		; TowerPro 70A with BL8003 FET drivers (INT0 PWM)
 #elif defined(tgy6a_esc)
 #include "tgy6a.inc"		; Turnigy Plush 6A (INT0 PWM)
-#else
+#elif defined(tgy_esc)
 #include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PWM)
+#else
+#error "Unrecognized board type."
 #endif
 
 .equ	BOOT_LOADER	= 1	; Enable or disable boot loader
