@@ -5,12 +5,12 @@ ASM?= avra
 .SUFFIXES: .inc .hex
 
 ALL_TARGETS = afro.hex afro2.hex afro3.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex hk200a.hex kda.hex mkblctrl1.hex rb50a.hex rb70a.hex rct50a.hex rct50a2.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy.hex
+AUX_TARGETS = diy0.hex
 
 all: $(ALL_TARGETS)
 
 $(ALL_TARGETS): tgy.asm boot.inc
-
-diy0.hex: tgy.asm boot.inc
+$(AUX_TARGETS): tgy.asm boot.inc
 
 .inc.hex:
 	@test -e $*.asm || ln -s tgy.asm $*.asm
