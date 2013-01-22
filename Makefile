@@ -1,6 +1,7 @@
 # This Makefile is compatible with both BSD and GNU make
 
 ASM?= avra
+SHELL = /bin/bash
 
 .SUFFIXES: .inc .hex
 
@@ -15,7 +16,7 @@ $(AUX_TARGETS): tgy.asm boot.inc
 .inc.hex:
 	@test -e $*.asm || ln -s tgy.asm $*.asm
 	@echo "$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm"
-	@set -o pipefail; $(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm |& grep -v 'PRAGMA directives currently ignored'
+	@set -o pipefail; $(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm 2>&1 | grep -v 'PRAGMA directives currently ignored'
 	@test -L $*.asm && rm -f $*.asm || true
 
 test: all
