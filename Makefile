@@ -33,16 +33,16 @@ program_tgy_%: %.hex
 	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -D -U flash:w:$<:i
 
 program_usbasp_%: %.hex
-	avrdude -c usbasp -u -p m8 -U flash:w:$<:i
+	avrdude -c usbasp -B.5 -p m8 -U flash:w:$<:i
 
 program_avrisp2_%: %.hex
-	avrdude -c avrisp2 -u -p m8 -U flash:w:$<:i
+	avrdude -c avrisp2 -p m8 -U flash:w:$<:i
 
 program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
 
 program_dapa_%: %.hex
-	avrdude -c dapa -u -p m8 -U flash:w:$<:i
+	avrdude -c dapa -p m8 -U flash:w:$<:i
 
 program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<
