@@ -57,6 +57,7 @@ Tested boards by target:
     - Turnigy dlux 20A SBEC
 - hk200a:
     - Hobby King SS Series 190-200A (HK-SS200ALV)
+    - RCTimer 50A TQFP version
 - kda:
     - Keda 12A rev B with inverted PWM input (30A should also work)
 - mkblctrl1:
@@ -68,8 +69,6 @@ Tested boards by target:
     - Hobby King Red Brick 200A (RB200A-BTO, black board)
 - rct50a:
     - RCTimer 50A older MLF version
-- rct50a2:
-    - RCTimer 50A TQFP version
 - tp:
     - Original TowerPro 17A, 25A
     - Hobby King SS models without "-HW" in part number
