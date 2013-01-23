@@ -1770,6 +1770,7 @@ wait_for_power_on:
 		brne	wait_for_power_on
 		ldi	temp1, 60
 		sts	rct_beacon, temp1	; Double rate after the first beep
+		rcall	switch_power_off	; Brake may have been on
 		rcall	beep_f3
 		rjmp	wait_for_power_on
 		.endif
