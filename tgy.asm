@@ -1968,7 +1968,7 @@ start_from_running:
 
 run1:		.if MOTOR_REVERSE
 		sbrs	flags1, REVERSE
-		else
+		.else
 		sbrc	flags1, REVERSE
 		.endif
 		rjmp	run_reverse
