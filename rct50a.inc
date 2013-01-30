@@ -2,6 +2,8 @@
 ;* RCTimer 50A with all FETs on PORTD                      *
 ;* Same sense and FET pins as TowerPro "type 1" boards,    *
 ;* but with different FET pin ordering                     *
+;* Note: Newer 50A are the same but with inverted high/low *
+;* For newer 50A boards (TQFP), use the hk200a target      *
 ;* Original fuses are lfuse:0xbf hfuse:0xc1                *
 ;***********************************************************
 
@@ -14,14 +16,14 @@
 ;*********************
 ; PORT D definitions *
 ;*********************
-.equ	ApFET		= 7	;o
-.equ	c_comp		= 6	;i common comparator input (AIN0)
-.equ	AnFET		= 5	;o
-.equ	BnFET		= 4	;o
-.equ	BpFET		= 3	;o
-.equ	rcp_in		= 2	;i r/c pulse input
-.equ	CpFET		= 1	;o
-.equ	CnFET		= 0	;o
+.equ	ApFET		= 7	;11 o
+.equ	c_comp		= 6	;10 i common comparator input (AIN0)
+.equ	AnFET		= 5	;9  o
+.equ	BnFET		= 4	;2  o
+.equ	BpFET		= 3	;1  o
+.equ	rcp_in		= 2	;32 i r/c pulse input
+.equ	CpFET		= 1	;31 o
+.equ	CnFET		= 0	;30 o
 
 .equ	INIT_PD		= 0
 .equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)+(1<<AnFET)+(1<<BnFET)+(1<<CnFET)
