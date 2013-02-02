@@ -228,17 +228,7 @@
 .def	sys_control_h	= r13		; duty limit high
 .def	timing_duty_l	= r14		; timing duty limit low
 .def	timing_duty_h	= r15		; timing duty limit high
-
-;.def	nfet_on		= r18
-;.def	nfet_off	= r19
-.def	i_temp1		= r20		; interrupt temporary
-.def	i_temp2		= r21		; interrupt temporary
-.def	temp3		= r22		; main temporary (L)
-.def	temp4		= r23		; main temporary (H)
-.def	temp1		= r24		; main temporary (L), adiw-capable
-.def	temp2		= r25		; main temporary (H), adiw-capable
-
-.def	flags0	= r16	; state flags
+.def	flags0		= r16	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
 	.equ	SET_DUTY	= 1	; if set when armed, set duty during evaluate_rc
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
@@ -247,8 +237,7 @@
 	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
 	.equ	NO_CALIBRATION	= 7	; if set, disallow calibration (unsafe reset cause)
-
-.def	flags1	= r17	; state flags
+.def	flags1		= r17	; state flags
 	.equ	POWER_OFF	= 0	; switch fets on disabled
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
@@ -257,23 +246,18 @@
 	.equ	ACO_EDGE_HIGH	= 5	; if set, looking for ACO high - conviently located at the same bit position as ACO
 	.equ	STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
-
-.def	flags2	= r18
+.def	flags2		= r18
 	.equ	A_FET		= 0	; if set, A FET is being PWMed
 	.equ	B_FET		= 1	; if set, B FET is being PWMed
 	.equ	C_FET		= 2	; if set, C FET is being PWMed
 	.equ	ALL_FETS	= (1<<A_FET)+(1<<B_FET)+(1<<C_FET)
-;.def	flags2	= r25
-;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
-;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
-;	.equ	RC_INTERVAL_OK	= 2
-;	.equ	POFF_CYCLE	= 3	; if set one commutation cycle is performed without power
-;	.equ	COMP_SAVE	= 4	; if set ACO was high
-;	.equ	COMP_SAVE_READY	= 5	; if acsr_save was set by PWM interrupt
-;	.equ	STARTUP		= 6	; if set startup-phase is active
-;	.equ	SCAN_TIMEOUT	= 7	; if set a startup timeout occurred
-
-; here the XYZ registers are placed ( r26-r31)
+;.def			= r19
+.def	i_temp1		= r20		; interrupt temporary
+.def	i_temp2		= r21		; interrupt temporary
+.def	temp3		= r22		; main temporary (L)
+.def	temp4		= r23		; main temporary (H)
+.def	temp1		= r24		; main temporary (L), adiw-capable
+.def	temp2		= r25		; main temporary (H), adiw-capable
 
 ; XL: general temporary
 ; XH: general temporary
