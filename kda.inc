@@ -143,7 +143,8 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-;.equ	mux_vbat	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 10.10V in -> .406V at ADC7)
+; CHECK THIS
+;.equ	mux_voltage	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 10.10V in -> .406V at ADC7)
 ;.equ			= 6	; ADC6
 ;.equ			= 5	; ADC5
 .equ	mux_c		= 4	; ADC4 phase input
@@ -151,6 +152,10 @@
 .equ	mux_a		= 2	; ADC2 phase input
 ;.equ			= 1	; ADC1
 ;.equ			= 0	; ADC0
+
+; CHECK THIS
+.equ	O_POWER		= 47
+.equ	O_GROUND	= 2
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0

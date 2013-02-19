@@ -101,9 +101,12 @@
 .equ	BpFET		= 5	;o
 ;.equ			= 4	; ADC4
 .equ	CpFET		= 3	;o
-;.equ			= 2	; ADC2
-.equ	mux_vbat	= 1	; ADC1 voltage input (220k from Vbat, 51k to gnd, 10.10V in -> 1.888V at ADC1)
+.equ	mux_voltage	= 2	; ADC2 voltage input (220k from Vbat, 51k to gnd, 10.10V in -> 1.888V at ADC2)
+.equ	mux_temperature	= 1	; ADC1
 .equ	mux_c		= 0	; ADC0 phase input
+
+.equ	O_POWER		= 220
+.equ	O_GROUND	= 51
 
 .equ	INIT_PC		= (1<<CpFET)|(1<<BpFET)
 .equ	DIR_PC		= (1<<CpFET)|(1<<BpFET)

@@ -78,9 +78,12 @@
 .equ	BpFET		= 5
 .equ	BnFET		= 4
 .equ	CpFET		= 3
-.equ	mux_vbat	= 2	; ADC2 voltage input (220k from Vbat, 51k to gnd, 10.10V -> 1.900V at ADC2)
+.equ	mux_voltage	= 2	; ADC2 voltage input (220k from Vbat, 51k to gnd, 10.10V -> 1.900V at ADC2)
 ;.equ			= 1
 .equ	mux_c		= 0	; ADC0
+
+.equ	O_POWER		= 220
+.equ	O_GROUND	= 51
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= (1<<BnFET)+(1<<BpFET)+(1<<CpFET)

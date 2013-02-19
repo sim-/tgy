@@ -159,7 +159,10 @@
 .equ	mux_c		= 4	; ADC4 phase input
 ;.equ			= 5	; ADC5
 ;.equ			= 6	; ADC6
-.equ	ACCU_MUX	= 7	; ADC7 voltage control input
+.equ	mux_voltage	= 7	; ADC7 voltage input
+
+.equ    O_POWER         = 470
+.equ    O_GROUND        = 47
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0

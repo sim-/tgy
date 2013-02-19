@@ -153,7 +153,10 @@
 .equ	i2c_data	= 4	; ADC4/SDA
 .equ	i2c_clk		= 5	; ADC5/SCL
 ;.equ			= 6	; ADC6
-.equ	ACCU_MUX	= 7	; ADC7 voltage control input
+.equ	mux_voltage	= 7	; ADC7 voltage input
+
+.equ    O_POWER         = 470
+.equ    O_GROUND        = 47
 
 .equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
 .equ	DIR_PC		= 0

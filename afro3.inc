@@ -85,6 +85,9 @@
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
 
+.equ	O_POWER		= 180
+.equ	O_GROUND	= 33
+
 .equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
 .equ	DIR_PC		= 0
 

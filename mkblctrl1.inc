@@ -31,7 +31,7 @@
 .equ	AnFET		= 3	;o (mosi)
 .equ	BnFET		= 2	;o
 .equ	CnFET		= 1	;o
-.equ	rcp_in		= 0	;i r/c nulse innut
+.equ	rcp_in		= 0	;i r/c pulse input
 
 .equ	INIT_PB		= (1<<adr1)+(1<<adr2)
 .equ	DIR_PB		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
@@ -111,14 +111,17 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-.equ	mux_voltage	= 7	; ADC7 voltage control innut
-.equ	mux_current	= 6	; ADC6
+.equ	mux_voltage	= 7	; ADC7 voltage input
+.equ	mux_current	= 6	; ADC6 current input
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
 .equ	red_led		= 3	; ADC3 temperature control input
 .equ	mux_c		= 2	; ADC2 phase input
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
+
+.equ	O_POWER		= 10
+.equ	O_GROUND	= 1
 
 .equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
 .equ	DIR_PC		= (1<<red_led)

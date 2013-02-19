@@ -81,7 +81,7 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-.equ	accu_adc	= 7	; ADC7 voltage control input
+.equ	mux_voltage	= 7	; ADC7 voltage input
 ;.equ			= 6	; ADC6
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
@@ -89,6 +89,9 @@
 .equ	StatLED		= 2	; o
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
+
+.equ	O_POWER		= 10
+.equ	O_GROUND	= 1
 
 .equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
 .equ	DIR_PC		= (1<<ApFET)+(1<<StatLED)

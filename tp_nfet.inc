@@ -97,8 +97,11 @@
 .equ	mux_b		= 4	; ADC4 phase input
 ;.equ			= 3	; ADC3
 ;.equ			= 2	; ADC2 (plush has something on here)
-;.equ	temp_adc	= 1	; ADC1 temperature control input
-;.equ	accu_adc	= 0	; ADC0 voltage control input
+.equ	mux_temperature	= 1	; ADC1 temperature input
+.equ	mux_voltage	= 0	; ADC0 voltage input (10k from Vbat, 976 to gnd, 10.55V in -> .936V at ADC0)
+
+.equ	O_POWER		= 10000
+.equ	O_GROUND	= 976
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0

@@ -20,8 +20,8 @@
 .equ	txd		= 1
 .equ	rxd		= 0
 
-.equ	INIT_PD		= (1<<ApFET)|(1<<txd)
-.equ	DIR_PD		= (1<<ApFET)|(1<<txd)|(1<<io1)|(1<<io2)|(1<<red_led)
+.equ	INIT_PD		= (1<<ApFET)
+.equ	DIR_PD		= (1<<ApFET)|(1<<io1)|(1<<io2)|(1<<red_led)
 
 .equ	ApFET_port	= PORTD
 
@@ -63,6 +63,9 @@
 .equ	mux_voltage	= 2	; ADC2 voltage input
 .equ	mux_temperature	= 1	; ADC1 temperature input
 .equ	mux_c		= 0	; ADC0 phase input
+
+.equ	O_POWER		= 220
+.equ	O_GROUND	= 51
 
 .equ	INIT_PC		= (1<<BpFET)|(1<<CpFET)
 .equ	DIR_PC		= (1<<BpFET)|(1<<CpFET)

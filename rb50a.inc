@@ -1,6 +1,7 @@
 ;********************************************
 ;* Red Brick 50A with all FETs on PORTD     *
 ;* Original fuses are lfuse:0xbf hfuse:0xc1 *
+;* Same as hk200a but with reversed C and A *
 ;********************************************
 
 .equ	F_CPU		= 16000000
@@ -142,7 +143,7 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-.equ	mux_vbat	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 14.7V in -> .598V at ADC7)
+.equ	mux_voltage	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 14.7V in -> .598V at ADC7)
 ;.equ			= 6	; ADC6
 ;.equ			= 5	; ADC5
 .equ	mux_c		= 4	; ADC4 phase input
@@ -150,6 +151,9 @@
 .equ	mux_a		= 2	; ADC2 phase input
 ;.equ			= 1	; ADC1
 ;.equ			= 0	; ADC0
+
+.equ	O_POWER		= 47
+.equ	O_GROUND	= 2	; Mystery Cloud-50A seen to have 4.7k here, pfft
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0

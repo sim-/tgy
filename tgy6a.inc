@@ -103,8 +103,11 @@
 .equ	mux_b		= 4	; ADC4 phase input
 ;.equ			= 3	; ADC3
 .equ	mux_c		= 2	; ADC2 phase input
-.equ	temp_adc	= 1	; ADC1 temperature control input
-.equ	accu_adc	= 0	; ADC0 voltage control input
+;.equ			= 1	; ADC1
+.equ	mux_voltage	= 0	; ADC0 voltage input (4.7k from Vbat, 1k to gnd, 10.10V -> 1.772V at ADC0)
+
+.equ	O_POWER		= 47
+.equ	O_GROUND	= 10
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0
