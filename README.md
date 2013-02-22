@@ -1,9 +1,11 @@
 https://github.com/sim-/tgy
 
-This tree contains Atmel AVR assembly code for AVR-based 3-phase
-sensor-less motor electronic speed control (ESC) boards. This work is
-based on Bernhard Konze's "tp-18a" code, with significant modifications.
-Please see tgy.asm for Bernhard's license.
+This tree contains Atmel AVR assembly code for ATmega-based 3-phase
+sensor-less motor electronic speed control (ESC) boards, originally for
+Turnigy and similar models. This work is based on Bernhard Konze's
+"tp-18a" software, which was a port from his earlier personal work to the
+TowerPro 18A and original (not current!) Turnigy Plush boards. Please see
+tgy.asm for Bernhard's license.
 
 Patches and comments are always welcome! Let me know how it goes!
 
@@ -13,11 +15,11 @@ Features
 - 16-bit output PWM with full clock rate resolution (~18kHz PWM with
   a POWER_RANGE of 800 steps)
 - 24-bit timing and PWM pulse tracking at full clock rate resolution
-- ICP-based pulse time recording (on supported hardware) for zero
-  throttle jitter
+- ICP-based pulse time recording (on supported hardware) for zero PWM
+  input control jitter
 - Immediate PWM input to PWM output for best possible multicopter
-  response (eg: ideal for tricopters, quadcopters, etc., but NOT where
-  soft start or really any significant current limiting is needed!)
+  response (but NOT where soft start or really any significant current
+  limiting is needed!)
 - Accepts any PWM update rate (minimum ~5microseconds PWM low time)
 - Optimized interrupt code (very low minimum PWM and reduced full
   throttle bump)
@@ -206,26 +208,54 @@ resistor star and connected to AIN0 on all boards, for detecting the
 zero-crossing from the motor back-EMF for timing. You can check which
 pins run to which output phases as they will have the lowest resistance
 from output phase to AVR pin, and all three will have a common resistance
-to the AIN1 pin.
+to the AIN0 pin.
+
+Boot Loader
+-----------
+Since the 2012-06-01 release, the pre-built .hex files contain a boot
+loader that allows for flash and EEPROM reading and writing over the PWM
+input wire. The main purpose of this boot loader is to support software
+updates without having to expose the MCU or ISP pads for SPI programming,
+assuming this version or newer has previously been flashed.
+
+The boot loader is available on all boards which are wired in way that
+permits two-way communication over the wire. Some ESCs are isolated with
+an opto-isolator or by components to invert the signal to be compatible
+with ESCs that do have an opto-isolator, such as ESCs that work with the
+kda.hex target. Such boards will not be able to use this protocol.
+
+The boot loader uses an implementation of the same wire encoding as the
+Turnigy USB Linker. This is a simple 9600bps serial to half duplex wire
+converter that encodes signals in a way that should make it difficult to
+start a motor, even on an ESC not supporting the protocol, regardless of
+data sent. However, it is still possible that this could occur, so follow
+the same precautions as with normal ISP flashing, below.
+
+If the Turnigy USB Linker is not available, it is possible to use an
+Arduino or MultiWii board as a gateway between (USB and) serial and the
+wire protocol used by the boot loader. See the ArduinoUSBLinker project
+by Chris Osgood: https://github.com/c---/ArduinoUSBLinker
 
 Flashing and Testing
 --------------------
 Sort out how you want to connect an ISP programming device to the chip.
-Most boards have 6 pads in a row for this purpose. You can either solder
+Some boards have 6 pads in a row for this purpose. You can either solder
 wires, or make up some kind of springy-pin connector that touches the
 pads or chip pins without needing to solder. This is helpful when
 flashing more than one board. See here for some ideas and discussion:
 http://www.rcgroups.com/forums/showthread.php?t=1513678
 
-Sort out which software you will use for flashing. You can download AVR
-Studio and the AVR Toolchain from www.atmel.com, or "avrdude" on most
-OSes. There are plenty of resources on the web for AVR ISP programming.
+Sort out which software you will use for flashing. The KKMulticopter
+Flashtool now supports ESC flashing and is commonly used. You may also
+download AVR Studio and the AVR Toolchain from www.atmel.com, or try
+"avrdude" on most OSes. There are plenty of resources on the web for AVR
+ISP programming, and maybe ways to do it.
 
-With the board powered from the current-limited supply, try to read
-the stock firmware (flash) _and_ EEPROM from the AVR, to use as a backup.
-Most are locked and will still appear to read, but the files will contain
-just a series of repeating/increasing digits. If you do manage to get
-something, consider yourself lucky!
+Power the ESC from a current-limited supply and try to read the stock
+firmware (flash) _and_ EEPROM, to use as a backup. Most are locked and
+will still appear to read, but the files will contain just a series of
+repeating/increasing digits. If you do manage to get something, consider
+yourself lucky!
 
 Write down the stock fuse values, and check that they are sane. Most AVR
 programmers have a menu for this, but with avrdude or uisp, Google "AVR
@@ -240,7 +270,9 @@ to and voltage at the chip. Sometimes, a weak power or signal connection
 can temporarily work and then fail part-way through programming, giving
 verification errors. This can happen particularly if the target chip is
 powered weakly by the programmer itself, which then back-feeds to the
-rest of the circuit and tries to charge the capacitor, etc.
+rest of the circuit and tries to charge the capacitor, etc. Also check
+that the ground pin (black wire) actually connects to a pin marked "GND",
+not "NC" as on some USBasp devices!
 
 Once programming is successful, hook up a small motor without propeller
 and reset the power. You should hear three increasing beeps. If not, or
@@ -269,20 +301,14 @@ flight control board, you can sometimes tap the board to make it output a
 sudden throttle increase.
 
 For debugging reset causes, recent code has different beep sequences for
-each AVR reset case. Three increasing beeps indicates a usual startup.
-However, if there was a power brownout (such as voltage at the MCU
-dropping below 4.0V), there will be a medium and low beep (like a mobile
-phone with dead battery). Finally, an external reset, such as after ISP
-flashing, will cause just a single beep at the same pitch as the arming
-beep.
+each AVR reset case. See the Troubleshooting section below.
 
 Throttle Calibration and Programming
 ------------------------------------
 
-Since the 2012-01-04 release, there is software support for throttle
-calibration. This should be used whenever PWM input mode is used,
-including where external resonators are present, to set the usable
-throttle range.
+Since the 2012-01-04 release, the input throttle range may be calibrated.
+This should be used whenever PWM input mode is used, including where
+external resonators are present, to set the usable throttle range.
 
 The default range is set at the top of tgy.asm (stop at 1060us, full
 throttle at 1860us) and is not changed if no new value is saved to the
@@ -293,18 +319,29 @@ which may be off by 5% - 10% between each board, and will also drift by
 throttle differences between boards if not calibrated, and issues arming
 the ESC, particularly in cold environments.
 
-To calibrate the ESC, REMOVE ALL PROPELLERS and follow the steps
-documented for your flight controller board. With KK boards, for example,
-the Yaw pot must be set to the minimum position in order to enable "pass
-through" mode from the RX input to the ESC output, and the ESCs are then
-calibrated to the radio's throttle stick.
+Some flight boards may have automatic calibration procedures, or it may
+just be possible to set the min/max motor output to exactly match the ESC
+defaults listed above. ESCs with external resonators can use this method
+to avoid calibration. With a flight board such as the Naze32 running
+baseflight, the min/max can be set with CLI commands as follows:
+
+set minthrottle=1064
+set maxthrottle=1864
+
+Otherwise, to calibrate the ESC, REMOVE ALL PROPELLERS and follow the
+steps that may be documented for your flight controller board. KK2 boards
+have a two-button procedure that emits calibration pulses automatically.
+With KK boards, the Yaw pot must be set to the minimum position in order
+to enable "pass through" mode from the RX input to the ESC output. The
+ESCs are then calibrated to the radio's throttle stick.
 
 Calibration may also be done with a servo tester or with the ESC directly
 connected to an RX channel. The only requirement is that the input pulse
 has to be at or above PROGRAM_RC_PULS (default 1460us) to enter
 programming mode. This will differ slightly on boards with no external
-oscillator, and if programming individually, try to maintain a close
-temperature.
+oscillator. If calibrating ESCs individually, try to maintain a close
+temperature and at least 6-7V input voltage (the ATmega8 oscillator also
+speeds up as VCC drops).
 
 With the propellers removed and the source (radio, servo tester, or flight
 control board) set to full throttle, power up the ESC and wait for a
