@@ -1,10 +1,7 @@
 ;***********************************************************
-;* Pulso Advance Plus DLU40A with all FETs on PORTD, same  *
-;* Same pinout as rct50a.inc but inverted low-side FETs,   *
-;* and inverted PWM input due to the opto-isolator         *
-;* Pull-up on PWM input helps make input from opto square  *
-;* Warning: Not sure of exact model, might be DLPU40A      *
-;* Original fuses are lfuse:0x9f hfuse:0xc9                *
+;* TowerPro 70A with all FETs on PORTD                     *
+;* Same pinout as dlu40a.inc (ir2103 drivers), but without *
+;* PWM input inversion                                     *
 ;***********************************************************
 
 .equ	F_CPU		= 16000000
@@ -155,8 +152,8 @@
 ;.equ			= 1	; ADC1
 ;.equ			= 0	; ADC0
 
-.equ    O_POWER         = 44	; Seen as 22k + 22k
-.equ    O_GROUND        = 2
+.equ	O_POWER		= 44	; Seen as 22k + 22k
+.equ	O_GROUND	= 2
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0

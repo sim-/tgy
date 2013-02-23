@@ -1,5 +1,5 @@
 ;***********************************************************
-;* Pulso Advance Plus DLU40A with all FETs on PORTD, same  *
+;* Pulso Advance Plus DLU40A with all FETs on PORTD        *
 ;* Same pinout as rct50a.inc but inverted low-side FETs,   *
 ;* and inverted PWM input due to the opto-isolator         *
 ;* Pull-up on PWM input helps make input from opto square  *

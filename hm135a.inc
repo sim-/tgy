@@ -1,6 +1,5 @@
 ;***********************************************************
 ;* Hacker/Jeti Master 135-O-F5B with all FETs on PORTD     *
-;* Pulso Advance Plus DLU40A with all FETs on PORTD, same  *
 ;* Same pinout as Pulso Advance Plus DLU40A but at 12MHz   *
 ;***********************************************************
 
