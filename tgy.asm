@@ -276,8 +276,8 @@ goodies:	.byte	1	; Number of rounds without timeout
 powerskip:	.byte	1	; Skip power through this number of steps
 ocr1ax:		.byte	1	; 3rd byte of OCR1A
 tcnt1x:		.byte	1	; 3rd byte of TCNT1
-rct_boot:	.byte	1	; Counter which increments while rc_timeout is 0
-rct_beacon:	.byte	1	; Counter which increments while rc_timeout is 0
+rct_boot:	.byte	1	; Counter which increments while rc_timeout is 0 to jump to boot loader
+rct_beacon:	.byte	1	; Counter which increments while rc_timeout is 0 to disarm and beep occasionally
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
 last_tcnt1_x:	.byte	1
@@ -1614,6 +1614,9 @@ boot_loader_jump:
 .endif
 ;-----bko-----------------------------------------------------------------
 control_start:
+control_disarm:
+		cli
+
 	; status led on
 		GRN_on
 
@@ -1691,6 +1694,14 @@ i_rc_puls2:	wdr
 		.if BOOT_LOADER
 		rcall	boot_loader_test
 		.endif
+		.if BEACON
+		lds	temp1, rct_beacon
+		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
+		brne	i_rc_puls2
+		ldi	temp1, 60
+		sts	rct_beacon, temp1	; Double rate after the first beep
+		rcall	beep_f3			; Beacon
+		.endif
 		rjmp	i_rc_puls2
 i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
@@ -1748,16 +1759,14 @@ wait_for_power_on:
 		.if BOOT_LOADER
 		rcall	boot_loader_test
 		.endif
-		.if BEACON
 		lds	temp1, rct_beacon
-		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
+		cpi	temp1, 30		; Disarm after ~2 seconds of no signal
 		brne	wait_for_power_on
-		ldi	temp1, 60
-		sts	rct_beacon, temp1	; Double rate after the first beep
 		rcall	switch_power_off	; Brake may have been on
-		rcall	beep_f3
-		rjmp	wait_for_power_on
-		.endif
+		rcall	wait30ms
+		rcall	beep_f3			; Play beeps for signal lost, disarming
+		rcall	beep_f2
+		rjmp	control_disarm		; Do not start motor until neutral signal received once again
 wait_for_power_rx:
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
 		adiw	YL, 0			; Test for zero
@@ -2032,10 +2041,6 @@ run6_4:		movw	sys_control_l, YL
 
 restart_control:
 		rcall	switch_power_off
-		rcall	wait30ms
-		rcall	beep_f3
-		rcall	beep_f2
-		rcall	wait30ms
 run_to_brake:	rjmp	init_startup
 restart_run:	rjmp	start_from_running
 
