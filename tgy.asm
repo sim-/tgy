@@ -867,26 +867,30 @@ urxc_exit:	out	SREG, i_sreg
 	.endif
 ;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
-beep_f1:	ldi	temp4, 200
-		ldi	temp2, 80
+beep_f1:	ldi	temp2, 80
+		ldi	temp4, 200
+		RED_on
 		BpFET_on
 		AnFET_on
 		rjmp	beep
 
-beep_f2:	ldi	temp4, 180
-		ldi	temp2, 100
+beep_f2:	ldi	temp2, 100
+		ldi	temp4, 180
+		GRN_on
 		CpFET_on
 		BnFET_on
 		rjmp	beep
 
-beep_f3:	ldi	temp4, 160
-		ldi	temp2, 120
+beep_f3:	ldi	temp2, 120
+		ldi	temp4, 160
 		ApFET_on
 		CnFET_on
 		rjmp	beep
 
-beep_f4:	ldi	temp4, 140
-		ldi	temp2, 140
+beep_f4:	ldi	temp2, 140
+beep_f4_freq:	ldi	temp4, 140
+		RED_on
+		GRN_on
 		CpFET_on
 		AnFET_on
 		; Fall through
@@ -915,6 +919,8 @@ beep3:		in	temp1, TCNT0
 		brne	beep2
 		dec	temp2
 		brne	beep_on
+		GRN_off
+		RED_off
 		ret
 
 wait240ms:	rcall	wait120ms
@@ -1617,8 +1623,9 @@ control_start:
 control_disarm:
 		cli
 
-	; status led on
-		GRN_on
+	; LEDs off while disarmed
+		GRN_off
+		RED_off
 
 		rcall	puls_scale
 
@@ -1734,6 +1741,8 @@ i_rc_puls3:
 init_startup:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
+		GRN_on				; Green on while armed and idle or braking
+		RED_off
 		.if MOTOR_BRAKE
 		ldi	YL, low(BRAKE_POWER)
 		ldi	YH, high(BRAKE_POWER)
@@ -1778,6 +1787,7 @@ start_from_running:
 		rcall	switch_power_off
 		comp_init temp1			; init comparator
 		RED_off
+		GRN_off
 
 		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
 		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
@@ -2024,6 +2034,7 @@ run6:
 		rjmp	run6_3
 
 run6_2:		cbr	flags1, (1<<STARTUP)
+		RED_off
 		; Build up sys_control to MAX_POWER in steps.
 		; If SLOW_THROTTLE is disabled, this only limits
 		; initial start ramp-up; once running, sys_control
@@ -2059,9 +2070,12 @@ demag_timeout:
 		CpFET_off
 		.endif
 		all_nFETs_off temp1
+		RED_on
 		rjmp	wait_commutation
 ;-----bko-----------------------------------------------------------------
-wait_timeout:	sts	goodies, ZH
+wait_timeout:	sbrs	flags1, STARTUP
+		RED_on
+		sts	goodies, ZH
 		sbr	flags1, (1<<STARTUP)
 		rjmp	wait_commutation	; Update timing and duty.
 ;-----bko-----------------------------------------------------------------
@@ -2121,6 +2135,7 @@ wait_pwm_enable:
 		cpi	ZL, low(pwm_wdr)
 		brne	wait_pwm_running
 		ldi	ZL, low(pwm_off)	; Re-enable PWM if disabled for powerskip or sync loss avoidance
+		RED_off				; wait_timeout would have happened if motor not spinning during powerskip
 wait_pwm_running:
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
