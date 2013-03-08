@@ -581,10 +581,9 @@ scmd_read_ee1:	rcall	boot_eeprom_rw		; Uses and increments byte address
 		st	X+, r16			; STATUS_CMD_OK at end
 		rjmp	scmd_send_chksum
 
-; For chip erase, we just nuke the EEPROM.
+; For chip erase, clear the flash before the boot loader and nuke the EEPROM.
 scmd_chip_erase:
-		clr	r12
-		clr	r13
+		rcall	boot_clear_flash	; Also clears r12:r13 for EEPROM address
 		ldi	r24, low(EEPROMEND+1)
 		ldi	r25, high(EEPROMEND+1)
 		set
@@ -621,12 +620,14 @@ scmd_write_fl1:	ld	r0, Y+
 		rcall	boot_wr_flash		; use the normal boot_wr_flash
 scmd_write_fl2:	movw	ZL, r14			; Restore Z
 		rjmp	scmd_send_chksum
+; This is a shadow of boot_wr_flash and is to be used while the page containing
+; the usually-used boot_wr_flash is being erased and reflashed.
 scmd_write_fl3:	rcall	scmd_spm		; Erase page
 		ldi	r22, (1<<PGWRT)+(1<<SPMEN)
 		rcall	scmd_spm		; Write page
 		ldi	r22, (1<<RWWSRE)+(1<<SPMEN)
 		rcall	scmd_spm		; Re-enable RWW section
-		rjmp	scmd_write_fl2
+		rjmp	scmd_write_fl2		; Return
 scmd_spm_wait:	in	r23, SPMCR		; Wait for previous SPM to finish
 		sbrc	r23, SPMEN
 		rjmp	scmd_spm_wait
@@ -660,6 +661,19 @@ boot_eeprom_rw:	rcall	boot_spm_wait
 		out	EEDR, r23		; Set new byte
 		sbi	EECR, EEMWE		; Write arming
 		out	EECR, r17		; Write
+		ret
+
+; Erase flash space before boot loader (used for "chip erase")
+boot_clear_flash:
+		movw	r14, ZL			; Save Z
+		ldi	ZL, low(BOOT_START)
+		ldi	ZH, high(BOOT_START)
+		ldi	r22, (1<<PGERS)+(1<<SPMEN)
+boot_clear_fl1:	sbiw	ZL, PAGESIZE
+		rcall	boot_spm		; Erase page (never this code)
+		brne	boot_clear_fl1
+		movw	r12, ZL			; Zero r12:r13 (for EEPROM address later)
+		movw	ZL, r14			; Restore Z
 		ret
 
 ; Keep these addresses within a page so that we can self-update.
