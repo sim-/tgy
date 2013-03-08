@@ -238,7 +238,7 @@
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
 	.equ	NO_CALIBRATION	= 7	; if set, disallow calibration (unsafe reset cause)
 .def	flags1		= r17	; state flags
-	.equ	POWER_OFF	= 0	; switch fets on disabled
+	.equ	POWER_ON	= 0	; if set, switching fets is enabled
 	.equ	FULL_POWER	= 1	; 100% on - don't switch off, but do OFF_CYCLE working
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
 	.equ	UART_MODE	= 3	; if receiving updates via UART
@@ -818,7 +818,7 @@ i2c_rx_data1:	in	rx_l, TWDR		; Receive low byte from bus (MK FlightCtrl "new pro
 		rjmp	i2c_ack
 i2c_tx_init:	out	TWDR, ZH		; Send 0 as Current (dummy)
 		ldi	i_temp1, 250		; Prepare MaxPWM value (250 when stopped enables proto v2 for MK)
-		sbrc	flags1, POWER_OFF
+		sbrs	flags1, POWER_ON
 i2c_tx_datarep:	ldi	i_temp1, 255		; Send MaxPWM 255 when running (and repeat for Temperature)
 		sts	max_pwm, i_temp1
 		rjmp	i2c_ack
@@ -842,7 +842,7 @@ urxc_int:
 	; http://www.control.aau.dk/uav/reports/10gr833/10gr833_student_report.pdf
 	; The UART runs at 38400 baud, N81. Input is ignored until >= 0xf5
 	; is received, where we start counting to MOTOR_ID, at which
-	; the received byte is used as throttle input. 0 is POWER_OFF,
+	; the received byte is used as throttle input. 0 is neutral,
 	; >= 200 is FULL_POWER.
 	.if USE_UART
 		in	i_sreg, SREG
@@ -1478,7 +1478,7 @@ set_new_duty13:
 		rol	YH
 		.endif
 set_new_duty_set:
-		cbr	flags1, (1<<POWER_OFF)
+		sbr	flags1, (1<<POWER_ON)
 set_new_duty_set_off:
 		com	YL			; Save one's complement of both
 		com	temp1			; low bytes for up-counting TCNT2
@@ -1491,7 +1491,7 @@ set_new_duty_full:
 		rjmp	set_new_duty_set
 set_new_duty_zero:
 		; Power off
-		sbr	flags1, (1<<POWER_OFF)
+		cbr	flags1, (1<<POWER_ON)
 		rjmp	set_new_duty_set_off
 ;-----bko-----------------------------------------------------------------
 ; Multiply the 24-bit timing in temp1:temp2:temp3 by temp4 and add the top
@@ -1777,7 +1777,7 @@ start_from_running:
 		sbr	flags0, (1<<SET_DUTY)
 		; Set STARTUP flag and call update_timing which will set
 		; last_tcnt1 and set the duty (limited by STARTUP) and
-		; clear POWER_OFF.
+		; set POWER_ON.
 		rcall	wait_timeout
 		ldi	temp1, 2		; Start with a short timeout to stop quickly
 		mov	rc_timeout, temp1	; if we see no further pulses after the first.
@@ -1795,7 +1795,7 @@ start_from_running:
 		; Bp off, Ap on
 		set_comp_phase_b temp1
 		BpFET_off
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		ApFET_on
 .endmacro
 
@@ -1803,7 +1803,7 @@ start_from_running:
 		; Bp on, Ap off
 		set_comp_phase_a temp1
 		ApFET_off
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		BpFET_on
 .endmacro
 
@@ -1812,7 +1812,7 @@ start_from_running:
 		set_comp_phase_c temp1
 		cli
 		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		sbr	flags2, (1<<B_FET)
 		.if COMP_PWM
 		CpFET_off
@@ -1830,7 +1830,7 @@ start_from_running:
 		set_comp_phase_b temp1
 		cli
 		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		sbr	flags2, (1<<C_FET)
 		.if COMP_PWM
 		BpFET_off
@@ -1847,7 +1847,7 @@ start_from_running:
 		; Ap off, Cp on
 		set_comp_phase_a temp1
 		ApFET_off
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		CpFET_on
 .endmacro
 
@@ -1855,7 +1855,7 @@ start_from_running:
 		; Ap on, Cp off
 		set_comp_phase_c temp1
 		CpFET_off
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		ApFET_on
 .endmacro
 
@@ -1864,7 +1864,7 @@ start_from_running:
 		set_comp_phase_b temp1
 		cli
 		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		sbr	flags2, (1<<A_FET)
 		.if COMP_PWM
 		BpFET_off
@@ -1882,7 +1882,7 @@ start_from_running:
 		set_comp_phase_a temp1
 		cli
 		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		sbr	flags2, (1<<B_FET)
 		.if COMP_PWM
 		ApFET_off
@@ -1899,7 +1899,7 @@ start_from_running:
 		; Cp off, Bp on
 		set_comp_phase_c temp1
 		CpFET_off
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		BpFET_on
 .endmacro
 
@@ -1907,7 +1907,7 @@ start_from_running:
 		; Cp on, Bp off
 		set_comp_phase_b temp1
 		BpFET_off
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		CpFET_on
 .endmacro
 
@@ -1916,7 +1916,7 @@ start_from_running:
 		set_comp_phase_a temp1
 		cli
 		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		sbr	flags2, (1<<C_FET)
 		.if COMP_PWM
 		ApFET_off
@@ -1934,7 +1934,7 @@ start_from_running:
 		set_comp_phase_c temp1
 		cli
 		cbr	flags2, ALL_FETS
-		sbrs	flags1, POWER_OFF
+		sbrc	flags1, POWER_ON
 		sbr	flags2, (1<<A_FET)
 		.if COMP_PWM
 		CpFET_off
@@ -1991,13 +1991,13 @@ run_reverse:	rcall	wait_for_low
 run6:
 		.if MOTOR_BRAKE
 		; Brake immediately whenever power is off
-		sbrc	flags1, POWER_OFF
+		sbrs	flags1, POWER_ON
 		rjmp	run_to_brake
 		.else
 		; If last commutation timed out and power is off, return to init_startup
 		lds	temp1, goodies
 		cpi	temp1, 0
-		sbrc	flags1, POWER_OFF
+		sbrs	flags1, POWER_ON
 		breq	run_to_brake
 		.endif
 		movw	YL, sys_control_l
@@ -2218,7 +2218,7 @@ wait_commutation:
 		flag_off
 		lds	temp1, powerskip
 		cpse	temp1, ZH
-		sbr	flags1, (1<<POWER_OFF)	; Disable power when powerskipping
+		cbr	flags1, (1<<POWER_ON)	; Disable power when powerskipping
 		cpse	rc_timeout, ZH
 		ret
 		pop	temp1			; Throw away return address
