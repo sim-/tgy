@@ -1192,9 +1192,6 @@ rc_no_set_duty:	ldi	temp1, RCP_TOT
 evaluate_rc_i2c:
 		movw	YL, rx_l		; Atomic copy of 16-bit input
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
-		.if MOTOR_REVERSE
-		sbr	flags1, (1<<REVERSE)
-		.endif
 	; MK sends one or two bytes, if supported, and if low bits are
 	; non-zero. We store the first received byte in rx_h, second
 	; in rx_l. There are 3 low bits which are stored at the low
@@ -1217,9 +1214,6 @@ evaluate_rc_i2c:
 evaluate_rc_uart:
 		mov	YH, rx_h		; Copy 8-bit input
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
-		.if MOTOR_REVERSE
-		sbr	flags1, (1<<REVERSE)
-		.endif
 		ldi	YL, 0
 		cpi	YH, 0
 		breq	rc_not_full
