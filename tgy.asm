@@ -138,6 +138,7 @@
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
+.equ	DEAD_TIME_NS	= 437	; Dead time with complementary PWM (62.5ns steps @ 16MHz: min 437ns, max 2437ns)
 .if !defined(MOTOR_ADVANCE)
 .equ	MOTOR_ADVANCE	= 18	; Degrees of timing advance (0 - 30, 30 meaning no delay)
 .endif
@@ -425,6 +426,31 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 
+.macro cycle_delay
+	.if @0 >= 32
+		.error "cycle_delay too long"
+	.endif
+	.if @0 & 1
+		nop
+	.endif
+	.if @0 & 2
+		rjmp	PC + 1
+	.endif
+	.if @0 & 4
+		rjmp	PC + 1
+		rjmp	PC + 1
+	.endif
+	.if	@0 & 8
+		nop
+		rcall	wait_ret		; 3 cycles to call + 4 to return
+	.endif
+	.if	@0 & 16
+		rjmp	PC + 1
+		rcall	wait_ret
+		rcall	wait_ret
+	.endif
+.endmacro
+
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
@@ -637,6 +663,12 @@ pwm_on:
 		BpFET_off
 		sbrc	flags2, C_FET
 		CpFET_off
+		.if DEAD_TIME_NS * CPU_MHZ / 1000 > 7
+		.equ	EXTRA_DEAD_TIME = DEAD_TIME_NS * CPU_MHZ / 1000 - 7
+		.else
+		.equ	EXTRA_DEAD_TIME = 0
+		.endif
+		cycle_delay EXTRA_DEAD_TIME
 		.endif
 		sbrc	flags2, A_FET
 		AnFET_on
@@ -670,6 +702,7 @@ pwm_off:
 		sbrc	flags2, C_FET
 		CnFET_off
 		.if COMP_PWM
+		cycle_delay EXTRA_DEAD_TIME
 		sbrc	flags2, A_FET
 		ApFET_on
 		sbrc	flags2, B_FET
@@ -935,7 +968,8 @@ wait3:		in	temp1, TIFR
 		brne	wait2
 		dec	temp2
 		brne	wait1
-		ret
+wait_ret:	ret
+
 ;-----bko-----------------------------------------------------------------
 ; Read from or write to the EEPROM block. To avoid duplication, we use the
 ; global interrupts flag (I) to enable writing versus reading mde. Only
