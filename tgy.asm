@@ -41,7 +41,7 @@
 ;
 ; NOTE: We do 16-bit PWM on timer2 at full CPU clock rate resolution, using
 ; tcnt2h to simulate the high byte. An input FULL to STOP range of 800 plus
-; a MIN_DUTY of 58 (a POWER_RANGE of 858) gives 800 unique PWM steps at an
+; a MIN_DUTY of 56 (a POWER_RANGE of 856) gives 800 unique PWM steps at an
 ; about 18kHz on a 16MHz CPU clock. The output frequency is slightly lower
 ; than F_CPU / POWER_RANGE due to cycles used in the interrupt as TCNT2 is
 ; reloaded.
@@ -176,7 +176,7 @@
 
 ; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
 .if !defined(MIN_DUTY)
-.equ	MIN_DUTY	= 58 * CPU_MHZ / 16
+.equ	MIN_DUTY	= 56 * CPU_MHZ / 16
 .endif
 
 ; Number of PWM steps (too high and PWM frequency drops into audible range)
@@ -578,14 +578,10 @@ init_bitbeep2:	sbrs	i_temp1, 0
 ; cycle is longer than 8 bits. This is tracked in tcnt2h.
 
 .if MOTOR_BRAKE
-pwm_brake_again:
-		dec	tcnt2h
-		out	SREG, i_sreg
-		reti
-
-pwm_brake_on:	in	i_sreg, SREG
+pwm_brake_on:
 		cpse	tcnt2h, ZH
-		rjmp	pwm_brake_again
+		rjmp	pwm_again
+		in	i_sreg, SREG
 		nFET_brake i_temp1
 		ldi	i_temp1, 0xff
 		cp	off_duty_l, i_temp1	; Check for 0 off-time
@@ -607,9 +603,10 @@ pwm_brake_on1:	mov	tcnt2h, duty_h
 		out	TCNT2, duty_l
 		reti
 
-pwm_brake_off:	in	i_sreg, SREG
+pwm_brake_off:
 		cpse	tcnt2h, ZH
-		rjmp	pwm_brake_again
+		rjmp	pwm_again
+		in	i_sreg, SREG
 		ldi	ZL, pwm_brake_on
 		mov	tcnt2h, off_duty_h
 		all_nFETs_off i_temp1
@@ -625,12 +622,11 @@ pwm_on_high:
 		ldi	ZL, pwm_on
 pwm_on_again:	out	SREG, i_sreg
 		reti
-pwm_off_high:
+
+pwm_again:
 		in	i_sreg, SREG
 		dec	tcnt2h
-		brne	pwm_off_again
-		ldi	ZL, pwm_off
-pwm_off_again:	out	SREG, i_sreg
+		out	SREG, i_sreg
 		reti
 
 pwm_on:
@@ -649,8 +645,6 @@ pwm_on:
 		sbrc	flags2, C_FET
 		CnFET_on
 		ldi	ZL, pwm_off
-		cpse	duty_h, ZH
-		ldi	ZL, pwm_off_high
 		mov	tcnt2h, duty_h
 		out	TCNT2, duty_l
 		reti
@@ -660,6 +654,8 @@ pwm_wdr:					; Just reset watchdog
 		reti
 
 pwm_off:
+		cpse	tcnt2h, ZH		; 2 cycles to skip when tcnt2h is 0
+		rjmp	pwm_again
 		wdr				; 1 cycle: watchdog reset
 		sbrc	flags1, FULL_POWER	; 2 cycles to skip if not full power
 		rjmp	pwm_on			; None of this off stuff if full power
@@ -668,7 +664,7 @@ pwm_off:
 		ldi	ZL, pwm_on_high		; 1 cycle
 		mov	tcnt2h, off_duty_h	; 1 cycle
 		sbrc	flags2, A_FET		; 1 cycle if not, 2 cycles if skip
-		AnFET_off			; 2 cycles (off at 10 cycles from entry)
+		AnFET_off			; 2 cycles (off at 12 cycles from entry)
 		sbrc	flags2, B_FET		; Offset by 2 cycles here,
 		BnFET_off			; but still equal on-time
 		sbrc	flags2, C_FET
