@@ -132,7 +132,9 @@
 #error "Unrecognized board type."
 #endif
 
-.equ	BOOT_LOADER	= 1	; Enable or disable boot loader
+.equ	BOOT_LOADER	= 1	; Include Turnigy USB linker STK500v2 boot loader on PWM input pin
+.equ	BOOT_JUMP	= 1	; Jump to any boot loader when PWM input stays high
+.equ	BOOT_START	= THIRDBOOTSTART
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
@@ -1619,7 +1621,7 @@ switch_power_off:
 		all_nFETs_off temp1
 		ret
 ;-----bko-----------------------------------------------------------------
-.if BOOT_LOADER
+.if BOOT_JUMP
 boot_loader_test:
 		.if USE_ICP
 		sbis	PINB, rcp_in		; Skip clear if ICP pin high
@@ -1631,7 +1633,18 @@ boot_loader_test:
 		sts	rct_boot, ZH		; Clear rct_count when low
 		lds	temp1, rct_boot
 		sbrs	temp1, 5 		; Wait 32 * 16 * 65536us (~2s) before jumping
-		ret
+boot_ret:	ret
+; Check for boot loader presence
+		ldi	ZL, low(BOOT_START << 1)
+		cli				; Interrupts depend on ZH being 0
+		ldi	ZH, high(BOOT_START << 1)
+		lpm	temp1, Z+
+		lpm	temp2, Z
+		ldi	ZH, 0
+		sei
+		adiw	temp1, 1		; Check flash contents for 0xffff or 0x0000
+		sbiw	temp1, 2
+		brcs	boot_ret		; Return if boot loader area is empty
 boot_loader_jump:
 		cli
 		out	DDRB, ZH		; Tristate pins
@@ -1640,7 +1653,9 @@ boot_loader_jump:
 		ldi	temp1, (1<<WDCE)+(1<<WDE)
 		out	WDTCR, temp1
 		out	WDTCR, ZH		; Disable watchdog
-		rjmp	THIRDBOOTSTART
+		lds	temp1, orig_osccal
+		out	OSCCAL, temp1		; Restore OSCCAL
+		rjmp	BOOT_START		; Jump to boot loader
 .endif
 ;-----bko-----------------------------------------------------------------
 control_start:
@@ -1722,7 +1737,7 @@ i_rc_puls2:	wdr
 		.endif
 		sbrc	flags1, EVAL_RC
 		rjmp	i_rc_puls_rx
-		.if BOOT_LOADER
+		.if BOOT_JUMP
 		rcall	boot_loader_test
 		.endif
 		.if BEACON
@@ -1789,7 +1804,7 @@ wait_for_power_on:
 		rjmp	wait_for_power_rx
 		tst	rc_timeout
 		brne	wait_for_power_on	; Tight loop unless rc_timeout is zero
-		.if BOOT_LOADER
+		.if BOOT_JUMP
 		rcall	boot_loader_test
 		.endif
 		lds	temp1, rct_beacon

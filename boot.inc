@@ -159,7 +159,9 @@
 ; Fuses should have BOOTSZ1 set, BOOTSZ0 unset, BOOTRST set.
 ; Last nibble of hfuse should be A or 2 to save EEPROM on chip erase.
 ; Do not set WTDON. Implementing support for it here is big/difficult.
+.if !defined(BOOT_START)
 .equ BOOT_START = THIRDBOOTSTART
+.endif
 .org BOOT_START
 boot_reset:	ldi	ZL, high(RAMEND)	; Set up stack
 		ldi	ZH, low(RAMEND)
