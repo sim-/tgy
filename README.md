@@ -55,6 +55,7 @@ Tested boards by target:
     - Hobby King BlueSeries 40A (and _some_ Mystery 40A boards)
 - dlu40a:
     - Pulso Advance Plus DLU40A with opto-isolated inverted PWM input
+    - Hobby King Multistar 45A
 - dlux:
     - Turnigy dlux 20A SBEC
 - hk200a:
@@ -62,6 +63,8 @@ Tested boards by target:
     - RCTimer 50A TQFP version
 - kda:
     - Keda 12A rev B with inverted PWM input (30A should also work)
+    - Dynam 18A, 25A with Blue Heat Shrink
+    - Hobby King Multistar series (30A and under)
 - mkblctrl1:
     - MikroKopter BL-Ctrl v1.x (flashable by ISP only)
 - rb50a.hex
