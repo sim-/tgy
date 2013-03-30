@@ -114,6 +114,8 @@
 #include "rb70a.inc"		; Red Brick 70A with all nFETs (INT0 PWM)
 #elif defined(rct50a_esc)
 #include "rct50a.inc"		; RCTimer 50A (MLF version) with all nFETs (INT0 PWM)
+#elif defined(tbs_esc)
+#include "tbs.inc"		; TBS 30A ESC (Team BlackSheep) with all nFETs (ICP PWM, UART)
 #elif defined(tp_esc)
 #include "tp.inc"		; TowerPro 25A/HobbyKing 18A "type 1" (INT0 PWM)
 #elif defined(tp_8khz_esc)

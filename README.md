@@ -71,6 +71,8 @@ Tested boards by target:
     - Hobby King Red Brick 200A (RB200A-BTO, black board)
 - rct50a:
     - RCTimer 50A older MLF version
+- tbs:
+    - Team BlackSheep TBS 30A ESC (ICP input version)
 - tp:
     - Original TowerPro 17A, 25A
     - Hobby King SS models without "-HW" in part number
