@@ -156,16 +156,16 @@
 	cbi	AnFET_port, AnFET
 .ENDMACRO
 .MACRO BnFET_on
-	sbi	AnFET_port, BnFET
+	sbi	BnFET_port, BnFET
 .ENDMACRO
 .MACRO BnFET_off
-	cbi	AnFET_port, BnFET
+	cbi	BnFET_port, BnFET
 .ENDMACRO
 .MACRO CnFET_on
-	sbi	AnFET_port, CnFET
+	sbi	CnFET_port, CnFET
 .ENDMACRO
 .MACRO CnFET_off
-	cbi	AnFET_port, CnFET
+	cbi	CnFET_port, CnFET
 .ENDMACRO
 
 .MACRO AnFET_on_reg
