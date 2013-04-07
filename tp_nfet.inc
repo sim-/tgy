@@ -100,8 +100,8 @@
 .equ	mux_temperature	= 1	; ADC1 temperature input
 .equ	mux_voltage	= 0	; ADC0 voltage input (10k from Vbat, 976 to gnd, 10.55V in -> .936V at ADC0)
 
-.equ	O_POWER		= 10000
-.equ	O_GROUND	= 976
+.equ	O_POWER		= 625	; 10k
+.equ	O_GROUND	= 61	; 976
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0
