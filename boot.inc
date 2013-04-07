@@ -678,6 +678,27 @@ boot_clear_fl1:	sbiw	ZL, PAGESIZE
 		movw	ZL, r14			; Restore Z
 		ret
 
+; Pad out the boot loader to work around avrdude verifying gaps
+		nop
+		nop
+		nop
+		nop
+
+		nop
+		nop
+		nop
+		nop
+
+		nop
+		nop
+		nop
+		nop
+
+		nop
+		nop
+		nop
+		nop
+
 ; Keep these addresses within a page so that we can self-update.
 .org FLASHEND + 1 - 32
 description:
