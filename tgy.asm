@@ -404,30 +404,76 @@ eeprom_defaults_w:
 .endmacro
 
 ;-- Macros ---------------------------------------------------------------
-.macro adiwx
-	.if @2 > 63
-		.if byte1(-@2)
+
+; Add any 16-bit immediate to a register pair (@0:@1 += @2)
+.macro adi2
+	.if byte1(-@2)
 		subi	@0, byte1(-@2)
 		sbci	@1, byte1(-byte2(@2 + 0xff))
-		.else
+	.else
 		subi	@1, byte1(-byte2(@2 + 0xff))
-		.endif
+	.endif
+.endmacro
+
+; Smaller version for r24 and above
+.macro adiwx
+	.if @2 > 63
+		adi2	@0, @1, @2
 	.else
 		adiw	@0, @2
 	.endif
 .endmacro
 
-.macro sbiwx
-	.if @2 > 63
-		.if byte1(@2)
+; Compare any 16-bit immediate from a register pair (@0:@1 -= @2, maybe clobbering @3)
+.macro cpi2
+	.if byte1(@2)
+		cpi	@0, byte1(@2)
+		ldi	@3, byte2(@2)
+		cpc	@1, @3
+	.else
+		cpi	@1, byte2(@2)
+	.endif
+.endmacro
+
+; Compare any 24-bit immediate from a register triplet (@0:@1:$2 -= @3, maybe clobbering @4)
+.macro cpi3
+		cpi	@0, byte1(@3)
+	.if byte2(@3)
+		ldi	@4, byte2(@3)
+		cpc	@1, @4
+	.else
+		cpc	@1, ZH
+	.endif
+	.if byte3(@3)
+		ldi	@4, byte3(@3)
+		cpc	@2, @4
+	.else
+		cpc	@2, ZH
+	.endif
+.endmacro
+
+; Subtract any 16-bit immediate from a register pair (@0:@1 -= @2)
+.macro sbi2
+	.if byte1(@2)
 		subi	@0, byte1(@2)
 		sbci	@1, byte2(@2)
-		.else
+	.else
 		subi	@1, byte2(@2)
-		.endif
+	.endif
+.endmacro
+
+; Smaller version for r24 and above
+.macro sbiwx
+	.if @2 > 63
+		sbi2	@0, @1, @2
 	.else
 		sbiw	@0, @2
 	.endif
+.endmacro
+
+.macro ldi2
+		ldi	@0, byte1(@2)
+		ldi	@1, byte2(@2)
 .endmacro
 
 .macro cycle_delay
@@ -800,7 +846,7 @@ falling_edge:
 		movw	rx_l, i_temp1		; Guaranteed to be valid, store immediately
 		in	i_temp1, OCR1BL		; No atomic temp register used to read OCR1* registers
 		in	i_temp2, OCR1BH
-		sbiwx	i_temp1, i_temp2, MAX_RC_PULS * CPU_MHZ	; Put back to start time
+		sbi2	i_temp1, i_temp2, MAX_RC_PULS * CPU_MHZ	; Put back to start time
 		sub	rx_l, i_temp1		; Subtract start time from current time
 		sbc	rx_h, i_temp2
 .if byte3(MAX_RC_PULS*CPU_MHZ)
@@ -1092,9 +1138,7 @@ rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
 		clr	temp7
 		cpi	YL, low(puls_high_l)	; Are we learning the high pulse?
 		brne	rc_prog3		; No, maybe the low pulse
-		cpi	temp3, byte1(PROGRAM_RC_PULS * CPU_MHZ)
-		ldi	temp1, byte2(PROGRAM_RC_PULS * CPU_MHZ)
-		cpc	temp4, temp1
+		cpi2	temp3, temp4, PROGRAM_RC_PULS * CPU_MHZ, temp1
 		brcs	evaluate_rc_puls	; Lower than PROGRAM_RC_PULS - exit programming
 		ldi	temp1, 32 * 31/32	; Full speed pulse averaging count (slightly below exact)
 		rjmp	rc_prog5
@@ -1195,18 +1239,15 @@ puls_plus:
 		lds	temp4, fwd_scale_h
 puls_not_zero:
 		.if RCP_DEADBAND
-		subi	temp1, byte1(RCP_DEADBAND * CPU_MHZ)
-		sbci	temp2, byte2(RCP_DEADBAND * CPU_MHZ)
-		brmi	puls_zero
+		sbiwx	temp1, temp2, RCP_DEADBAND * CPU_MHZ
+		brmi	puls_zero_brake
 		.endif
 .endif
 	; The following is used by all input modes
 rc_do_scale:	ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
 		ldi	YH, byte2(MIN_DUTY)
 		rcall	mul_y_12x34		; Scaled result is now in Y
-		cpi	YL, byte1(MAX_POWER)
-		ldi	temp1, byte2(MAX_POWER)
-		cpc	YH, temp1
+		cpi2	YL, YH, MAX_POWER, temp1
 		brlo	rc_not_full
 		ldi	YL, byte1(MAX_POWER)
 		ldi	YH, byte2(MAX_POWER)
@@ -1361,15 +1402,7 @@ update_timing:
 		sbc	temp3, temp4
 
 	; Limit maximum RPM (fastest timing)
-		cpi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
-		ldi	temp4, byte2(TIMING_MAX*CPU_MHZ/2)
-		cpc	temp2, temp4
-		.if byte3(TIMING_MAX*CPU_MHZ/2)
-		ldi	temp4, byte3(TIMING_MAX*CPU_MHZ/2)
-		cpc	temp3, temp4
-		.else
-		cpc	temp3, ZH
-		.endif
+		cpi3	temp1, temp2, temp3, TIMING_MAX*CPU_MHZ/2, temp4
 		brcc	update_timing1
 		ldi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
 		ldi	temp2, byte2(TIMING_MAX*CPU_MHZ/2)
@@ -1385,34 +1418,16 @@ update_timing1:
 	; so this is just an approximation. It would be nice if we could
 	; do this with math instead of two constants, but we need a divide.
 	; Clobbers only temp4. Fastest in case of fastest timing.
-		.if (TIMING_RANGE2*CPU_MHZ/2) & 0xff00
-		ldi	temp4, byte3(TIMING_RANGE2*CPU_MHZ/2)
-		cpi	temp2, byte2(TIMING_RANGE2*CPU_MHZ/2)
-		cpc	temp3, temp4
-		.else
-		cpi	temp3, byte3(TIMING_RANGE2*CPU_MHZ/2)
-		.endif
+		cpi2	temp2, temp3, (TIMING_RANGE2*CPU_MHZ/2) >> 8, temp4
 		ldi	XL, low(MAX_POWER)
 		ldi	XH, high(MAX_POWER)
 		brcs	update_timing4
-		.if (TIMING_RANGE1*CPU_MHZ/2) & 0xff00
-		ldi	temp4, byte3(TIMING_RANGE1*CPU_MHZ/2)
-		cpi	temp2, byte2(TIMING_RANGE1*CPU_MHZ/2)
-		cpc	temp3, temp4
-		.else
-		cpi	temp3, byte3(TIMING_RANGE1*CPU_MHZ/2)
-		.endif
+		cpi2	temp2, temp3, (TIMING_RANGE1*CPU_MHZ/2) >> 8, temp4
 		ldi	XL, low(PWR_MAX_RPM2)
 		ldi	XH, high(PWR_MAX_RPM2)
 		brcs	update_timing4
 	; Limit minimum RPM (slowest timing)
-		.if (TIMING_MIN*CPU_MHZ/2) & 0xff00
-		ldi	temp4, byte3(TIMING_MIN*CPU_MHZ/2)
-		cpi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
-		cpc	temp3, temp4
-		.else
-		cpi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
-		.endif
+		cpi2	temp2, temp3, (TIMING_MIN*CPU_MHZ/2) >> 8, temp4
 		brcs	update_timing2
 		ldi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
 		ldi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
