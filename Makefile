@@ -30,7 +30,7 @@ binary_zip: $(ALL_TARGETS)
 	zip -9 "$$TARGET" $(ALL_TARGETS) && ls -l "$$TARGET"
 
 program_tgy_%: %.hex
-	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -D -U flash:w:$<:i
+	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -U flash:w:$<:i
 
 program_usbasp_%: %.hex
 	avrdude -c usbasp -B.5 -p m8 -U flash:w:$<:i
