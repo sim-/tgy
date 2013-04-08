@@ -626,32 +626,28 @@ init_bitbeep2:	sbrs	i_temp1, 0
 		rjmp	init_bitbeep1		; Loop forever
 
 ;-----bko-----------------------------------------------------------------
-; timer2 overflow compare interrupt (output PWM) -- the interrupt vector
-; actually "ijmp"s to Z which should point to one of these entry points.
+; Timer2 overflow interrupt (output PWM) -- the interrupt vector actually
+; "ijmp"s to Z, which should point to one of these entry points.
 ;
 ; We try to avoid clobbering (and thus needing to save/restore) flags;
-; in, out, mov, ldi, etc. do not modify any flags, while dec does.
+; in, out, mov, ldi, cpse, etc. do not modify any flags, while dec does.
 ;
-; The comparator (ACSR) is saved at the very end of the ON cycle, but
-; since the nFET takes at least half a microsecond to turn off and the
-; AVR buffers ACO for a few cycles, we do it after turning off the drive
-; pin. For low duty cycles (with a longer off period), testing shows that
-; waiting an extra 0.5us - 0.75us (8-12 cycles at 16MHz) actually helps
-; to improve zero-crossing detection accuracy significantly, perhaps
-; because the driven-low phase has had a chance to finish swinging down.
-; However, some tiny boards such as 10A or less may have very low gate
-; charge/capacitance, and so can turn off faster. We used to wait 8/9
-; cycles, but now we wait 5 cycles (5/16ths of a microsecond), which
-; still helps on ~30A boards without breaking 10A boards.
+; We used to check the comparator (ACSR) here to help starting, since PWM
+; switching is what introduces noise that affects the comparator result.
+; However, timing of this is very sensitive to FET characteristics, and
+; would work well on some boards but not at all on others without waiting
+; another 100-200ns, which was enough to break other boards. So, instead,
+; we do all of the ACSR sampling outside of the interrupt and do digital
+; filtering. The AVR interrupt overhead also helps to shield the noise.
 ;
 ; We reload TCNT2 as the very last step so as to reduce PWM dead areas
 ; between the reti and the next interrupt vector execution, which still
 ; takes a good 4 (reti) + 4 (interrupt call) + 2 (ijmp) cycles. We also
-; try to keep the fet switch off as close to this as possible to avoid a
-; significant bump at FULL_POWER.
+; try to keep the switch on close to the start of pwm_on and switch off
+; close to the end of pwm_aff to minimize the power bump at full power.
 ;
-; The pwm_*_high entry points are only called when the particular on/off
-; cycle is longer than 8 bits. This is tracked in tcnt2h.
+; pwm_*_high and pwm_again are called when the particular on/off cycle
+; is longer than will fit in 8 bits. This is tracked in tcnt2h.
 
 .if MOTOR_BRAKE
 pwm_brake_on:
