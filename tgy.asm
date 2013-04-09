@@ -523,19 +523,15 @@ clear_loop1:	cp	ZL, r0
 		in	i_sreg, MCUCSR
 		out	MCUCSR, r0
 
-	; portB - all FETs off
+	; Initialize ports
 		ldi	temp1, INIT_PB
 		out	PORTB, temp1
 		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5)
 		out	DDRB, temp1
-
-	; portC reads comparator inputs
 		ldi	temp1, INIT_PC
 		out	PORTC, temp1
 		ldi	temp1, DIR_PC
 		out	DDRC, temp1
-
-	; portD reads rc-puls + AIN0 ( + RxD, TxD for debug )
 		ldi	temp1, INIT_PD
 		out	PORTD, temp1
 		ldi	temp1, DIR_PD
