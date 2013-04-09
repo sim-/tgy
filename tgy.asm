@@ -163,6 +163,7 @@
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
+.equ	MIN_RC_PULS	= 100	; Throw away any pulses shorter than this
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
@@ -1208,6 +1209,12 @@ evaluate_rc_puls:
 		lds	YL, neutral_l
 		lds	YH, neutral_h
 		movw	temp1, rx_l		; Atomic copy of rc pulse length
+		.if defined(MIN_RC_PULS)
+		cpi2	temp1, temp2, MIN_RC_PULS, temp3
+		brcc	puls_long_enough
+		ret
+puls_long_enough:
+		.endif
 		sub	temp1, YL
 		sbc	temp2, YH
 		brcc	puls_plus
