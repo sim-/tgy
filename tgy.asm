@@ -497,126 +497,6 @@ eeprom_defaults_w:
 .endmacro
 
 ;-----bko-----------------------------------------------------------------
-; init after reset
-
-reset:		clr	r0
-		out	SREG, r0		; Clear interrupts and flags
-
-	; Set up stack
-		ldi	ZH, high(RAMEND)
-		ldi	ZL, low(RAMEND)
-		out	SPH, ZH
-		out	SPL, ZL
-	; Clear RAM and all registers
-clear_loop:	st	-Z, r0
-		cpi	ZL, SRAM_START
-		cpc	ZH, r0
-		brne	clear_loop1
-		ldi	ZL, 30			; Start clearing registers
-clear_loop1:	cp	ZL, r0
-		cpc	ZH, r0
-		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
-
-	; Save original OSCCAL and reset cause
-		in	i_sreg, OSCCAL
-		sts	orig_osccal, i_sreg
-		in	i_sreg, MCUCSR
-		out	MCUCSR, r0
-
-	; Initialize ports
-		ldi	temp1, INIT_PB
-		out	PORTB, temp1
-		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5)
-		out	DDRB, temp1
-		ldi	temp1, INIT_PC
-		out	PORTC, temp1
-		ldi	temp1, DIR_PC
-		out	DDRC, temp1
-		ldi	temp1, INIT_PD
-		out	PORTD, temp1
-		ldi	temp1, DIR_PD
-		out	DDRD, temp1
-
-	; Start timers except output PWM
-		ldi	temp1, T0CLK		; timer0: beep control, delays
-		out	TCCR0, temp1
-		ldi	temp1, T1CLK		; timer1: commutation timing,
-		out	TCCR1B, temp1		; RC pulse measurement
-		out	TCCR2, ZH		; timer2: PWM, stopped
-
-	; Enable watchdog (WDTON may be set or unset)
-		ldi	temp1, (1<<WDCE)+(1<<WDE)
-		out	WDTCR, temp1
-		ldi	temp1, (1<<WDE)		; Fastest option: ~16.3ms timeout
-		out	WDTCR, temp1
-
-	; Read EEPROM block to RAM
-		rcall	wait120ms
-		rcall	eeprom_read_block	; Also calls osccal_set
-
-	; Check EEPROM signature
-		ldi	XL, low(eeprom_sig_l) + 2
-		ld	temp2, -X
-		ld	temp1, -X		; Leave X at eeprom_sig_l
-		subi	temp1, low(EEPROM_SIGN)
-		sbci	temp2, high(EEPROM_SIGN)
-		breq	eeprom_good
-
-	; Signature not good: set defaults in RAM, but do not write
-	; to the EEPROM until we actually set something non-default
-		ldi	ZL, low(eeprom_defaults_w << 1)
-eeprom_default:	lpm	temp1, Z+
-		st	X+, temp1
-		cpi	XL, low(eeprom_end)
-		brne	eeprom_default
-eeprom_good:
-
-	; Check reset cause
-		bst	i_sreg, PORF		; Power-on reset
-		cpse	i_sreg, ZH		; or zero
-		brtc	init_no_porf
-		rcall	beep_f1			; Usual startup beeps
-		rcall	beep_f2
-		rcall	beep_f3
-		rjmp	control_start
-init_no_porf:
-		sbrs	i_sreg, BORF		; Brown-out reset
-		rjmp	init_no_borf
-		rcall	beep_f3			; "dead cellphone"
-		rcall	beep_f1
-		sbr	flags0, (1<<NO_CALIBRATION)
-		rjmp	control_start
-init_no_borf:
-		sbrs	i_sreg, EXTRF		; External reset
-		rjmp	init_no_extrf
-		rcall	beep_f4			; Single beep
-		rjmp	control_start
-init_no_extrf:
-		sbrs	i_sreg, WDRF		; Watchdog reset
-		rjmp	init_no_wdrf
-init_wdrf1:	rcall	beep_f1			; "siren"
-		rcall	beep_f1
-		rcall	beep_f3
-		rcall	beep_f3
-		rjmp	init_wdrf1		; Loop forever
-init_no_wdrf:
-
-	; Unknown reset cause: Beep out all 8 bits
-	; Sometimes I can cause this by touching the oscillator.
-init_bitbeep1:	rcall	wait240ms
-		mov	i_temp1, i_sreg
-		ldi	i_temp2, 8
-init_bitbeep2:	sbrs	i_temp1, 0
-		rcall	beep_f2
-		sbrc	i_temp1, 0
-		rcall	beep_f4
-		rcall	wait120ms
-		lsr	i_temp1
-		dec	i_temp2
-		brne	init_bitbeep2
-		rjmp	init_bitbeep1		; Loop forever
-
-;-----bko-----------------------------------------------------------------
 ; Timer2 overflow interrupt (output PWM) -- the interrupt vector actually
 ; "ijmp"s to Z, which should point to one of these entry points.
 ;
@@ -2293,6 +2173,126 @@ wait_commutation:
 		pop	temp1			; Throw away return address
 		pop	temp1
 		rjmp	restart_control		; Restart control immediately on RC timeout
+
+;-----bko-----------------------------------------------------------------
+; init after reset
+
+reset:		clr	r0
+		out	SREG, r0		; Clear interrupts and flags
+
+	; Set up stack
+		ldi	ZH, high(RAMEND)
+		ldi	ZL, low(RAMEND)
+		out	SPH, ZH
+		out	SPL, ZL
+	; Clear RAM and all registers
+clear_loop:	st	-Z, r0
+		cpi	ZL, SRAM_START
+		cpc	ZH, r0
+		brne	clear_loop1
+		ldi	ZL, 30			; Start clearing registers
+clear_loop1:	cp	ZL, r0
+		cpc	ZH, r0
+		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
+
+	; Save original OSCCAL and reset cause
+		in	i_sreg, OSCCAL
+		sts	orig_osccal, i_sreg
+		in	i_sreg, MCUCSR
+		out	MCUCSR, r0
+
+	; Initialize ports
+		ldi	temp1, INIT_PB
+		out	PORTB, temp1
+		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5)
+		out	DDRB, temp1
+		ldi	temp1, INIT_PC
+		out	PORTC, temp1
+		ldi	temp1, DIR_PC
+		out	DDRC, temp1
+		ldi	temp1, INIT_PD
+		out	PORTD, temp1
+		ldi	temp1, DIR_PD
+		out	DDRD, temp1
+
+	; Start timers except output PWM
+		ldi	temp1, T0CLK		; timer0: beep control, delays
+		out	TCCR0, temp1
+		ldi	temp1, T1CLK		; timer1: commutation timing,
+		out	TCCR1B, temp1		; RC pulse measurement
+		out	TCCR2, ZH		; timer2: PWM, stopped
+
+	; Enable watchdog (WDTON may be set or unset)
+		ldi	temp1, (1<<WDCE)+(1<<WDE)
+		out	WDTCR, temp1
+		ldi	temp1, (1<<WDE)		; Fastest option: ~16.3ms timeout
+		out	WDTCR, temp1
+
+	; Read EEPROM block to RAM
+		rcall	wait120ms
+		rcall	eeprom_read_block	; Also calls osccal_set
+
+	; Check EEPROM signature
+		ldi	XL, low(eeprom_sig_l) + 2
+		ld	temp2, -X
+		ld	temp1, -X		; Leave X at eeprom_sig_l
+		subi	temp1, low(EEPROM_SIGN)
+		sbci	temp2, high(EEPROM_SIGN)
+		breq	eeprom_good
+
+	; Signature not good: set defaults in RAM, but do not write
+	; to the EEPROM until we actually set something non-default
+		ldi	ZL, low(eeprom_defaults_w << 1)
+eeprom_default:	lpm	temp1, Z+
+		st	X+, temp1
+		cpi	XL, low(eeprom_end)
+		brne	eeprom_default
+eeprom_good:
+
+	; Check reset cause
+		bst	i_sreg, PORF		; Power-on reset
+		cpse	i_sreg, ZH		; or zero
+		brtc	init_no_porf
+		rcall	beep_f1			; Usual startup beeps
+		rcall	beep_f2
+		rcall	beep_f3
+		rjmp	control_start
+init_no_porf:
+		sbrs	i_sreg, BORF		; Brown-out reset
+		rjmp	init_no_borf
+		rcall	beep_f3			; "dead cellphone"
+		rcall	beep_f1
+		sbr	flags0, (1<<NO_CALIBRATION)
+		rjmp	control_start
+init_no_borf:
+		sbrs	i_sreg, EXTRF		; External reset
+		rjmp	init_no_extrf
+		rcall	beep_f4			; Single beep
+		rjmp	control_start
+init_no_extrf:
+		sbrs	i_sreg, WDRF		; Watchdog reset
+		rjmp	init_no_wdrf
+init_wdrf1:	rcall	beep_f1			; "siren"
+		rcall	beep_f1
+		rcall	beep_f3
+		rcall	beep_f3
+		rjmp	init_wdrf1		; Loop forever
+init_no_wdrf:
+
+	; Unknown reset cause: Beep out all 8 bits
+	; Sometimes I can cause this by touching the oscillator.
+init_bitbeep1:	rcall	wait240ms
+		mov	i_temp1, i_sreg
+		ldi	i_temp2, 8
+init_bitbeep2:	sbrs	i_temp1, 0
+		rcall	beep_f2
+		sbrc	i_temp1, 0
+		rcall	beep_f4
+		rcall	wait120ms
+		lsr	i_temp1
+		dec	i_temp2
+		brne	init_bitbeep2
+		rjmp	init_bitbeep1		; Loop forever
 
 .if BOOT_LOADER
 .include "boot.inc"
