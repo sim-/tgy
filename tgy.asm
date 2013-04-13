@@ -134,6 +134,8 @@
 #error "Unrecognized board type."
 #endif
 
+.equ	CPU_MHZ		= F_CPU / 1000000
+
 .equ	BOOT_LOADER	= 1	; Include Turnigy USB linker STK500v2 boot loader on PWM input pin
 .equ	BOOT_JUMP	= 1	; Jump to any boot loader when PWM input stays high
 .equ	BOOT_START	= THIRDBOOTSTART
@@ -142,7 +144,13 @@
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
-.equ	DEAD_TIME_NS	= 437	; Dead time with complementary PWM (62.5ns steps @ 16MHz: min 437ns, max 2437ns)
+.if !defined(DEAD_LOW_NS)
+.equ	DEAD_LOW_NS	= 300	; Low-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max 2437ns)
+.equ	DEAD_HIGH_NS	= 300	; High-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max roughly PWM period)
+.endif
+.equ	DEAD_TIME_LOW	= DEAD_LOW_NS * CPU_MHZ / 1000
+.equ	DEAD_TIME_HIGH	= DEAD_HIGH_NS * CPU_MHZ / 1000
+
 .if !defined(MOTOR_ADVANCE)
 .equ	MOTOR_ADVANCE	= 18	; Degrees of timing advance (0 - 30, 30 meaning no delay)
 .endif
@@ -155,7 +163,6 @@
 .equ	MOTOR_DEBUG	= 0
 
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
-.equ	CPU_MHZ		= F_CPU / 1000000
 
 ; These are now defaults which can be adjusted via throttle calibration
 ; (stick high, stick low, (stick neutral) at start).
@@ -251,6 +258,7 @@
 	.equ	B_FET		= 1	; if set, B FET is being PWMed
 	.equ	C_FET		= 2	; if set, C FET is being PWMed
 	.equ	ALL_FETS	= (1<<A_FET)+(1<<B_FET)+(1<<C_FET)
+	.equ	SKIP_CPWM	= 7	; if set, skip complementary PWM (for short off period)
 ;.def			= r19
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r21		; interrupt temporary
@@ -276,6 +284,7 @@ goodies:	.byte	1	; Number of rounds without timeout
 powerskip:	.byte	1	; Skip power through this number of steps
 ocr1ax:		.byte	1	; 3rd byte of OCR1A
 tcnt1x:		.byte	1	; 3rd byte of TCNT1
+pwm_on_ptr:	.byte	1	; Next PWM ON vector
 rct_boot:	.byte	1	; Counter which increments while rc_timeout is 0 to jump to boot loader
 rct_beacon:	.byte	1	; Counter which increments while rc_timeout is 0 to disarm and beep occasionally
 last_tcnt1_l:	.byte	1	; last timer1 value
@@ -471,10 +480,12 @@ eeprom_defaults_w:
 		ldi	@1, byte2(@2)
 .endmacro
 
+.equ	MAX_BUSY_WAIT_CYCLES	= 32
 .macro cycle_delay
-	.if @0 >= 32
-		.error "cycle_delay too long"
-	.endif
+.if @0 >= MAX_BUSY_WAIT_CYCLES
+.error "cycle_delay too long"
+.endif
+.if @0 > 0
 	.if @0 & 1
 		nop
 	.endif
@@ -485,15 +496,16 @@ eeprom_defaults_w:
 		rjmp	PC + 1
 		rjmp	PC + 1
 	.endif
-	.if	@0 & 8
+	.if @0 & 8
 		nop
 		rcall	wait_ret		; 3 cycles to call + 4 to return
 	.endif
-	.if	@0 & 16
+	.if @0 & 16
 		rjmp	PC + 1
 		rcall	wait_ret
 		rcall	wait_ret
 	.endif
+.endif
 .endmacro
 
 ;-----bko-----------------------------------------------------------------
@@ -558,6 +570,23 @@ pwm_brake_off:
 		reti
 .endif
 
+.if DEAD_TIME_HIGH > 7
+.equ	EXTRA_DEAD_TIME_HIGH = DEAD_TIME_HIGH - 7
+.else
+.equ	EXTRA_DEAD_TIME_HIGH = 0
+.endif
+
+pwm_on_fast_high:
+.if COMP_PWM && EXTRA_DEAD_TIME_HIGH > MAX_BUSY_WAIT_CYCLES
+		in	i_sreg, SREG
+		dec	tcnt2h
+		brne	pwm_on_fast_high_again
+		ldi	ZL, pwm_on_fast
+pwm_on_fast_high_again:
+		out	SREG, i_sreg
+		reti
+.endif
+
 pwm_on_high:
 		in	i_sreg, SREG
 		dec	tcnt2h
@@ -573,20 +602,34 @@ pwm_again:
 		reti
 
 pwm_on:
-		.if COMP_PWM
+.if COMP_PWM
 		sbrc	flags2, A_FET
 		ApFET_off
 		sbrc	flags2, B_FET
 		BpFET_off
 		sbrc	flags2, C_FET
 		CpFET_off
-		.if DEAD_TIME_NS * CPU_MHZ / 1000 > 7
-		.equ	EXTRA_DEAD_TIME = DEAD_TIME_NS * CPU_MHZ / 1000 - 7
+	.if EXTRA_DEAD_TIME_HIGH > MAX_BUSY_WAIT_CYCLES
+		; Reschedule to interrupt once the dead time has passed
+		.if high(EXTRA_DEAD_TIME_HIGH)
+		ldi	i_temp1, high(EXTRA_DEAD_TIME_HIGH)
+		mov	tcnt2h, i_temp1
+		ldi	ZL, pwm_on_fast_high
 		.else
-		.equ	EXTRA_DEAD_TIME = 0
+		ldi	ZL, pwm_on_fast
 		.endif
-		cycle_delay EXTRA_DEAD_TIME
-		.endif
+		ldi	i_temp1, 0xff - low(EXTRA_DEAD_TIME_HIGH)
+		out	TCNT2, i_temp1
+		reti				; Do something else while we wait
+		.equ	CPWM_OVERHEAD_HIGH = 7 + 8 + EXTRA_DEAD_TIME_HIGH
+	.else
+		; Waste cycles to wait for the dead time
+		cycle_delay EXTRA_DEAD_TIME_HIGH
+		.equ	CPWM_OVERHEAD_HIGH = 7 + EXTRA_DEAD_TIME_HIGH
+		; Fall through
+	.endif
+.endif
+pwm_on_fast:
 		sbrc	flags2, A_FET
 		AnFET_on
 		sbrc	flags2, B_FET
@@ -608,18 +651,25 @@ pwm_off:
 		wdr				; 1 cycle: watchdog reset
 		sbrc	flags1, FULL_POWER	; 2 cycles to skip if not full power
 		rjmp	pwm_on			; None of this off stuff if full power
-		ldi	ZL, pwm_on		; 1 cycle
-		cpse	off_duty_h, ZH		; 1 cycle if not zero, 2 if zero
-		ldi	ZL, pwm_on_high		; 1 cycle
+		lds	ZL, pwm_on_ptr		; 2 cycles
 		mov	tcnt2h, off_duty_h	; 1 cycle
-		sbrc	flags2, A_FET		; 1 cycle if not, 2 cycles if skip
+		sbrc	flags2, A_FET		; 2 cycles if skip, 1 cycle otherwise
 		AnFET_off			; 2 cycles (off at 12 cycles from entry)
 		sbrc	flags2, B_FET		; Offset by 2 cycles here,
 		BnFET_off			; but still equal on-time
 		sbrc	flags2, C_FET
 		CnFET_off
+		out	TCNT2, off_duty_l	; 1 cycle
 		.if COMP_PWM
-		cycle_delay EXTRA_DEAD_TIME
+		sbrc	flags2, SKIP_CPWM	; 2 cycles if skip, 1 cycle otherwise
+		reti
+		.if DEAD_TIME_LOW > 9
+		.equ	EXTRA_DEAD_TIME_LOW = DEAD_TIME_LOW - 9
+		.else
+		.equ	EXTRA_DEAD_TIME_LOW = 0
+		.endif
+		cycle_delay EXTRA_DEAD_TIME_LOW - 2
+		.equ	CPWM_OVERHEAD_LOW = 9 + EXTRA_DEAD_TIME_LOW
 		sbrc	flags2, A_FET
 		ApFET_on
 		sbrc	flags2, B_FET
@@ -627,14 +677,13 @@ pwm_off:
 		sbrc	flags2, C_FET
 		CpFET_on
 		.endif
-		out	TCNT2, off_duty_l	; 1 cycle
 		reti				; 4 cycles
 
 .if high(pwm_off)
 .error "high(pwm_off) is non-zero; please move code closer to start or use 16-bit (ZH) jump registers"
 .endif
 ;-----bko-----------------------------------------------------------------
-; timer output compare interrupt
+; timer1 output compare interrupt
 t1oca_int:	in	i_sreg, SREG
 		lds	i_temp1, ocr1ax
 		subi	i_temp1, 1
@@ -1385,10 +1434,11 @@ set_new_duty13:
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
 		breq	set_new_duty_full
-		cbr	flags1, (1<<FULL_POWER)
 		adiw	YL, 0
 		breq	set_new_duty_zero
 		; Not off and not full power
+		cbr	flags1, (1<<FULL_POWER)
+		sbr	flags1, (1<<POWER_ON)
 		; At higher PWM frequencies, halve the frequency
 		; when starting -- this helps hard drive startup
 		.if POWER_RANGE < 1000 * CPU_MHZ / 16
@@ -1400,21 +1450,41 @@ set_new_duty13:
 		rol	YH
 		.endif
 set_new_duty_set:
-		sbr	flags1, (1<<POWER_ON)
-set_new_duty_set_off:
+		; When off duty is short, skip complementary PWM; otherwise,
+		; compensate the off_duty time to account for the overhead.
+	.if COMP_PWM
+		set
+		ldi	temp4, pwm_on_fast	; Short off period: skip complementary PWM
+		cpse	temp2, ZH
+		ldi	temp4, pwm_on_fast_high	; Off period >= 0x100
+		cpi2	temp1, temp2, CPWM_OVERHEAD_HIGH + CPWM_OVERHEAD_LOW, temp3
+		brcs	set_new_duty21		; Off period < off-to-on cycle count plus interrupt overhead
+		clt				; Not short off period, unset SKIP_CPWM
+		sbiwx	temp1, temp2, CPWM_OVERHEAD_HIGH
+	.endif
+		ldi	temp4, pwm_on		; Off period < 0x100
+		cpse	temp2, ZH
+		ldi	temp4, pwm_on_high	; Off period >= 0x100
+set_new_duty21:
 		com	YL			; Save one's complement of both
 		com	temp1			; low bytes for up-counting TCNT2
-		movw	duty_l, YL		; Atomic set of new ON duty for PWM interrupt
-		movw	off_duty_l, temp1	; Atomic set of new OFF duty for PWM interrupt
+		movw	duty_l, YL		; Atomic set new ON duty for PWM interrupt
+		cli				; Critical section (off_duty & flags together)
+		movw	off_duty_l, temp1	; Set new OFF duty for PWM interrupt
+		sts	pwm_on_ptr, temp4	; Set Next PWM ON interrupt vector
+		.if COMP_PWM
+		bld	flags2, SKIP_CPWM	; If to skip complementary PWM
+		.endif
+		sei
 		ret
 set_new_duty_full:
 		; Full power
-		sbr	flags1, (1<<FULL_POWER)
+		sbr	flags1, (1<<FULL_POWER)+(1<<POWER_ON)
 		rjmp	set_new_duty_set
 set_new_duty_zero:
 		; Power off
-		cbr	flags1, (1<<POWER_ON)
-		rjmp	set_new_duty_set_off
+		cbr	flags1, (1<<FULL_POWER)+(1<<POWER_ON)
+		rjmp	set_new_duty_set
 ;-----bko-----------------------------------------------------------------
 ; Multiply the 24-bit timing in temp1:temp2:temp3 by temp4 and add the top
 ; 24-bits to YL:YH:temp7.
@@ -1679,7 +1749,7 @@ init_startup:
 		ldi	temp2, high(MAX_POWER)
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
-		rcall	set_new_duty_set_off
+		rcall	set_new_duty_set
 		ldi	ZL, low(pwm_brake_off)	; Enable PWM brake mode
 		clr	sys_control_l		; Abused as duty update divisor
 		ldi	temp1, T2CLK
