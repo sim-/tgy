@@ -12,6 +12,9 @@
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
 
+.equ	DEAD_LOW_NS	= 1400	; Calibrated to F-40A green PCB -- bigger boards may vary!
+.equ	DEAD_HIGH_NS	= 1700	; For P/N boards, this may need to be more like 30000ns!
+
 ;*********************
 ; PORT D definitions *
 ;*********************
