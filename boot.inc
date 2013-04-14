@@ -586,6 +586,7 @@ scmd_read_ee1:	rcall	boot_eeprom_rw		; Uses and increments byte address
 ; For chip erase, clear the flash before the boot loader and nuke the EEPROM.
 scmd_chip_erase:
 		rcall	boot_clear_flash	; Also clears r12:r13 for EEPROM address
+		nop
 		ldi	r24, low(EEPROMEND+1)
 		ldi	r25, high(EEPROMEND+1)
 		set
@@ -679,7 +680,6 @@ boot_clear_fl1:	sbiw	ZL, PAGESIZE
 		ret
 
 ; Pad out the boot loader to work around avrdude verifying gaps
-		nop
 		nop
 		nop
 		nop
