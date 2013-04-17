@@ -140,9 +140,6 @@
 .equ	BOOT_JUMP	= 1	; Jump to any boot loader when PWM input stays high
 .equ	BOOT_START	= THIRDBOOTSTART
 
-.equ	I2C_ADDR	= 0x50	; MK-style I2C address
-.equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
-
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
 .if !defined(DEAD_LOW_NS)
 .equ	DEAD_LOW_NS	= 300	; Low-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max 2437ns)
@@ -161,7 +158,10 @@
 .equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
-.equ	MOTOR_DEBUG	= 0
+.equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
+
+.equ	I2C_ADDR	= 0x50	; MK-style I2C address
+.equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
 .equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
 
