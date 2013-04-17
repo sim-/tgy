@@ -485,11 +485,48 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 
+; Load 2-byte immediate
 .macro ldi2
 		ldi	@0, byte1(@2)
 		ldi	@1, byte2(@2)
 .endmacro
 
+; Load 3-byte immediate
+.macro ldi3
+		ldi	@0, byte1(@3)
+		ldi	@1, byte2(@3)
+		ldi	@2, byte3(@3)
+.endmacro
+
+; Register out to any address (memory-mapped if necessary)
+.macro outr
+	.if @0 < 64
+		out	@0, @1
+	.else
+		sts	@0, @1
+	.endif
+.endmacro
+
+; Register in from any address (memory-mapped if necessary)
+.macro inr
+	.if @1 < 64
+		in	@0, @1
+	.else
+		lds	@0, @1
+	.endif
+.endmacro
+
+; Immediate out to any port (possibly via @2 as a temporary)
+.macro outi
+	.if @1
+		ldi	@2, @1
+		outr	@0, @2
+	.else
+		outr	@0, ZH
+	.endif
+.endmacro
+
+; Short cycle delay without clobbering flags
 .equ	MAX_BUSY_WAIT_CYCLES	= 32
 .macro cycle_delay
 .if @0 >= MAX_BUSY_WAIT_CYCLES
@@ -1641,8 +1678,7 @@ boot_loader_jump:
 		out	DDRB, ZH		; Tristate pins
 		out	DDRC, ZH
 		out	DDRD, ZH
-		ldi	temp1, (1<<WDCE)+(1<<WDE)
-		out	WDTCR, temp1
+		outi	WDTCR, (1<<WDCE)+(1<<WDE), temp1
 		out	WDTCR, ZH		; Disable watchdog
 		lds	temp1, orig_osccal
 		out	OSCCAL, temp1		; Restore OSCCAL
@@ -1671,28 +1707,20 @@ control_disarm:
 	; after any jumper change.
 		.equ	BAUD_RATE = 1200
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
-		ldi	temp1, high(UBRR_VAL)
-		out	UBRRH, temp1
-		ldi	temp1, low(UBRR_VAL)
-		out	UBRRL, temp1
-		ldi	temp1, (1<<RXEN)	; Do programming card rx by polling
-		out	UCSRB, temp1
-		ldi	temp1, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0)
-		out	UCSRC, temp1
+		outi	UBRRH, high(UBRR_VAL), temp1
+		outi	UBRRL, low(UBRR_VAL), temp1
+		outi	UCSRB, (1<<RXEN), temp1	; Do programming card rx by polling
+		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1
 		.endif
 
 	; init input sources (i2c and/or rc-puls)
 		.if USE_UART && !defined(HK_PROGRAM_CARD)
 		.equ	BAUD_RATE = 38400
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
-		ldi	temp1, high(UBRR_VAL)
-		out	UBRRH, temp1
-		ldi	temp1, low(UBRR_VAL)
-		out	UBRRL, temp1
-		ldi	temp1, (1<<RXEN)+(0<<RXCIE)	; We don't actually tx
-		out	UCSRB, temp1
-		ldi	temp1, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0)	; N81
-		out	UCSRC, temp1
+		outi	UBRRH, high(UBRR_VAL), temp1
+		outi	UBRRL, low(UBRR_VAL), temp1
+		outi	UCSRB, (1<<RXEN), temp1	; We don't actually tx
+		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1	; N81
 		in	temp1, UDR
 		in	temp1, UDR
 		in	temp1, UDR
@@ -1709,8 +1737,7 @@ control_disarm:
 		subi	temp1, -2
 		.endif
 		out	TWAR, temp1
-		ldi	temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
-		out	TWCR, temp1
+		outi	TWCR, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT), temp1
 		.endif
 		.if USE_INT0 || USE_ICP
 		rcp_int_rising_edge temp1
@@ -1812,8 +1839,7 @@ set_brake_duty:	ldi	temp1, low(MAX_POWER)
 		ldi	ZL, low(pwm_brake_off)	; Enable PWM brake mode
 		clr	tcnt2h
 		clr	sys_control_l		; Abused as duty update divisor
-		ldi	temp1, T2CLK
-		out	TCCR2, temp1		; Enable PWM, cleared later by switch_power_off
+		outi	TCCR2, T2CLK, temp1	; Enable PWM, cleared later by switch_power_off
 		.endif
 
 wait_for_power_on:
@@ -1861,8 +1887,7 @@ start_from_running:
 		sts	powerskip, temp1	; see if motor is running, and align to it.
 		ldi	temp1, ENOUGH_GOODIES	; If we can follow without a timeout, do not
 		sts	goodies, temp1		; continue in startup mode (long ZC filtering).
-		ldi	temp1, T2CLK
-		out	TCCR2, temp1		; Enable PWM (ZL has been set to pwm_wdr)
+		outi	TCCR2, T2CLK, temp1	; Enable PWM (ZL has been set to pwm_wdr)
 
 ;-----bko-----------------------------------------------------------------
 ; *** commutation utilities ***
@@ -2332,24 +2357,16 @@ clear_loop1:	cp	ZL, r0
 		out	MCUCSR, r0
 
 	; Initialize ports
-		ldi	temp1, INIT_PB
-		out	PORTB, temp1
-		ldi	temp1, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5)
-		out	DDRB, temp1
-		ldi	temp1, INIT_PC
-		out	PORTC, temp1
-		ldi	temp1, DIR_PC
-		out	DDRC, temp1
-		ldi	temp1, INIT_PD
-		out	PORTD, temp1
-		ldi	temp1, DIR_PD
-		out	DDRD, temp1
+		outi	PORTB, INIT_PB, temp1
+		outi	DDRB,  DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
+		outi	PORTC, INIT_PC, temp1
+		outi	DDRC, DIR_PC, temp1
+		outi	PORTD, INIT_PD, temp1
+		outi	DDRD, DIR_PD, temp1
 
 	; Start timers except output PWM
-		ldi	temp1, T0CLK		; timer0: beep control, delays
-		out	TCCR0, temp1
-		ldi	temp1, T1CLK		; timer1: commutation timing,
-		out	TCCR1B, temp1		; RC pulse measurement
+		outi	TCCR0, T0CLK, temp1	; timer0: beep control, delays
+		outi	TCCR1B, T1CLK, temp1	; timer1: commutation timing, RC pulse measurement
 		out	TCCR2, ZH		; timer2: PWM, stopped
 
 	; Enable watchdog (WDTON may be set or unset)
