@@ -419,7 +419,7 @@ eeprom_defaults_w:
 
 ;-- Macros ---------------------------------------------------------------
 
-; Add any 16-bit immediate to a register pair (@0:@1 += @2)
+; Add any 16-bit immediate to a register pair (@0:@1 += @2), no Z flag
 .macro adi2
 	.if byte1(-@2)
 		subi	@0, byte1(-@2)
@@ -429,7 +429,7 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 
-; Smaller version for r24 and above
+; Smaller version for r24 and above, Z flag not reliable
 .macro adiwx
 	.if @2 > 63
 		adi2	@0, @1, @2
@@ -439,18 +439,31 @@ eeprom_defaults_w:
 .endmacro
 
 ; Compare any 16-bit immediate from a register pair (@0:@1 -= @2, maybe clobbering @3)
-.macro cpi2
-	.if byte1(@2)
+.macro cpiz2
 		cpi	@0, byte1(@2)
+	.if byte1(@2)
 		ldi	@3, byte2(@2)
 		cpc	@1, @3
+	.else
+		cpc	@1, ZH
+	.endif
+.endmacro
+
+; Compare any 16-bit immediate from a register pair (@0:@1 -= @2, maybe clobbering @3), no Z flag
+; Do not follow by Z flag tests like breq, brne, brlt, brge, brlo, brsh!
+; The idea here is that the low byte being compared with (subtracted by)
+; 0 will never set carry, so skipping it and cpi'ing the high byte is the
+; same other than the result of the Z flag.
+.macro cpi2
+	.if byte1(@2)
+		cpiz2	@0, @1, @2, @3
 	.else
 		cpi	@1, byte2(@2)
 	.endif
 .endmacro
 
-; Compare any 24-bit immediate from a register triplet (@0:@1:$2 -= @3, maybe clobbering @4)
-.macro cpi3
+; Compare any 24-bit immediate from a register triplet (@0:@1:@2 -= @3, maybe clobbering @4)
+.macro cpiz3
 		cpi	@0, byte1(@3)
 	.if byte2(@3)
 		ldi	@4, byte2(@3)
@@ -466,7 +479,17 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 
-; Subtract any 16-bit immediate from a register pair (@0:@1 -= @2)
+; Compare any 24-bit immediate from a register triplet (@0:@1:@2 -= @3, maybe clobbering @4)
+; May not set Z flag, as above.
+.macro cpi3
+	.if byte1(@3)
+		cpiz3	@0, @1, @2, @3, @4
+	.else
+		cpi2	@1, @2, @3 >> 8, @4
+	.endif
+.endmacro
+
+; Subtract any 16-bit immediate from a register pair (@0:@1 -= @2), no Z flag
 .macro sbi2
 	.if byte1(@2)
 		subi	@0, byte1(@2)
@@ -476,7 +499,7 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 
-; Smaller version for r24 and above
+; Smaller version for r24 and above, Z flag not reliable
 .macro sbiwx
 	.if @2 > 63
 		sbi2	@0, @1, @2
@@ -993,10 +1016,8 @@ eeprom_read_block:				; When interrupts disabled
 eeprom_write_block:				; When interrupts enabled
 		lds	temp1, orig_osccal
 		out	OSCCAL, temp1
-		ldi	YL, low(eeprom_sig_l)
-		ldi	YH, high(eeprom_sig_l)
-		ldi	temp1, low(EEPROM_OFFSET)
-		ldi	temp2, high(EEPROM_OFFSET)
+		ldi2	YL, YH, eeprom_sig_l
+		ldi2	temp1, temp2, EEPROM_OFFSET
 eeprom_rw1:	wdr
 		sbic	EECR, EEWE
 		rjmp	eeprom_rw1		; Loop while writing EEPROM
@@ -1088,8 +1109,7 @@ evaluate_rc_init:
 		.if RC_CALIBRATION && (USE_ICP || USE_INT0)
 		cbr	flags1, (1<<EVAL_RC)
 	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
-		ldi	YL, low(puls_high_l)	; Start with high pulse calibration
-		ldi	YH, high(puls_high_l)
+		ldi2	YL, YH, puls_high_l	; Start with high pulse calibration
 		sbrc	flags0, NO_CALIBRATION	; Is it safe to calibrate now?
 		rjmp	evaluate_rc_puls
 		rjmp	rc_prog1
@@ -1234,13 +1254,11 @@ puls_not_zero:
 		.endif
 .endif
 	; The following is used by all input modes
-rc_do_scale:	ldi	YL, byte1(MIN_DUTY)	; Offset result so that 0 is MIN_DUTY
-		ldi	YH, byte2(MIN_DUTY)
+rc_do_scale:	ldi2	YL, YH, MIN_DUTY	; Offset result so that 0 is MIN_DUTY
 		rcall	mul_y_12x34		; Scaled result is now in Y
 		cpi2	YL, YH, MAX_POWER, temp1
-		brlo	rc_not_full
-		ldi	YL, byte1(MAX_POWER)
-		ldi	YH, byte2(MAX_POWER)
+		brcs	rc_not_full
+		ldi2	YL, YH, MAX_POWER
 rc_not_full:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
@@ -1270,8 +1288,7 @@ evaluate_rc_i2c:
 	; power from the highest MaxGas setting in MK-Tools. Bernhard's
 	; original version reaches full power at around 245.
 		movw	temp1, YL
-		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 247)
-		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 247)
+		ldi2	temp3, temp4, 0x100 * (POWER_RANGE - MIN_DUTY) / 247
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -1284,8 +1301,7 @@ evaluate_rc_uart:
 		breq	rc_not_full
 	; Scale so that YH == 200 is MAX_POWER.
 		movw	temp1, YL
-		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 200)
-		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 200)
+		ldi2	temp3, temp4, 0x100 * (POWER_RANGE - MIN_DUTY) / 200
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -1332,19 +1348,16 @@ puls_scale:
 ; too low a multiplicand (higher won't fit in 16 bits).
 puls_find_multiplicand:
 		.if RCP_DEADBAND
-		subi	temp3, byte1(RCP_DEADBAND * CPU_MHZ)
-		sbci	temp4, byte2(RCP_DEADBAND * CPU_MHZ)
+		sbi2	temp3, temp4, RCP_DEADBAND * CPU_MHZ
 		.endif
-		ldi	temp1, byte1((POWER_RANGE - MIN_DUTY) * 65536 / MAX_RC_PULS / CPU_MHZ)
-		ldi	temp2, byte2((POWER_RANGE - MIN_DUTY) * 65536 / MAX_RC_PULS / CPU_MHZ)
+		ldi2	temp1, temp2, (POWER_RANGE - MIN_DUTY) * 65536 / MAX_RC_PULS / CPU_MHZ
 puls_find1:	adiw	temp1, 1
 		wdr
 		cpi	temp2, 0xff
 		cpc	temp1, temp2
 		breq	puls_find_fail		; Return if we reached 0xffff
 	; Start with negative POWER_RANGE so that 0 is full throttle
-		ldi	YL, low(MIN_DUTY - POWER_RANGE)
-		ldi	YH, high(MIN_DUTY - POWER_RANGE)
+		ldi2	YL, YH, MIN_DUTY - POWER_RANGE
 		rcall	mul_y_12x34
 	; We will always be increasing the result in steps of less than 1,
 	; so we can test for just zero rather than a range.
@@ -1394,9 +1407,7 @@ update_timing:
 	; Limit maximum RPM (fastest timing)
 		cpi3	temp1, temp2, temp3, TIMING_MAX*CPU_MHZ/2, temp4
 		brcc	update_timing1
-		ldi	temp1, byte1(TIMING_MAX*CPU_MHZ/2)
-		ldi	temp2, byte2(TIMING_MAX*CPU_MHZ/2)
-		ldi	temp3, byte3(TIMING_MAX*CPU_MHZ/2)
+		ldi3	temp1, temp2, temp3, TIMING_MAX*CPU_MHZ/2
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
 update_timing1:
@@ -1409,21 +1420,16 @@ update_timing1:
 	; do this with math instead of two constants, but we need a divide.
 	; Clobbers only temp4. Fastest in case of fastest timing.
 		cpi2	temp2, temp3, (TIMING_RANGE2*CPU_MHZ/2) >> 8, temp4
-		ldi	XL, low(MAX_POWER)
-		ldi	XH, high(MAX_POWER)
+		ldi2	XL, XH, MAX_POWER
 		brcs	update_timing4
 		cpi2	temp2, temp3, (TIMING_RANGE1*CPU_MHZ/2) >> 8, temp4
-		ldi	XL, low(PWR_MAX_RPM2)
-		ldi	XH, high(PWR_MAX_RPM2)
+		ldi2	XL, XH, PWR_MAX_RPM2
 		brcs	update_timing4
 	; Limit minimum RPM (slowest timing)
 		cpi2	temp2, temp3, (TIMING_MIN*CPU_MHZ/2) >> 8, temp4
 		brcs	update_timing2
-		ldi	temp3, byte3(TIMING_MIN*CPU_MHZ/2)
-		ldi	temp2, byte2(TIMING_MIN*CPU_MHZ/2)
-		ldi	temp1, byte1(TIMING_MIN*CPU_MHZ/2)
-update_timing2:	ldi	XL, low(PWR_MAX_RPM1)
-		ldi	XH, high(PWR_MAX_RPM1)
+		ldi3	temp1, temp2, temp3, TIMING_MIN*CPU_MHZ/2
+update_timing2:	ldi2	XL, YH, PWR_MAX_RPM1
 update_timing4:	movw	timing_duty_l, XL
 
 		sts	timing_l, temp1		; Store timing (120 degrees)
@@ -1483,8 +1489,7 @@ set_new_duty11:
 		; limit it to that. This means that a steady-state duty
 		; cycle can double at any time, but any larger change will
 		; be rate-limited.
-		ldi	temp1, low(PWR_MIN_START)
-		ldi	temp2, high(PWR_MIN_START)
+		ldi2	temp1, temp2, PWR_MIN_START
 		cp	YL, temp1
 		cpc	YH, temp2
 		brcs	set_new_duty12
@@ -1497,8 +1502,7 @@ set_new_duty12:	lsl	temp1
 		movw	sys_control_l, temp1
 set_new_duty13:
 .endif
-		ldi	temp1, low(MAX_POWER)
-		ldi	temp2, high(MAX_POWER)
+		ldi2	temp1, temp2, MAX_POWER
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
 		breq	set_new_duty_full
@@ -1820,19 +1824,16 @@ wait_for_power_on_init:
 		brne	set_brake1
 		ldi	YL, 1 << BRAKE_SPEED
 		sts	brake_sub, YL
-		ldi	YL, low(BRAKE_POWER)
-		ldi	YH, high(BRAKE_POWER)
+		ldi2	YL, YH, BRAKE_POWER
 		rjmp	set_brake_duty
 
 set_brake1:	cpi	temp3, 2		; Thumb brake
 		brne	wait_for_power_on
 		ldi	YL, 1 << LOW_BRAKE_SPEED
 		sts	brake_sub, YL
-		ldi	YL, low(LOW_BRAKE_POWER)
-		ldi	YH, high(LOW_BRAKE_POWER)
+		ldi2	YL, YH, (LOW_BRAKE_POWER
 
-set_brake_duty:	ldi	temp1, low(MAX_POWER)
-		ldi	temp2, high(MAX_POWER)
+set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 		sub	temp1, YL		; Calculate OFF duty
 		sbc	temp2, YH
 		rcall	set_new_duty_set
@@ -1872,8 +1873,7 @@ start_from_running:
 		RED_off
 		GRN_off
 
-		ldi	YL, low(PWR_MIN_START)	; Start with limited power to
-		ldi	YH, high(PWR_MIN_START) ; reduce the chance that we
+		ldi2	YL, YH, PWR_MIN_START	; Start with limited power to reduce the chance that we
 		movw	sys_control_l, YL	; align to a timing harmonic
 
 		sbr	flags0, (1<<SET_DUTY)
@@ -2112,8 +2112,7 @@ run6:
 		sts	goodies, temp1
 		; Build up sys_control to PWR_MAX_START in steps.
 		adiwx	YL, YH, (POWER_RANGE + 47) / 48
-		ldi	temp1, low(PWR_MAX_START)
-		ldi	temp2, high(PWR_MAX_START)
+		ldi2	temp1, temp2, PWR_MAX_START
 		rjmp	run6_3
 
 run6_2:		cbr	flags1, (1<<STARTUP)
@@ -2123,8 +2122,7 @@ run6_2:		cbr	flags1, (1<<STARTUP)
 		; initial start ramp-up; once running, sys_control
 		; will stay at MAX_POWER unless timing is lost.
 		adiwx	YL, YH, (POWER_RANGE + 31) / 32
-		ldi	temp1, low(MAX_POWER)
-		ldi	temp2, high(MAX_POWER)
+		ldi2	temp1, temp2, MAX_POWER
 run6_3:		cp	YL, temp1
 		cpc	YH, temp2
 		brcs	run6_4
@@ -2336,8 +2334,7 @@ reset:		clr	r0
 		out	SREG, r0		; Clear interrupts and flags
 
 	; Set up stack
-		ldi	ZH, high(RAMEND)
-		ldi	ZL, low(RAMEND)
+		ldi2	ZL, ZH, RAMEND
 		out	SPH, ZH
 		out	SPL, ZL
 	; Clear RAM and all registers
