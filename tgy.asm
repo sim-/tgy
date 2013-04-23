@@ -1248,7 +1248,7 @@ puls_zero_brake:
 		.endif
 puls_zero:	clr	YL
 		clr	YH
-		rjmp	rc_not_full
+		rjmp	rc_duty_set
 puls_plus:
 		lds	temp3, fwd_scale_l	; Load forward scaling factor
 		lds	temp4, fwd_scale_h
@@ -1262,9 +1262,9 @@ puls_not_zero:
 rc_do_scale:	ldi2	YL, YH, MIN_DUTY	; Offset result so that 0 is MIN_DUTY
 		rcall	mul_y_12x34		; Scaled result is now in Y
 		cpi2	YL, YH, MAX_POWER, temp1
-		brcs	rc_not_full
+		brcs	rc_duty_set
 		ldi2	YL, YH, MAX_POWER
-rc_not_full:	sts	rc_duty_l, YL
+rc_duty_set:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
@@ -1288,7 +1288,7 @@ evaluate_rc_i2c:
 		lsl	YL			; 00000xxxb -> 0000xxx0b
 		swap	YL			; 0000xxx0b -> xxx00000b
 		adiw	YL, 0			; 16-bit zero-test
-		breq	rc_not_full
+		breq	rc_duty_set		; Power off
 	; Scale so that YH == 247 is MAX_POWER, to support reaching full
 	; power from the highest MaxGas setting in MK-Tools. Bernhard's
 	; original version reaches full power at around 245.
@@ -1303,7 +1303,7 @@ evaluate_rc_uart:
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
 		ldi	YL, 0
 		cpi	YH, 0
-		breq	rc_not_full
+		breq	rc_duty_set		; Power off
 	; Scale so that YH == 200 is MAX_POWER.
 		movw	temp1, YL
 		ldi2	temp3, temp4, 0x100 * (POWER_RANGE - MIN_DUTY) / 200
