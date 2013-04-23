@@ -257,7 +257,7 @@
 	.equ	I2C_MODE	= 2	; if receiving updates via I2C
 	.equ	UART_MODE	= 3	; if receiving updates via UART
 	.equ	EVAL_RC		= 4	; if set, evaluate rc command while waiting for OCT1
-	.equ	ACO_EDGE_HIGH	= 5	; if set, looking for ACO high - conviently located at the same bit position as ACO
+	.equ	ACO_EDGE_HIGH	= 5	; if set, looking for ACO high - same bit position as ACO
 	.equ	STARTUP		= 6	; if set, startup-phase is active
 	.equ	REVERSE		= 7	; if set, do reverse commutation
 .def	flags2		= r18
@@ -1074,7 +1074,7 @@ lsl_temp567:
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Multiply temp1:temp2 by temp3:temp4 and add high 16 bits of result to Y.
-; Clobbers temp5, temp6, temp7.
+; Clobbers temp5, temp6, and leaves the lower byte in temp7.
 mul_y_12x34:
 		mul	temp1, temp3		; Scale raw pulse length to POWER_RANGE: 16x16->32 (bottom 16 discarded)
 		mov	temp7, temp6		; Save byte 2 of result, discard byte 1 already
@@ -1189,6 +1189,7 @@ rc_prog_done:	rcall	eeprom_write_block
 		rjmp	puls_scale		; Calculate the new scaling factors
 		.endif
 ;-----bko-----------------------------------------------------------------
+; These routines may clobber temp* and Y, but not X.
 evaluate_rc:
 		.if USE_UART
 		sbrc	flags1, UART_MODE
@@ -1346,7 +1347,7 @@ puls_scale:
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Find the lowest 16.16 multiplicand that brings us to full throttle
-; (POWER_RANGE - MIN_DUTY) when multplied by temp3:temp4.
+; (POWER_RANGE - MIN_DUTY) when multiplied by temp3:temp4.
 ; The range we are looking for is around 3000 - 10000:
 ; m = (POWER_RANGE - MIN_DUTY) * 65536 / (1000us * 16MHz)
 ; If the input range is < 100us at 8MHz, < 50us at 16MHz, we return
@@ -1478,6 +1479,8 @@ update_timing4:	movw	timing_duty_l, XL
 		sbrc	flags1, EVAL_RC
 		rjmp	evaluate_rc		; Set new duty either way
 ;-----bko-----------------------------------------------------------------
+; Unlike update_timing above, we try not to clobber XL, XH used as a loop
+; counter in wait_for_edge.
 set_new_duty:	lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 set_new_duty_l:	cp	YL, timing_duty_l
@@ -1704,10 +1707,10 @@ control_disarm:
 
 		rcall	puls_scale
 
-	; init registers and interrupts
+	; Enable timer interrupts (we only do this late to improve beep quality)
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		out	TIFR, temp1		; clear TOIE1, OCIE1A, and TOIE2
-		out	TIMSK, temp1		; enable TOIE1, OCIE1A, and TOIE2 interrupts
+		out	TIFR, temp1		; Clear TOIE1, OCIE1A, and TOIE2 flags
+		out	TIMSK, temp1		; Enable t1ovfl_int, t1oca_int, t2ovfl_int
 
 		.if defined(HK_PROGRAM_CARD)
 	; This program card seems to send data at 1200 baud N81,
@@ -1722,7 +1725,7 @@ control_disarm:
 		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1
 		.endif
 
-	; init input sources (i2c and/or rc-puls)
+	; Initialize input sources (i2c and/or rc-puls)
 		.if USE_UART && !defined(HK_PROGRAM_CARD)
 		.equ	BAUD_RATE = 38400
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
@@ -1799,9 +1802,11 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		rcp_int_disable temp1		; Turn off RC pulse interrupt
 i_rc_puls3:
 		.endif
+
 		rcall	beep_f4			; signal: rcpuls ready
 		rcall	beep_f4
 		rcall	beep_f4
+
 	; Fall through to init_startup
 ;-----bko-----------------------------------------------------------------
 init_startup:
