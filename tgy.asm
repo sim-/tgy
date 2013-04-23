@@ -935,46 +935,54 @@ urxc_exit:	out	SREG, i_sreg
 beep_f1:	ldi	temp2, 80
 		ldi	temp4, 200
 		RED_on
-		BpFET_on
+beep_f1_on:	BpFET_on
 		AnFET_on
-		rjmp	beep
+		rcall	beep
+		brne	beep_f1_on
+		RED_off
+		ret
 
 beep_f2:	ldi	temp2, 100
 		ldi	temp4, 180
 		GRN_on
-		CpFET_on
+beep_f2_on:	CpFET_on
 		BnFET_on
-		rjmp	beep
+		rcall	beep
+		brne	beep_f2_on
+		GRN_off
+		ret
 
 beep_f3:	ldi	temp2, 120
 		ldi	temp4, 160
-		ApFET_on
+beep_f3_on:	ApFET_on
 		CnFET_on
-		rjmp	beep
+		rcall	beep
+		brne	beep_f3_on
+		ret
 
 beep_f4:	ldi	temp2, 140
 beep_f4_freq:	ldi	temp4, 140
-		RED_on
+beep_f4_fets:	RED_on
 		GRN_on
-		CpFET_on
+beep_f4_on:	CpFET_on
 		AnFET_on
+		rcall	beep
+		brne	beep_f4_on
+		GRN_off
+		RED_off
+		ret
+
 		; Fall through
 ;-----bko-----------------------------------------------------------------
 ; Interrupts no longer need to be disabled to beep, but the PWM interrupt
 ; must be muted first
-beep:		in	temp5, PORTB		; Save ON state
-		in	temp6, PORTC
-		in	temp7, PORTD
-beep_on:	out	PORTB, temp5		; Restore ON state
-		out	PORTC, temp6
-		out	PORTD, temp7
-		out	TCNT0, ZH
+beep:		out	TCNT0, ZH
 beep1:		in	temp1, TCNT0
 		cpi	temp1, 2*CPU_MHZ	; 32µs on
 		brlo	beep1
 		all_nFETs_off temp3
 		all_pFETs_off temp3
-		ldi	temp3, CPU_MHZ		; 2040µs off
+		ldi	temp3, CPU_MHZ
 beep2:		out	TCNT0, ZH
 		wdr
 beep3:		in	temp1, TCNT0
@@ -983,9 +991,6 @@ beep3:		in	temp1, TCNT0
 		dec	temp3
 		brne	beep2
 		dec	temp2
-		brne	beep_on
-		GRN_off
-		RED_off
 		ret
 
 wait240ms:	rcall	wait120ms
