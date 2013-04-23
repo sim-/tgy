@@ -114,20 +114,20 @@
 
 .MACRO comp_init
 	in	@0, SFIOR
-	sbr	@0, (1<<ACME)		; switch to comparator multiplexed
+	sbr	@0, (1<<ACME)	; switch to comparator multiplexed
 	out	SFIOR, @0
-	cbi	ADCSRA, ADEN		; disable ADC
+	cbi	ADCSRA, ADEN	; disable ADC
 .ENDMACRO
 .MACRO set_comp_phase_a
-	ldi	@0, mux_a		; set comparator multiplexer to phase A
+	ldi	@0, mux_a	; set comparator multiplexer to phase A
 	out	ADMUX, @0
 .ENDMACRO
 .MACRO set_comp_phase_b
-	ldi	@0, mux_b		; set comparator multiplexer to phase B
+	ldi	@0, mux_b	; set comparator multiplexer to phase B
 	out	ADMUX, @0
 .ENDMACRO
 .MACRO set_comp_phase_c
-	ldi	@0, mux_c		; set comparator multiplexer to phase C
+	ldi	@0, mux_c	; set comparator multiplexer to phase C
 	out	ADMUX, @0
 .ENDMACRO
 
@@ -149,22 +149,22 @@
 .equ	CnFET_port	= PORTD
 
 .MACRO AnFET_on
-	sbi	PORTD, AnFET
+	sbi	AnFET_port, AnFET
 .ENDMACRO
 .MACRO AnFET_off
-	cbi	PORTD, AnFET
+	cbi	AnFET_port, AnFET
 .ENDMACRO
 .MACRO BnFET_on
-	sbi	PORTD, BnFET
+	sbi	BnFET_port, BnFET
 .ENDMACRO
 .MACRO BnFET_off
-	cbi	PORTD, BnFET
+	cbi	BnFET_port, BnFET
 .ENDMACRO
 .MACRO CnFET_on
-	sbi	PORTD, CnFET
+	sbi	CnFET_port, CnFET
 .ENDMACRO
 .MACRO CnFET_off
-	cbi	PORTD, CnFET
+	cbi	CnFET_port, CnFET
 .ENDMACRO
 
 .MACRO AnFET_on_reg
