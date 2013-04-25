@@ -1283,7 +1283,7 @@ check_ain0_low:	sbiw	YL, 1
 		sbi	PORTD, 6		; Drive AIN0 high
 
 		.if defined(mux_a)
-		rcall	wait120ms		; There might be some capacitance
+		rcall	wait30ms		; There might be some capacitance
 		ldi	XL, 6			; Error code 6: Phase A low-side drive broken
 		ldi	temp4, mux_a
 		rcall	adc_read
@@ -1295,7 +1295,7 @@ check_ain0_low:	sbiw	YL, 1
 		.endif
 
 		.if defined(mux_b)
-		rcall	wait120ms
+		rcall	wait30ms
 		ldi	XL, 7			; Error code 7: Phase B low-side drive broken
 		ldi	temp4, mux_b
 		rcall	adc_read
@@ -1307,7 +1307,7 @@ check_ain0_low:	sbiw	YL, 1
 		.endif
 
 		.if defined(mux_c)
-		rcall	wait120ms
+		rcall	wait30ms
 		ldi	XL, 8			; Error code 8: Phase C low-side drive broken
 		ldi	temp4, mux_c
 		rcall	adc_read
