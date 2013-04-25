@@ -9,7 +9,7 @@
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 1
 
-.equ	DEAD_LOW_NS  	= 2200
+.equ	DEAD_LOW_NS	= 2200
 .equ	DEAD_HIGH_NS 	= 24000
 
 ;*********************
