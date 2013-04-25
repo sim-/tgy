@@ -1,6 +1,6 @@
 ;*****************************************
-;* AfroESC 3                             *
-;* 2012-12-02                            *
+;* AfroESC HV                            *
+;* 2013-04-25                            *
 ;* Fuses should be lfuse=0x3f hfuse=0xca *
 ;*****************************************
 
@@ -11,7 +11,8 @@
 .equ	USE_ICP		= 1
 
 .equ	DEAD_LOW_NS	= 300
-.equ	DEAD_HIGH_NS	= 300
+.equ	DEAD_HIGH_NS	= 900
+.equ	CHECK_HARDWARE	= 1
 
 ;*********************
 ; PORT B definitions *
@@ -25,7 +26,7 @@
 .equ	CpFET		= 1	;o
 .equ	rcp_in		= 0	;i r/c pulse input
 
-.equ	INIT_PB		= (1<<BpFET)+(1<<CpFET)
+.equ	INIT_PB		= 0
 .equ	DIR_PB		= (1<<BpFET)+(1<<CpFET)
 
 .equ	BpFET_port	= PORTB
@@ -51,29 +52,29 @@
 .ENDMACRO
 
 .MACRO BpFET_on
-	cbi	BpFET_port, BpFET
-.ENDMACRO
-.MACRO BpFET_off
 	sbi	BpFET_port, BpFET
 .ENDMACRO
+.MACRO BpFET_off
+	cbi	BpFET_port, BpFET
+.ENDMACRO
 .MACRO CpFET_on
-	cbi	CpFET_port, CpFET
+	sbi	CpFET_port, CpFET
 .ENDMACRO
 .MACRO CpFET_off
-	sbi	CpFET_port, CpFET
+	cbi	CpFET_port, CpFET
 .ENDMACRO
 
 .MACRO BpFET_on_reg
-	cbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
 	sbr	@0, 1<<BpFET
 .ENDMACRO
+.MACRO BpFET_off_reg
+	cbr	@0, 1<<BpFET
+.ENDMACRO
 .MACRO CpFET_on_reg
-	cbr	@0, 1<<CpFET
+	sbr	@0, 1<<CpFET
 .ENDMACRO
 .MACRO CpFET_off_reg
-	sbr	@0, 1<<CpFET
+	cbr	@0, 1<<CpFET
 .ENDMACRO
 
 ;*********************
@@ -88,8 +89,8 @@
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
 
-.equ	O_POWER		= 180
-.equ	O_GROUND	= 33
+.equ	O_POWER		= 470
+.equ	O_GROUND	= 47
 
 .equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
 .equ	DIR_PC		= 0
@@ -138,7 +139,7 @@
 .equ	txd		= 1
 .equ	rxd		= 0
 
-.equ	INIT_PD		= (1<<ApFET)+(1<<txd)
+.equ	INIT_PD		= (1<<txd)
 .equ	DIR_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<ApFET)+(1<<txd)
 
 .equ	AnFET_port	= PORTD
@@ -165,10 +166,10 @@
 	cbi	CnFET_port, CnFET
 .ENDMACRO
 .MACRO ApFET_on
-	cbi	ApFET_port, ApFET
+	sbi	ApFET_port, ApFET
 .ENDMACRO
 .MACRO ApFET_off
-	sbi	ApFET_port, ApFET
+	cbi	ApFET_port, ApFET
 .ENDMACRO
 
 .MACRO AnFET_on_reg
@@ -190,10 +191,10 @@
 	cbr	@0, 1<<CnFET
 .ENDMACRO
 .MACRO ApFET_on_reg
-	cbr	@0, 1<<ApFET
+	sbr	@0, 1<<ApFET
 .ENDMACRO
 .MACRO ApFET_off_reg
-	sbr	@0, 1<<ApFET
+	cbr	@0, 1<<ApFET
 .ENDMACRO
 
 .MACRO nFET_brake

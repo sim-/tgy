@@ -40,6 +40,8 @@ Tested boards by target:
     - AfroESC (http://code.google.com/p/afrodevices/downloads/list)
 - afro2:
     - AfroESC 2 (prototype)
+- afro_hv:
+    - AfroESC HV (high voltage, with all-N FETs and drivers)
 - afro_nfet:
     - AfroESC with all-N FETs (revision 3)
 - birdie70a:

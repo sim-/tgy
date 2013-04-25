@@ -84,6 +84,8 @@
 #include "afro.inc"		; AfroESC (ICP PWM, I2C, UART)
 #elif defined(afro2_esc)
 #include "afro2.inc"		; AfroESC 2 (ICP PWM, I2C, UART)
+#elif defined(afro_hv_esc)
+#include "afro_hv.inc"		; AfroESC HV with drivers (ICP PWM, I2C, UART)
 #elif defined(afro_nfet_esc)
 #include "afro_nfet.inc"	; AfroESC 3 with all nFETs (ICP PWM, I2C, UART)
 #elif defined(birdie70a_esc)
