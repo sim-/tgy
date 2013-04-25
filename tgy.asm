@@ -856,8 +856,8 @@ falling_edge:
 		sbi2	i_temp1, i_temp2, MAX_RC_PULS * CPU_MHZ	; Put back to start time
 		sub	rx_l, i_temp1		; Subtract start time from current time
 		sbc	rx_h, i_temp2
-.if byte3(MAX_RC_PULS*CPU_MHZ)
-.error "MAX_RC_PULS*CPU_MHZ too high to fit in two bytes -- adjust it or the rcp_int code"
+.if MAX_RC_PULS * CPU_MHZ > 0xffff
+.error "MAX_RC_PULS * CPU_MHZ too big to fit in two bytes -- adjust it or the rcp_int code"
 .endif
 		sbr	flags1, (1<<EVAL_RC)
 rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
@@ -1520,9 +1520,9 @@ update_timing:
 		sbc	temp3, temp4
 
 	; Limit maximum RPM (fastest timing)
-		cpi3	temp1, temp2, temp3, TIMING_MAX*CPU_MHZ/2, temp4
+		cpi3	temp1, temp2, temp3, TIMING_MAX * CPU_MHZ / 2, temp4
 		brcc	update_timing1
-		ldi3	temp1, temp2, temp3, TIMING_MAX*CPU_MHZ/2
+		ldi3	temp1, temp2, temp3, TIMING_MAX * CPU_MHZ / 2
 		lsr	sys_control_h		; limit by reducing power
 		ror	sys_control_l
 update_timing1:
@@ -1534,16 +1534,16 @@ update_timing1:
 	; so this is just an approximation. It would be nice if we could
 	; do this with math instead of two constants, but we need a divide.
 	; Clobbers only temp4. Fastest in case of fastest timing.
-		cpi2	temp2, temp3, (TIMING_RANGE2*CPU_MHZ/2) >> 8, temp4
+		cpi2	temp2, temp3, (TIMING_RANGE2 * CPU_MHZ / 2) >> 8, temp4
 		ldi2	XL, XH, MAX_POWER
 		brcs	update_timing4
-		cpi2	temp2, temp3, (TIMING_RANGE1*CPU_MHZ/2) >> 8, temp4
+		cpi2	temp2, temp3, (TIMING_RANGE1 * CPU_MHZ / 2) >> 8, temp4
 		ldi2	XL, XH, PWR_MAX_RPM2
 		brcs	update_timing4
 	; Limit minimum RPM (slowest timing)
-		cpi2	temp2, temp3, (TIMING_MIN*CPU_MHZ/2) >> 8, temp4
+		cpi2	temp2, temp3, (TIMING_MIN * CPU_MHZ / 2) >> 8, temp4
 		brcs	update_timing2
-		ldi3	temp1, temp2, temp3, TIMING_MIN*CPU_MHZ/2
+		ldi3	temp1, temp2, temp3, TIMING_MIN * CPU_MHZ / 2
 update_timing2:	ldi2	XL, YH, PWR_MAX_RPM1
 update_timing4:	movw	timing_duty_l, XL
 
@@ -2351,9 +2351,7 @@ wait_pwm_running:
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
 .if defined(START_DELAY_US)
-		ldi	YL, byte1(START_DELAY_US*CPU_MHZ)
-		ldi	YH, byte2(START_DELAY_US*CPU_MHZ)
-		ldi	temp4, byte3(START_DELAY_US*CPU_MHZ)
+		ldi3	YL, YH, temp4, START_DELAY_US * CPU_MHZ
 		mov	temp7, temp4
 		rcall	set_ocr1a_rel
 		rcall	wait_OCT1_tot
@@ -2369,15 +2367,9 @@ wait_pwm_running:
 		sub	YH, temp4
 		sbc	temp7, ZH
 		brcs	start_timeout1
-		cpi	YL, byte1(timeoutMIN*CPU_MHZ)
-		ldi	temp4, byte2(timeoutMIN*CPU_MHZ)
-		cpc	YH, temp4
-		ldi	temp4, byte3(timeoutMIN*CPU_MHZ)
-		cpc	temp7, temp4
+		cpiz3	YL, YH, temp7, timeoutMIN * CPU_MHZ, temp4
 		brcc	start_timeout2
-start_timeout1:	ldi	YL, byte1(timeoutSTART*CPU_MHZ)
-		ldi	YH, byte2(timeoutSTART*CPU_MHZ)
-		ldi	temp4, byte3(timeoutSTART*CPU_MHZ)
+start_timeout1:	ldi3	YL, YH, temp4, timeoutSTART * CPU_MHZ
 		mov	temp7, temp4
 start_timeout2:	sts	wt_OCT1_tot_l, YL
 		sts	wt_OCT1_tot_h, YH
@@ -2411,7 +2403,7 @@ wait_for_demag:
 		mov	XL, temp2		; Copy high and check extended byte
 		cpse	temp3, ZH		; to calculate the ZC check count
 		ldi	XL, 0xff
-.if TIMING_MAX*CPU_MHZ / 0x100 < 3
+.if TIMING_MAX * CPU_MHZ / 0x100 < 3
 .error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
 .endif
 		add	YL, temp1
