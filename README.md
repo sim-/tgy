@@ -40,6 +40,8 @@ Tested boards by target:
     - AfroESC (http://code.google.com/p/afrodevices/downloads/list)
 - afro2:
     - AfroESC 2 (prototype)
+- afro_nfet:
+    - AfroESC with all-N FETs (revision 3)
 - birdie70a:
     - Hobby King Birdie 70A (BIRD-60A)
     - Hobby King Red Brick 200A (RB200A, black board)
