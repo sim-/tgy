@@ -1365,6 +1365,7 @@ check_sense_low1:
 		breq	check_sense_low_ret	; Return if pin reads at 0 (low)
 		sbiw	YL, 1
 		brne	check_sense_low1	; Loop until timeout
+		rjmp	hw_error
 check_sense_low_ret:
 		ret
 
