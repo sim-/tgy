@@ -158,6 +158,14 @@
 .equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
+.if !defined(CHECK_HARDWARE)
+.equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
+.endif
+.equ	CELL_MAX_DV	= 43	; Maximum battery cell deciV
+.equ	CELL_MIN_DV	= 35	; Minimum battery cell deciV
+.equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
+.equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
+.equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
@@ -223,6 +231,10 @@
 
 .equ	EEPROM_SIGN	= 31337		; Random 16-bit value
 .equ	EEPROM_OFFSET	= 0x80		; Offset into 512-byte space (why not)
+
+; Conditional code inclusion
+.set	DEBUG_TX	= 0		; Output debugging on UART TX pin
+.set	ADC_READ_NEEDED	= 0		; Reading from ADCs
 
 ;**** **** **** **** ****
 ; Register Definitions
@@ -1195,6 +1207,398 @@ mul_y_12x34:
 		add	YL, temp5
 		adc	YH, temp6		; Product is now in Y, flags set
 		ret
+
+;-- Hardware diagnostics -------------------------------------------------
+; Any 3-phase brushless ESC based on the ATmega8 or similar must tie the
+; sense neutral star to AIN0, and the three sense lines to three ADC pins
+; or two ADC pins and AIN1. AIN0 and AIN1 are also normal I/O pins, so we
+;
+; can drive them and see if the ADC values move. Also, any non-zero value
+; at power up indicates either a spinning motor, a stuck FET, or that
+; an incorrect board target has been flashed. We can prevent further
+; damage by halting if this is detected.
+;
+; In typical conditions on the ATmega8, I/O pins transition to low at
+; about 1.42V and to high at about 1.86V. The ADC is 10-bit, however, and
+; will work in many more cases (such as with a lower input voltage or
+; stronger sense divider).
+;
+; Throughout all of this, the motor may be spinning. If so, we should wait
+; long enough that each phase falls to 0V and all tests succeed.
+;
+.if CHECK_HARDWARE
+.set ADC_READ_NEEDED = 1
+.equ MAX_CHECK_LOOPS = 5000			; ADC check takes ~200us
+
+hardware_check:
+		clt
+
+		; First, check that all sense lines are low.
+		.if defined(mux_a)
+		ldi	XL, 1			; Error code 1: Phase A stuck high
+		ldi	temp4, mux_a
+		rcall	check_sense_low
+		.endif
+
+		.if defined(mux_b)
+		ldi	XL, 2			; Error code 2: Phase B stuck high
+		ldi	temp4, mux_b
+		rcall	check_sense_low
+		.endif
+
+		.if defined(mux_c)
+		ldi	XL, 3			; Error code 3: Phase C stuck high
+		ldi	temp4, mux_c
+		rcall	check_sense_low
+		.endif
+
+		.if !defined(mux_a) || !defined(mux_b) || !defined(mux_c)
+		ldi	XL, 4			; Error code 4: AIN1 stuck high
+		ldi2	YL, YH, MAX_CHECK_LOOPS
+check_ain1_low:	sbiw	YL, 1
+		sbic	PIND, 7			; Skip loop if AIN1 low
+		brne	check_ain1_low
+		rcall	hw_error_eq
+		.endif
+
+		ldi	XL, 5			; Error code 5: AIN0 stuck high
+		ldi2	YL, YH, MAX_CHECK_LOOPS
+check_ain0_low:	sbiw	YL, 1
+		sbic	PIND, 6			; Skip loop if AIN0 low
+		brne	check_ain0_low
+		rcall	hw_error_eq
+
+		brts	hardware_check		; Do not allow further tests if stuck high
+
+		; If nothing is stuck high, pull up the motor by driving
+		; AIN0 and see if we can pull it low on each phase. We
+		; While the star is driven high or connected to ground,
+		; voltage on one phase will not influence another unless
+		; a motor is attached. So, we have to skip a phase if it
+		; is connected to AIN1.
+
+		sbi	DDRD, 6
+		sbi	PORTD, 6		; Drive AIN0 high
+
+		.if defined(mux_a)
+		rcall	wait120ms		; There might be some capacitance
+		ldi	XL, 6			; Error code 6: Phase A low-side drive broken
+		ldi	temp4, mux_a
+		rcall	adc_read
+		movw	YL, temp1		; Save ADC value (hopefully non-zero)
+		AnFET_on			; Drive down this phase (we've established that it was 0V above).
+		rcall	adc_read		; FET turn-on will easily beat ADC initialization
+		AnFET_off
+		rcall	hw_error_y_le_temp12
+		.endif
+
+		.if defined(mux_b)
+		rcall	wait120ms
+		ldi	XL, 7			; Error code 7: Phase B low-side drive broken
+		ldi	temp4, mux_b
+		rcall	adc_read
+		movw	YL, temp1		; Save ADC value (hopefully non-zero)
+		BnFET_on			; Drive down this phase (we've established that it was 0V above).
+		rcall	adc_read		; FET turn-on will easily beat ADC initialization
+		BnFET_off
+		rcall	hw_error_y_le_temp12
+		.endif
+
+		.if defined(mux_c)
+		rcall	wait120ms
+		ldi	XL, 8			; Error code 8: Phase C low-side drive broken
+		ldi	temp4, mux_c
+		rcall	adc_read
+		movw	YL, temp1		; Save ADC value (hopefully non-zero)
+		CnFET_on			; Drive down this phase (we've established that it was 0V above).
+		rcall	adc_read		; FET turn-on will easily beat ADC initialization
+		CnFET_off
+		rcall	hw_error_y_le_temp12
+		.endif
+
+		cbi	PORTD, 6		; Sink on AIN0 (help to pull down the outputs)
+		rcall	wait30ms
+
+		.if defined(mux_a)
+		ldi	XL, 9			; Error code 9: Phase A high-side drive broken
+		ldi	temp4, mux_a
+		rcall	adc_read
+		movw	YL, temp1		; Save ADC value (hopefully non-zero)
+		ApFET_on			; Drive up this phase.
+		rcall	adc_read		; Waste time for high side to turn off
+		ApFET_off
+		rcall	hw_error_temp12_le_y
+		.endif
+
+		.if defined(mux_b)
+		ldi	XL, 10			; Error code 10: Phase B high-side drive broken
+		ldi	temp4, mux_b
+		rcall	adc_read
+		movw	YL, temp1		; Save ADC value (hopefully non-zero)
+		BpFET_on			; Drive up this phase.
+		rcall	adc_read		; Waste time for high side to turn off
+		BpFET_off
+		rcall	hw_error_temp12_le_y
+		.endif
+
+		.if defined(mux_c)
+		ldi	XL, 11			; Error code 11: Phase C high-side drive broken
+		ldi	temp4, mux_c
+		rcall	adc_read
+		movw	YL, temp1		; Save ADC value (hopefully non-zero)
+		CpFET_on			; Drive up this phase.
+		rcall	adc_read		; Waste time for high side to turn off
+		CpFET_off
+		rcall	hw_error_temp12_le_y
+		.endif
+
+		cbi	DDRD, 6			; Restore tristated AIN0
+		ret
+
+check_sense_low:
+		ldi2	YL, YH, MAX_CHECK_LOOPS
+check_sense_low1:
+		rcall	adc_read
+		adiw	temp1, 0		; Test for zero
+		breq	check_sense_low_ret	; Return if pin reads at 0 (low)
+		sbiw	YL, 1
+		brne	check_sense_low1	; Loop until timeout
+check_sense_low_ret:
+		ret
+
+hw_error_temp12_le_y:
+		cp	YL, temp1
+		cpc	YH, temp2
+		brcc	hw_error
+		ret
+
+hw_error_y_le_temp12:
+		cp	temp1, YL
+		cpc	temp2, YH
+		brcc	hw_error
+		ret
+
+;-- Hardware error -------------------------------------------------------
+; Blink an LED or beep XL times to indicate a hardware error.
+; Beeping is possibly unsafe. The only other option is to stop.
+hw_error_eq:
+		brne	hw_error_ret
+hw_error:
+		mov	YL, XL
+hw_error1:
+		.if defined(red_led)
+		RED_on
+		rcall	wait120ms
+		RED_off
+		.elif defined(green_led)
+		GRN_on
+		rcall	wait120ms
+		GRN_off
+		.else
+		rcall	beep_f1			; Low frequency is safer
+		.endif
+		rcall	wait240ms
+		dec	YL
+		brne	hw_error1
+		rcall	wait240ms
+		rcall	wait240ms
+		set
+hw_error_ret:	ret
+
+.endif
+
+;-------------------------------------------------------------------------
+; ADC value dumping via the UART. Expects vt100ish.
+.if DEBUG_ADC_DUMP
+.set DEBUG_TX = 1
+.set ADC_READ_NEEDED = 1
+
+adc_input_dump:
+		ldi	temp4, 27
+		rcall	tx_byte
+		ldi	temp4, '['
+		rcall	tx_byte
+		ldi	temp4, '2'
+		rcall	tx_byte
+		ldi	temp4, 'J'
+		rcall	tx_byte
+
+adc_input_dump1:
+		ldi	temp2, 5
+		rcall	wait1
+		ldi	temp4, 27
+		rcall	tx_byte
+		ldi	temp4, '['
+		rcall	tx_byte
+		ldi	temp4, 'H'
+		rcall	tx_byte
+
+		.if defined(mux_a)
+		ldi	temp4, 'A'
+		rcall	tx_byte
+		ldi	temp4, mux_a
+		rcall	adc_read
+		rcall	colon_hex_write
+		.endif
+		.if defined(mux_b)
+		ldi	temp4, 'B'
+		rcall	tx_byte
+		ldi	temp4, mux_b
+		rcall	adc_read
+		rcall	colon_hex_write
+		.endif
+		.if defined(mux_c)
+		ldi	temp4, 'C'
+		rcall	tx_byte
+		ldi	temp4, mux_c
+		rcall	adc_read
+		rcall	colon_hex_write
+		.endif
+		.if defined(mux_voltage)
+		ldi	temp4, '#'
+		rcall	tx_byte
+		rcall	adc_cell_count
+		clr	temp2
+		rcall	colon_hex_write
+		.endif
+
+		rcall	tx_crlf
+
+		clr	YL
+adc_loop:
+		ldi	temp4, 'A'
+		rcall	tx_byte
+		ldi	temp4, 'D'
+		rcall	tx_byte
+		ldi	temp4, 'C'
+		rcall	tx_byte
+		mov	temp4, YL
+		rcall	tx_hex_nibble
+
+		mov	temp4, YL
+		rcall	adc_read
+		rcall	colon_hex_write
+
+		inc	YL
+		andi	YL, 0xf
+		breq	adc_input_dump1
+		cpi	YL, 8
+		brne	adc_loop
+		ldi	YL, 0xe		; Jump to band-gap reference (no ADC8 - ADC13)
+		rjmp	adc_loop
+
+		ret
+.endif
+
+.if DEBUG_TX
+init_debug_tx:
+.if !defined(txd) && DIR_PD & (1<<1)
+.error "Cannot use UART TX with this pin configuration"
+.endif
+	; Initialize TX for debugging on boards with free TX pin
+		.equ	D_BAUD_RATE = 38400
+		.equ	D_UBRR_VAL = F_CPU / D_BAUD_RATE / 16 - 1
+		outi	UBRRH, high(D_UBRR_VAL), temp1
+		outi	UBRRL, low(D_UBRR_VAL), temp1
+;		sbi	UCSRA, U2X		; Double speed
+		sbi	UCSRB, TXEN
+		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1	; N81
+		ret
+
+tx_hex_byte:
+		mov	temp4, temp3
+		swap	temp4
+		rcall	tx_hex_nibble
+		mov	temp4, temp3
+tx_hex_nibble:
+		andi	temp4, 0xf
+		ori	temp4, '0'
+		cpi	temp4, '9' + 1
+		brcs	tx_byte
+		subi	temp4, '9' + 1 - 'a'
+tx_byte:
+		sbis	UCSRA, UDRE
+		rjmp	tx_byte
+		out	UDR, temp4
+		ret
+
+tx_crlf:
+		ldi	temp4, 13
+		rcall	tx_byte
+		ldi	temp4, 10
+		rjmp	tx_byte
+
+tx_colonhex:
+		ldi	temp4, ':'
+		rcall	tx_byte
+		ldi	temp4, ' '
+		rcall	tx_byte
+		ldi	temp4, '0'
+		rcall	tx_byte
+		ldi	temp4, 'x'
+		rjmp	tx_byte
+
+colon_hex_write:
+		rcall	tx_colonhex
+		mov	temp3, temp2
+		rcall	tx_hex_byte
+		mov	temp3, temp1
+		rcall	tx_hex_byte
+		rjmp	tx_crlf
+.endif
+
+;-- Battery cell count ---------------------------------------------------
+; Assuming a LiPo cell will never exceed 4.3V, we can estimate
+; the number of cells by dividing the measured voltage by 4.3.
+.if defined(mux_voltage) && (DEBUG_ADC_DUMP || (!CELL_COUNT && BLIP_CELL_COUNT))
+.set ADC_READ_NEEDED = 1
+
+adc_cell_count:
+		ldi	temp4, mux_voltage | (1<<ADLAR)
+		rcall	adc_read
+		ldi2	temp3, temp4, 256 * 50 * (O_POWER + O_GROUND) / (O_GROUND * CELL_MAX_DV)
+		ldi2	YL, YH, 0x100		; Always at least one cell
+		rcall	mul_y_12x34
+		mov	temp1, YH
+		ret
+.endif
+
+.if ADC_READ_NEEDED
+;-- ADC input ------------------------------------------------------------
+; Read ADC from the mux set in temp4 and return result in temp1:temp2.
+;
+; The ADC clock on the ATmega8 needs to run between 50kHz and 200kHz for
+; full 10-bit sampling. At 8Mhz or 16MHz, we can use /128 to get 62.5kHz
+; or 125kHz. The datasheet says we can overclock further at the expense
+; of least significant bits. However, overclocked initialization appears
+; to offset zero when running the ADC clock any faster than 500kHz. As we
+; must turn off the ADC to use ADMUX for the comparator while driving the
+; motor, the maximum usable speed appears to be 500kHz (16MHz/32). This
+; results in minimum sample time of 25/500kHz == 50microseconds. Slowest
+; sample time is 100microseconds at 8MHz or 200microseconds at 16MHz.
+;
+; If AVcc is tied to AREF, the ADC is intended to be used with no
+; internal reference enabled (REFS0 and REFS1 not set). If a capacitor is
+; at AREF, one of the internal references must be set, or all the
+; capacitor will not charge and all ADC channels will read 0x3ff. REFS1
+; can still be set with AVcc bridged to AREF, since then it just gets
+; bridged internally and externally. The internal 2.56V reference (REFS0
+; and REFS1 set) can only be enabled if AVcc is NOT bridged.
+adc_read:
+		out	SFIOR, ZH		; Disable the Analog Comparator Multiplexer
+		sbr	temp4, (1<<REFS0)	; Enable AVCC (5.0V) reference
+		out	ADMUX, temp4		; Set ADC channel, AVcc reference with cap at AREF (should be safe if bridged)
+		ldi	temp1, (1<<ADEN)+(1<<ADSC)+(1<<ADPS2)+(1<<ADPS1)+(1<<ADPS0)
+		out     ADCSRA, temp1		; Enable the ADC, start conversion
+		wdr				; Will wait 25*128 cycles
+adc_wait:	sbic	ADCSRA, ADSC
+		rjmp	adc_wait
+		in	temp1, ADCL
+		in	temp2, ADCH
+		out	ADCSRA, ZH		; Disable the ADC (next enable and sample will take 25 ADC cycles)
+		ret
+.endif
+
 ;-----bko-----------------------------------------------------------------
 ; Unlike the normal evaluate_rc, we look here for programming mode (pulses
 ; above PROGRAM_RC_PULS), unless we have received I2C or UART input.
@@ -1822,6 +2226,31 @@ i2c_init:
 ;-----bko-----------------------------------------------------------------
 control_start:
 
+; Check cell count
+.if BLIP_CELL_COUNT
+	.if defined(mux_voltage) && !CELL_COUNT
+		rcall	adc_cell_count
+		cpi	temp1, 5
+		brlo	cell_count_good		; Detection of >=~5 LiPo cells becomes ambiguous based on charge state
+		ldi	temp1, 0
+cell_count_good:
+	.else
+		ldi	temp1, CELL_COUNT
+	.endif
+		mov	YL, temp1		; Beep clobbers temp1-temp5
+		cpi	YL, 0
+		breq	cell_blipper1
+cell_blipper:
+		rcall	wait120ms
+		ldi	temp2, 10		; Short blip (not too long for this)
+		rcall	beep_f4_freq
+		dec	YL
+		brne	cell_blipper
+		rcall	wait120ms
+cell_blipper1:
+
+.endif
+
 control_disarm:
 	; LEDs off while disarmed
 		GRN_off
@@ -1843,8 +2272,8 @@ control_disarm:
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
 		outi	UBRRH, high(UBRR_VAL), temp1
 		outi	UBRRL, low(UBRR_VAL), temp1
-		outi	UCSRB, (1<<RXEN), temp1	; Do programming card rx by polling
-		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1
+		sbi	UCSRB, RXEN		; Do programming card rx by polling
+		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1	; N81
 		.endif
 
 	; Initialize input sources (i2c and/or rc-puls)
@@ -1853,10 +2282,8 @@ control_disarm:
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
 		outi	UBRRH, high(UBRR_VAL), temp1
 		outi	UBRRL, low(UBRR_VAL), temp1
-		outi	UCSRB, (1<<RXEN), temp1	; We don't actually tx
+		sbi	UCSRB, RXEN		; We don't actually tx
 		outi	UCSRC, (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0), temp1	; N81
-		in	temp1, UDR
-		in	temp1, UDR
 		in	temp1, UDR
 		sbi	UCSRA, RXC		; clear flag
 		sbi	UCSRB, RXCIE		; enable reception irq
@@ -1906,7 +2333,7 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		.endif
 		.if USE_UART
 		sbrs	flags1, UART_MODE
-		out	UCSRB, ZH		; Turn off UART and interrupt
+		cbi	UCSRB, RXEN		; Turn off receiver
 		.endif
 		.if USE_INT0 || USE_ICP
 		mov	temp1, flags1
@@ -2482,6 +2909,10 @@ clear_loop1:	cp	ZL, r0
 		outi	PORTD, INIT_PD, temp1
 		outi	DDRD, DIR_PD, temp1
 
+		.if DEBUG_TX
+		rcall	init_debug_tx
+		.endif
+
 	; Start timers except output PWM
 		outi	TCCR0, T0CLK, temp1	; timer0: beep control, delays
 		outi	TCCR1B, T1CLK, temp1	; timer1: commutation timing, RC pulse measurement
@@ -2497,6 +2928,11 @@ clear_loop1:	cp	ZL, r0
 	; (with 64ms delayed start fuses) for i2c V2 protocol detection
 		rcall	wait30ms		; Running at unadjusted speed(!)
 
+	; Debugging hooks
+		.if DEBUG_ADC_DUMP
+		rcall	adc_input_dump
+		.endif
+
 	; Read EEPROM block to RAM
 		rcall	eeprom_read_block	; Also calls osccal_set
 		rcall	eeprom_check_reset
@@ -2509,6 +2945,11 @@ clear_loop1:	cp	ZL, r0
 
 	; Enable interrupts for early input (i2c)
 		sei
+
+	; Check hardware (before making any beeps)
+		.if CHECK_HARDWARE
+		rcall	hardware_check
+		.endif
 
 	; Check reset cause
 		bst	temp7, PORF		; Power-on reset
