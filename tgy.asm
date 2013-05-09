@@ -2384,7 +2384,7 @@ set_brake1:	cpi	temp3, 2		; Thumb brake
 		brne	wait_for_power_on
 		ldi	YL, 1 << LOW_BRAKE_SPEED
 		sts	brake_sub, YL
-		ldi2	YL, YH, (LOW_BRAKE_POWER
+		ldi2	YL, YH, LOW_BRAKE_POWER
 
 set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 		sub	temp1, YL		; Calculate OFF duty
