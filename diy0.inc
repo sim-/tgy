@@ -59,31 +59,6 @@
 .equ	BpFET_port	= PORTC
 .equ	CpFET_port	= PORTC
 
-.MACRO comp_init
-	in	@0, SFIOR
-	sbr	@0, (1<<ACME)		; switch to comparator multiplexed
-	out	SFIOR, @0
-	cbi	ADCSRA, ADEN		; disable ADC
-.ENDMACRO
-.MACRO set_comp_phase_a
-	ldi	@0, mux_a		; set comparator multiplexer to phase A
-	out	ADMUX, @0
-.ENDMACRO
-.MACRO set_comp_phase_b
-	ldi	@0, mux_b		; set comparator multiplexer to phase B
-	out	ADMUX, @0
-.ENDMACRO
-.MACRO set_comp_phase_c
-	ldi	@0, mux_c		; set comparator multiplexer to phase C
-	out	ADMUX, @0
-.ENDMACRO
-
-.MACRO all_pFETs_off
-	ApFET_off
-	BpFET_off
-	CpFET_off
-.ENDMACRO
-
 ;*********************
 ; PORT B definitions *
 ;*********************

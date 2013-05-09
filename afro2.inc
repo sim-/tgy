@@ -50,25 +50,6 @@
 
 .equ	ApFET_port	= PORTC
 
-.MACRO comp_init
-	in	@0, SFIOR
-	sbr	@0, (1<<ACME)	; set Analog Comparator Multiplexer Enable
-	out	SFIOR, @0
-.ENDMACRO
-.MACRO set_comp_phase_a
-	ldi	@0, mux_a	; set comparator multiplexer to phase A
-	out	ADMUX, @0
-	cbi	ADCSRA, ADEN	; disable ADC
-.ENDMACRO
-.MACRO set_comp_phase_b
-	ldi	@0, mux_b	; set comparator multiplexer to phase B
-	out	ADMUX, @0
-	cbi	ADCSRA, ADEN	; disable ADC
-.ENDMACRO
-.MACRO set_comp_phase_c
-	sbi	ADCSRA, ADEN	; enable ADC and comparator to phase C (AIN1)
-.ENDMACRO
-
 ;*********************
 ; PORT D definitions *
 ;*********************

@@ -54,25 +54,6 @@
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0
 
-.MACRO comp_init
-	in	@0, SFIOR
-	sbr	@0, (1<<ACME)	; set Analog Comparator Multiplexer Enable
-	out	SFIOR, @0
-	cbi	ADCSRA, ADEN	; disable ADC
-.ENDMACRO
-.MACRO set_comp_phase_a
-	ldi	@0, mux_a	; set comparator multiplexer to phase A
-	out	ADMUX, @0
-.ENDMACRO
-.MACRO set_comp_phase_b
-	ldi	@0, mux_b	; set comparator multiplexer to phase B
-	out	ADMUX, @0
-.ENDMACRO
-.MACRO set_comp_phase_c	
-	ldi	@0, mux_c	; set comparator multiplexer to phase C
-	out	ADMUX, @0
-.ENDMACRO
-
 ;*********************
 ; PORT B definitions *
 ;*********************
