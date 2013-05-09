@@ -425,34 +425,7 @@ eeprom_defaults_w:
 	.db 0, byte1(0xaa + BL_REVISION + 144 + 255 + 255 + 127 + 0 + 0)	; BitConfig, crc (0xaa + sum of above bytes)
 .endif
 
-;-----bko-----------------------------------------------------------------
-; Timing and motor debugging
-.macro flag_on
-	.if MOTOR_DEBUG && (DIR_PB & (1<<4)) == 0
-		sbi	PORTB, 4
-	.endif
-.endmacro
-.macro flag_off
-	.if MOTOR_DEBUG && (DIR_PB & (1<<4)) == 0
-		cbi	PORTB, 4
-	.endif
-.endmacro
-.macro sync_on
-	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
-		sbi	PORTB, 3
-	.elif MOTOR_DEBUG && (DIR_PB & (1<<5)) == 0
-		sbi	PORTB, 5
-	.endif
-.endmacro
-.macro sync_off
-	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
-		cbi	PORTB, 3
-	.elif MOTOR_DEBUG && (DIR_PB & (1<<5)) == 0
-		cbi	PORTB, 5
-	.endif
-.endmacro
-
-;-- Macros ---------------------------------------------------------------
+;-- Instruction extension macros -----------------------------------------
 
 ; Add any 16-bit immediate to a register pair (@0:@1 += @2), no Z flag
 .macro adi2
@@ -581,6 +554,138 @@ eeprom_defaults_w:
 		outr	@0, @2
 	.else
 		outr	@0, ZH
+	.endif
+.endmacro
+
+;-- FET driving macros ---------------------------------------------------
+; Careful: "if" conditions split over multiple lines (with backslashes)
+; work with arva, but avrasm2.exe silently produces wrong results.
+
+.macro FET_on
+.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
+		cbi	@0, @1
+.else
+		sbi	@0, @1
+.endif
+.endmacro
+
+.macro FET_off
+.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
+		sbi	@0, @1
+.else
+		cbi	@0, @1
+.endif
+.endmacro
+
+.macro AnFET_on
+		FET_on	AnFET_port, AnFET
+.endmacro
+.macro AnFET_off
+		FET_off	AnFET_port, AnFET
+.endmacro
+.macro ApFET_on
+		FET_on	ApFET_port, ApFET
+.endmacro
+.macro ApFET_off
+		FET_off	ApFET_port, ApFET
+.endmacro
+.macro BnFET_on
+		FET_on	BnFET_port, BnFET
+.endmacro
+.macro BnFET_off
+		FET_off	BnFET_port, BnFET
+.endmacro
+.macro BpFET_on
+		FET_on	BpFET_port, BpFET
+.endmacro
+.macro BpFET_off
+		FET_off	BpFET_port, BpFET
+.endmacro
+.macro CnFET_on
+		FET_on	CnFET_port, CnFET
+.endmacro
+.macro CnFET_off
+		FET_off	CnFET_port, CnFET
+.endmacro
+.macro CpFET_on
+		FET_on	CpFET_port, CpFET
+.endmacro
+.macro CpFET_off
+		FET_off	CpFET_port, CpFET
+.endmacro
+
+.macro all_pFETs_off
+.if ApFET_port != BpFET_port || ApFET_port != CpFET_port
+		ApFET_off
+		BpFET_off
+		CpFET_off
+.else
+	        in      @0, ApFET_port
+	.if (INIT_PB & ((ApFET_port == PORTB) << ApFET)) | (INIT_PC & ((ApFET_port == PORTC) << ApFET)) | (INIT_PD & ((ApFET_port == PORTD) << ApFET))
+		sbr     @0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+	.else
+		cbr     @0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+	.endif
+		out     ApFET_port, @0
+.endif
+.endmacro
+
+.macro all_nFETs_off
+.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
+		AnFET_off
+		BnFET_off
+		CnFET_off
+.else
+	        in      @0, AnFET_port
+	.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
+		sbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+	.else
+		cbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+	.endif
+		out     AnFET_port, @0
+.endif
+.endmacro
+
+.macro nFETs_brake
+.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
+		AnFET_on
+		BnFET_on
+		CnFET_on
+.else
+	        in      @0, AnFET_port
+	.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
+		cbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+	.else
+		sbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+	.endif
+		out     AnFET_port, @0
+.endif
+.endmacro
+
+;-- Timing and motor debugging macros ------------------------------------
+
+.macro flag_on
+	.if MOTOR_DEBUG && (DIR_PB & (1<<4)) == 0
+		sbi	PORTB, 4
+	.endif
+.endmacro
+.macro flag_off
+	.if MOTOR_DEBUG && (DIR_PB & (1<<4)) == 0
+		cbi	PORTB, 4
+	.endif
+.endmacro
+.macro sync_on
+	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
+		sbi	PORTB, 3
+	.elif MOTOR_DEBUG && (DIR_PB & (1<<5)) == 0
+		sbi	PORTB, 5
+	.endif
+.endmacro
+.macro sync_off
+	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
+		cbi	PORTB, 3
+	.elif MOTOR_DEBUG && (DIR_PB & (1<<5)) == 0
+		cbi	PORTB, 5
 	.endif
 .endmacro
 

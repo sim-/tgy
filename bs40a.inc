@@ -43,33 +43,6 @@
 	out MCUCR, @0		; set next int0 to falling edge
 .ENDMACRO
 
-.MACRO CnFET_on
-	sbi PORTD, CnFET
-.ENDMACRO
-.MACRO CnFET_off
-	cbi PORTD, CnFET
-.ENDMACRO
-.MACRO ApFET_on
-	sbi PORTD, ApFET
-.ENDMACRO
-.MACRO ApFET_off
-	cbi PORTD, ApFET
-.ENDMACRO
-
-.MACRO CnFET_on_reg
-	sbr @0, 1<<CnFET
-.ENDMACRO
-.MACRO CnFET_off_reg
-	cbr @0, 1<<CnFET
-.ENDMACRO
-.MACRO ApFET_on_reg
-	sbr @0, 1<<ApFET
-.ENDMACRO
-.MACRO ApFET_off_reg
-	cbr @0, 1<<ApFET
-.ENDMACRO
-
-
 ;*********************
 ; PORT C definitions *
 ;*********************
@@ -92,44 +65,6 @@
 .equ	BnFET_port	= PORTC
 .equ	CpFET_port	= PORTC
 
-.MACRO BnFET_on
-	sbi PORTC, BnFET
-.ENDMACRO
-.MACRO BnFET_off
-	cbi PORTC, BnFET
-.ENDMACRO
-.MACRO BpFET_on
-	sbi PORTC, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	cbi PORTC, BpFET
-.ENDMACRO
-.MACRO CpFET_on
-	sbi PORTC, CpFET
-.ENDMACRO
-.MACRO CpFET_off
-	cbi PORTC, CpFET
-.ENDMACRO
-
-.MACRO BnFET_on_reg
-	sbr @0, 1<<BnFET
-.ENDMACRO
-.MACRO BnFET_off_reg
-	cbr @0, 1<<BnFET
-.ENDMACRO
-.MACRO BpFET_on_reg
-	sbr @0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	cbr @0, 1<<BpFET
-.ENDMACRO
-.MACRO CpFET_on_reg
-	sbr @0, 1<<CpFET
-.ENDMACRO
-.MACRO CpFET_off_reg
-	cbr @0, 1<<CpFET
-.ENDMACRO
-
 .MACRO comp_init
 	in @0, SFIOR
 	sbr @0, 1<<ACME		; switch to comparator multiplexed
@@ -149,7 +84,6 @@
 	out ADMUX, @0
 .ENDMACRO
 
-
 ;*********************
 ; PORT B definitions *
 ;*********************
@@ -166,43 +100,6 @@
 .equ	DIR_PB		= (1<<AnFET)
 
 .equ	AnFET_port	= PORTB
-
-.MACRO AnFET_on
-	sbi PORTB, AnFET
-.ENDMACRO
-.MACRO AnFET_off
-	cbi PORTB, AnFET
-.ENDMACRO
-
-.MACRO AnFET_on_reg
-	sbr @0, 1<<AnFET
-.ENDMACRO
-.MACRO AnFET_off_reg
-	cbr @0, 1<<AnFET
-.ENDMACRO
-
-
-;********************
-; Some other Macros *
-;********************
-
-.MACRO nFET_brake
-	AnFET_on
-	BnFET_on
-	CnFET_on
-.ENDMACRO
-
-.MACRO all_nFETs_off
-	AnFET_off
-	BnFET_off
-	CnFET_off
-.ENDMACRO
-
-.MACRO all_pFETs_off
-	ApFET_off
-	BpFET_off
-	CpFET_off
-.ENDMACRO
 
 .MACRO RED_on
 .ENDMACRO

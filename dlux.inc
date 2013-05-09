@@ -44,46 +44,6 @@
 	out	MCUCR, @0	; set next int0 to falling edge
 .ENDMACRO
 
-.MACRO BnFET_on
-	sbi	BnFET_port, BnFET
-.ENDMACRO
-.MACRO BnFET_off
-	cbi	BnFET_port, BnFET
-.ENDMACRO
-.MACRO AnFET_on
-	sbi	AnFET_port, AnFET
-.ENDMACRO
-.MACRO AnFET_off
-	cbi	AnFET_port, AnFET
-.ENDMACRO
-
-.MACRO BnFET_on_reg
-	sbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO BnFET_off_reg
-	cbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO AnFET_on_reg
-	sbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO AnFET_off_reg
-	cbr	@0, 1<<AnFET
-.ENDMACRO
-
-.MACRO ApFET_on
-	cbi	ApFET_port, ApFET
-.ENDMACRO
-.MACRO ApFET_off
-	sbi	ApFET_port, ApFET
-.ENDMACRO
-
-.MACRO ApFET_on_reg
-	cbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO ApFET_off_reg
-	sbr	@0, 1<<ApFET
-.ENDMACRO
-
 .MACRO RED_on
 .ENDMACRO
 .MACRO RED_off
@@ -113,32 +73,6 @@
 
 .equ	CpFET_port	= PORTC
 .equ	BpFET_port	= PORTC
-
-.MACRO CpFET_on
-	cbi	CpFET_port, CpFET
-.ENDMACRO
-.MACRO CpFET_off
-	sbi	CpFET_port, CpFET
-.ENDMACRO
-.MACRO BpFET_on
-	cbi	BpFET_port, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	sbi	BpFET_port, BpFET
-.ENDMACRO
-
-.MACRO CpFET_on_reg
-	cbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO CpFET_off_reg
-	sbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO BpFET_on_reg
-	cbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	sbr	@0, 1<<BpFET
-.ENDMACRO
 
 .MACRO comp_init
 	in	@0, SFIOR
@@ -173,33 +107,3 @@
 .equ	DIR_PB		= (1<<CnFET)
 
 .equ	CnFET_port	= PORTB
-
-.MACRO CnFET_on
-	sbi	CnFET_port, CnFET
-.ENDMACRO
-.MACRO CnFET_off
-	cbi	CnFET_port, CnFET
-.ENDMACRO
-
-.MACRO CnFET_on_reg
-	sbr	@0, 1<<CnFET
-.ENDMACRO
-.MACRO CnFET_off_reg
-	cbr	@0, 1<<CnFET
-.ENDMACRO
-
-.MACRO nFET_brake
-	AnFET_on
-	BnFET_on
-	CnFET_on
-.ENDMACRO
-.MACRO all_nFETs_off
-	AnFET_off
-	BnFET_off
-	CnFET_off
-.ENDMACRO
-.MACRO all_pFETs_off
-	ApFET_off
-	BpFET_off
-	CpFET_off
-.ENDMACRO

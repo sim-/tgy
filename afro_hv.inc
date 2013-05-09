@@ -52,32 +52,6 @@
 	out	TCCR1B, @0
 .ENDMACRO
 
-.MACRO BpFET_on
-	sbi	BpFET_port, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	cbi	BpFET_port, BpFET
-.ENDMACRO
-.MACRO CpFET_on
-	sbi	CpFET_port, CpFET
-.ENDMACRO
-.MACRO CpFET_off
-	cbi	CpFET_port, CpFET
-.ENDMACRO
-
-.MACRO BpFET_on_reg
-	sbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	cbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO CpFET_on_reg
-	sbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO CpFET_off_reg
-	cbr	@0, 1<<CpFET
-.ENDMACRO
-
 ;*********************
 ; PORT C definitions *
 ;*********************
@@ -147,69 +121,3 @@
 .equ	BnFET_port	= PORTD
 .equ	CnFET_port	= PORTD
 .equ	ApFET_port	= PORTD
-
-.MACRO AnFET_on
-	sbi	AnFET_port, AnFET
-.ENDMACRO
-.MACRO AnFET_off
-	cbi	AnFET_port, AnFET
-.ENDMACRO
-.MACRO BnFET_on
-	sbi	BnFET_port, BnFET
-.ENDMACRO
-.MACRO BnFET_off
-	cbi	BnFET_port, BnFET
-.ENDMACRO
-.MACRO CnFET_on
-	sbi	CnFET_port, CnFET
-.ENDMACRO
-.MACRO CnFET_off
-	cbi	CnFET_port, CnFET
-.ENDMACRO
-.MACRO ApFET_on
-	sbi	ApFET_port, ApFET
-.ENDMACRO
-.MACRO ApFET_off
-	cbi	ApFET_port, ApFET
-.ENDMACRO
-
-.MACRO AnFET_on_reg
-	sbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO AnFET_off_reg
-	cbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO BnFET_on_reg
-	sbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO BnFET_off_reg
-	cbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO CnFET_on_reg
-	sbr	@0, 1<<CnFET
-.ENDMACRO
-.MACRO CnFET_off_reg
-	cbr	@0, 1<<CnFET
-.ENDMACRO
-.MACRO ApFET_on_reg
-	sbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO ApFET_off_reg
-	cbr	@0, 1<<ApFET
-.ENDMACRO
-
-.MACRO nFET_brake
-	in	@0, PORTD
-	sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	out	PORTD, @0
-.ENDMACRO
-.MACRO all_nFETs_off
-	in	@0, PORTD
-	cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	out	PORTD, @0
-.ENDMACRO
-.MACRO all_pFETs_off
-	ApFET_off
-	BpFET_off
-	CpFET_off
-.ENDMACRO

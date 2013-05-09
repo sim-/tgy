@@ -51,98 +51,6 @@
 	out	MCUCR, @0	; set next int0 to falling edge
 .ENDMACRO
 
-.MACRO ApFET_on
-	sbi	PORTD, ApFET
-.ENDMACRO
-.MACRO ApFET_off
-	cbi	PORTD, ApFET
-.ENDMACRO
-.MACRO BpFET_on
-	sbi	PORTD, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	cbi	PORTD, BpFET
-.ENDMACRO
-.MACRO CpFET_on
-	sbi	PORTD, CpFET
-.ENDMACRO
-.MACRO CpFET_off
-	cbi	PORTD, CpFET
-.ENDMACRO
-.MACRO AnFET_on
-	sbi	PORTD, AnFET
-.ENDMACRO
-.MACRO AnFET_off
-	cbi	PORTD, AnFET
-.ENDMACRO
-.MACRO BnFET_on
-	sbi	PORTD, BnFET
-.ENDMACRO
-.MACRO BnFET_off
-	cbi	PORTD, BnFET
-.ENDMACRO
-.MACRO CnFET_on
-	sbi	PORTD, CnFET
-.ENDMACRO
-.MACRO CnFET_off
-	cbi	PORTD, CnFET
-.ENDMACRO
-
-.MACRO ApFET_on_reg
-	sbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO ApFET_off_reg
-	cbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO BpFET_on_reg
-	sbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	cbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO CpFET_on_reg
-	sbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO CpFET_off_reg
-	cbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO AnFET_on_reg
-	sbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO AnFET_off_reg
-	cbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO BnFET_on_reg
-	sbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO BnFET_off_reg
-	cbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO CnFET_on_reg
-	sbr	@0, 1<<CnFET
-.ENDMACRO
-.MACRO CnFET_off_reg
-	cbr	@0, 1<<CnFET
-.ENDMACRO
-
-.MACRO all_pFETs_off
-	in	@0, PORTD
-	cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
-	out	PORTD, @0
-.ENDMACRO
-
-.MACRO nFET_brake
-	in	@0, PORTD
-	sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	out	PORTD, @0
-.ENDMACRO
-.MACRO all_nFETs_off
-	in	@0, PORTD
-	cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	out	PORTD, @0
-.ENDMACRO
-
-
 ;*********************
 ; PORT C definitions *
 ;*********************
@@ -179,7 +87,6 @@
 	ldi	@0, mux_c	; set comparator multiplexer to phase C
 	out	ADMUX, @0
 .ENDMACRO
-
 
 ;*********************
 ; PORT B definitions *

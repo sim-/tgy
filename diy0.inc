@@ -25,20 +25,6 @@
 
 .equ	ApFET_port	= PORTD
 
-.MACRO ApFET_on
-	cbi	PORTD, ApFET
-.ENDMACRO
-.MACRO ApFET_off
-	sbi	PORTD, ApFET
-.ENDMACRO
-
-.MACRO ApFET_on_reg
-	cbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO ApFET_off_reg
-	sbr	@0, 1<<ApFET
-.ENDMACRO
-
 .MACRO RED_on
 	sbi	DDRD, red_led
 .ENDMACRO
@@ -72,32 +58,6 @@
 
 .equ	BpFET_port	= PORTC
 .equ	CpFET_port	= PORTC
-
-.MACRO BpFET_on
-	cbi	PORTC, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	sbi	PORTC, BpFET
-.ENDMACRO
-.MACRO CpFET_on
-	cbi	PORTC, CpFET
-.ENDMACRO
-.MACRO CpFET_off
-	sbi	PORTC, CpFET
-.ENDMACRO
-
-.MACRO BpFET_on_reg
-	cbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	sbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO CpFET_on_reg
-	cbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO CpFET_off_reg
-	sbr	@0, 1<<CpFET
-.ENDMACRO
 
 .MACRO comp_init
 	in	@0, SFIOR
@@ -158,53 +118,4 @@
 .MACRO rcp_int_falling_edge
 	ldi	@0, T1CLK & ~(1<<ICES1)
 	out	TCCR1B, @0
-.ENDMACRO
-
-.MACRO AnFET_on
-	sbi	PORTB, AnFET
-.ENDMACRO
-.MACRO AnFET_off
-	cbi	PORTB, AnFET
-.ENDMACRO
-.MACRO BnFET_on
-	sbi	PORTB, BnFET
-.ENDMACRO
-.MACRO BnFET_off
-	cbi	PORTB, BnFET
-.ENDMACRO
-.MACRO CnFET_on
-	sbi	PORTB, CnFET
-.ENDMACRO
-.MACRO CnFET_off
-	cbi	PORTB, CnFET
-.ENDMACRO
-
-.MACRO AnFET_on_reg
-	sbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO AnFET_off_reg
-	cbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO BnFET_on_reg
-	sbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO BnFET_off_reg
-	cbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO CnFET_on_reg
-	sbr	@0, 1<<CnFET
-.ENDMACRO
-.MACRO CnFET_off_reg
-	cbr	@0, 1<<CnFET
-.ENDMACRO
-
-.MACRO nFET_brake
-	in	@0, PORTB
-	sbr	@0, (1<<AnFET)|(1<<BnFET)|(1<<CnFET)
-	out	PORTB, @0
-.ENDMACRO
-.MACRO all_nFETs_off
-	in	@0, PORTB
-	cbr	@0, (1<<AnFET)|(1<<BnFET)|(1<<CnFET)
-	out	PORTB, @0
 .ENDMACRO
