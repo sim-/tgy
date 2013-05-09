@@ -12,6 +12,8 @@
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
 
+.equ	CHECK_HARDWARE	= 0
+
 ;*********************
 ; PORT D definitions *
 ;*********************
