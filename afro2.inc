@@ -30,25 +30,6 @@
 .equ	BpFET_port	= PORTB
 .equ	CpFET_port	= PORTB
 
-.MACRO rcp_int_enable
-	in	@0, TIMSK
-	sbr	@0, (1<<TICIE1)	; enable icp1_int
-	out	TIMSK, @0
-.ENDMACRO
-.MACRO rcp_int_disable
-	in	@0, TIMSK
-	cbr	@0, (1<<TICIE1)	; disable icp1_int
-	out	TIMSK, @0
-.ENDMACRO
-.MACRO rcp_int_rising_edge
-	ldi	@0, T1CLK
-	out	TCCR1B, @0
-.ENDMACRO
-.MACRO rcp_int_falling_edge
-	ldi	@0, T1CLK & ~(1<<ICES1)
-	out	TCCR1B, @0
-.ENDMACRO
-
 ;*********************
 ; PORT C definitions *
 ;*********************

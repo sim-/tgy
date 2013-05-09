@@ -41,22 +41,6 @@
 .equ	BnFET_port	= PORTD
 .equ	CnFET_port	= PORTD
 
-.MACRO rcp_int_enable
-	ldi	@0, (1<<INT0)	; enable ext0int
-	out	GICR, @0
-.ENDMACRO
-.MACRO rcp_int_disable
-	out	GICR, ZH	; disable ext0int
-.ENDMACRO
-.MACRO rcp_int_rising_edge
-	ldi	@0, (1<<ISC01)+(1<<ISC00)
-	out	MCUCR, @0	; set next int0 to rising edge
-.ENDMACRO
-.MACRO rcp_int_falling_edge
-	ldi	@0, (1<<ISC01)
-	out	MCUCR, @0	; set next int0 to falling edge
-.ENDMACRO
-
 ;*********************
 ; PORT C definitions *
 ;*********************
