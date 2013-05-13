@@ -646,7 +646,7 @@ eeprom_defaults_w:
 .endif
 .endmacro
 
-.macro nFETs_brake
+.macro nFET_brake
 .if AnFET_port != BnFET_port || AnFET_port != CnFET_port
 		AnFET_on
 		BnFET_on
