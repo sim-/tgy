@@ -182,6 +182,7 @@
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
 .equ	MIN_RC_PULS	= 100	; Throw away any pulses shorter than this
+.equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
@@ -190,11 +191,12 @@
 .equ	RCP_DEADBAND	= 0
 .equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Normally 1460
 .endif
-.equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
 .if	LOW_BRAKE
 .equ	RCP_LOW_DBAND	= 60	; Brake at this many microseconds below low pulse
 .endif
+
+.equ	MAX_DRIFT_PULS	= 10	; Maximum jitter/drift microseconds during programming
 
 ; Minimum PWM on-time (too low and FETs won't turn on, hard starting)
 .if !defined(MIN_DUTY)
@@ -416,7 +418,7 @@ eeprom_defaults_w:
 	.db low(EEPROM_SIGN), high(EEPROM_SIGN)
 	.db byte1(FULL_RC_PULS * CPU_MHZ), byte2(FULL_RC_PULS * CPU_MHZ)
 	.db byte1(STOP_RC_PULS * CPU_MHZ), byte2(STOP_RC_PULS * CPU_MHZ)
-	.db byte1((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2), byte2((FULL_RC_PULS + STOP_RC_PULS) * CPU_MHZ / 2)
+	.db byte1(MID_RC_PULS * CPU_MHZ), byte2(MID_RC_PULS * CPU_MHZ)
 .if USE_I2C
 .equ	BL_REVISION	= 2
 	.db BL_REVISION, 144	; Revision, SetMask -- Settings mask should encode MOTOR_REVERSE bit
