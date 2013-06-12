@@ -13,6 +13,9 @@
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
 
+.equ    DEAD_LOW_NS     = 450	; May work on some boards, but be careful!
+.equ    DEAD_HIGH_NS    = 8000
+
 ;*********************
 ; PORT D definitions *
 ;*********************
