@@ -2944,7 +2944,7 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; synchronization, we check that demagnetization has finished after the
 ; minimum blanking period. If we do not see it by the maximum blanking
 ; period (about 30 degrees since we commutated last), we turn off power
-; and ontinue as if the ZC had occurred. PWM is enabled again after the
+; and continue as if the ZC had occurred. PWM is enabled again after the
 ; next commutation step.
 ;
 ; Normally, we wait for the blanking window to pass, look for the
