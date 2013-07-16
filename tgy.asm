@@ -88,6 +88,8 @@
 #include "afro_hv.inc"		; AfroESC HV with drivers (ICP PWM, I2C, UART)
 #elif defined(afro_nfet_esc)
 #include "afro_nfet.inc"	; AfroESC 3 with all nFETs (ICP PWM, I2C, UART)
+#elif defined(arctictiger_esc)
+#include "arctictiger.inc"	; Arctic Tiger 30A ESC with all nFETs (ICP PWM)
 #elif defined(birdie70a_esc)
 #include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PWM)
 #elif defined(mkblctrl1_esc)
