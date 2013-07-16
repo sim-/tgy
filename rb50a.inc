@@ -10,6 +10,9 @@
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
 
+.equ	DEAD_LOW_NS	= 1200
+.equ	DEAD_HIGH_NS	= 1800
+
 ;*********************
 ; PORT D definitions *
 ;*********************
