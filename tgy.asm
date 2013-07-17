@@ -453,7 +453,7 @@ eeprom_defaults_w:
 ; Compare any 16-bit immediate from a register pair (@0:@1 -= @2, maybe clobbering @3)
 .macro cpiz2
 		cpi	@0, byte1(@2)
-	.if byte1(@2)
+	.if byte2(@2)
 		ldi	@3, byte2(@2)
 		cpc	@1, @3
 	.else
