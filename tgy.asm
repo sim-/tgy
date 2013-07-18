@@ -155,6 +155,9 @@
 .if !defined(MOTOR_ADVANCE)
 .equ	MOTOR_ADVANCE	= 18	; Degrees of timing advance (0 - 30, 30 meaning no delay)
 .endif
+.if !defined(TIMING_OFFSET)
+.equ	TIMING_OFFSET	= 0	; Degrees of timing offset in microseconds
+.endif
 .equ	MOTOR_BRAKE	= 0	; Enable brake during neutral/idle ("motor drag" brake)
 .equ	LOW_BRAKE	= 0	; Enable brake on very short RC pulse ("thumb" brake like on Airtronics XL2P)
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
@@ -2195,6 +2198,11 @@ update_timing4:	movw	timing_duty_l, XL
 
 		ldi	temp4, (30 - MOTOR_ADVANCE) * 256 / 60
 		rcall	update_timing_add_degrees
+.if TIMING_OFFSET
+		sbiwx	YL, YH, TIMING_OFFSET * CPU_MHZ
+		ldi	temp4, byte3(TIMING_OFFSET * CPU_MHZ)
+		sbc	temp7, temp4
+.endif
 		sts	com_time_l, YL		; Store start of next commutation
 		sts	com_time_h, YH
 		sts	com_time_x, temp7
