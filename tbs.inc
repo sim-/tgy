@@ -10,6 +10,10 @@
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 1
 
+.equ	DEAD_LOW_NS	= 400
+.equ	DEAD_HIGH_NS	= 400
+.equ	CHECK_HARDWARE	= 1
+
 ;*********************
 ; PORT B definitions *
 ;*********************
