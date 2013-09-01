@@ -156,7 +156,7 @@
 .equ	MOTOR_ADVANCE	= 18	; Degrees of timing advance (0 - 30, 30 meaning no delay)
 .endif
 .if !defined(TIMING_OFFSET)
-.equ	TIMING_OFFSET	= 0	; Degrees of timing offset in microseconds
+.equ	TIMING_OFFSET	= 0	; Motor timing offset in microseconds
 .endif
 .equ	MOTOR_BRAKE	= 0	; Enable brake during neutral/idle ("motor drag" brake)
 .equ	LOW_BRAKE	= 0	; Enable brake on very short RC pulse ("thumb" brake like on Airtronics XL2P)
@@ -234,7 +234,7 @@
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 
-.equ	T0CLK		= (1<<CS01)	; clk/8 == 2Mhz
+.equ	T0CLK		= (1<<CS01)	; clk/8 == 2MHz
 .equ	T1CLK		= (1<<CS10)+(USE_ICP<<ICES1)+(USE_ICP<<ICNC1)	; clk/1 == 16MHz
 .equ	T2CLK		= (1<<CS20)	; clk/1 == 16MHz
 
