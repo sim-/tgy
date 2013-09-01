@@ -229,8 +229,12 @@
 .equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
 .equ	TIMING_MAX	= 0x00e0 ; 56us per commutation
 
-.equ	timeoutSTART	= 48000 ; 48ms per commutation
-.equ	timeoutMIN	= 36000	; 36ms per commutation
+.equ	TIMEOUT_START	= 48000	; Timeout per commutation for ZC during starting
+.if !defined(START_DELAY_US)
+.equ	START_DELAY_US	= 0	; Initial post-commutation wait during starting
+.endif
+.equ	START_DSTEP_US	= 8	; Microseconds per start delay step
+.equ	START_DELAY_INC	= 15	; Wait step count increase (wraps in a byte)
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 
@@ -327,9 +331,7 @@ timing_x:	.byte	1
 com_time_l:	.byte	1	; time of last commutation
 com_time_h:	.byte	1
 com_time_x:	.byte	1
-wt_OCT1_tot_l:	.byte	1	; time for each startup commutation
-wt_OCT1_tot_h:	.byte	1
-wt_OCT1_tot_x:	.byte	1
+start_delay:	.byte	1	; delay count after starting commutations before checking back-EMF
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 fwd_scale_l:	.byte	1	; 16.16 multipliers to scale input RC pulse to POWER_RANGE
@@ -2656,6 +2658,7 @@ start_from_running:
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; set POWER_ON.
 		rcall	wait_timeout
+		sts	start_delay, ZH
 		ldi	temp1, 2		; Start with a short timeout to stop quickly
 		mov	rc_timeout, temp1	; if we see no further pulses after the first.
 		ldi	temp1, 6		; Do not enable FETs during first cycle to
@@ -2930,10 +2933,15 @@ demag_timeout:
 		RED_on
 		rjmp	wait_commutation
 ;-----bko-----------------------------------------------------------------
-wait_timeout:	sbrs	flags1, STARTUP
-		RED_on
-		sts	goodies, ZH
-		sbr	flags1, (1<<STARTUP)
+wait_timeout:
+		sbrs	flags1, STARTUP		; Unless we were starting,
+		RED_on				; turn on red LED
+		sts	goodies, ZH		; Clear good commutation count
+		lds	temp4, start_delay
+		subi	temp4, -START_DELAY_INC	; Increase start (blanking) delay,
+		sbrc	flags1, STARTUP		; unless we were running
+		sts	start_delay, temp4
+		sbr	flags1, (1<<STARTUP)	; Leave running mode
 		rjmp	wait_commutation	; Update timing and duty.
 ;-----bko-----------------------------------------------------------------
 wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
@@ -2994,36 +3002,8 @@ wait_pwm_enable:
 		ldi	ZL, low(pwm_off)	; Re-enable PWM if disabled for powerskip or sync loss avoidance
 		RED_off				; wait_timeout would have happened if motor not spinning during powerskip
 wait_pwm_running:
-		sbrs	flags1, STARTUP
-		rjmp	wait_for_blank
-.if defined(START_DELAY_US)
-		ldi3	YL, YH, temp4, START_DELAY_US * CPU_MHZ
-		mov	temp7, temp4
-		rcall	set_ocr1a_rel
-		rcall	wait_OCT1_tot
-.endif
-	; Powered startup: skip blanking and commutation wait,
-	; and use a fixed ZC check count until goodies reaches
-	; ENOUGH_GOODIES and we clear the STARTUP flag.
-		lds	YL, wt_OCT1_tot_l	; Load the start commutation
-		lds	YH, wt_OCT1_tot_h	; timeout into YL:YH:temp7 and
-		lds	temp7, wt_OCT1_tot_x	; subtract a "random" amount
-		in	temp4, TCNT0
-		andi	temp4, 0x1f
-		sub	YH, temp4
-		sbc	temp7, ZH
-		brcs	start_timeout1
-		cpiz3	YL, YH, temp7, timeoutMIN * CPU_MHZ, temp4
-		brcc	start_timeout2
-start_timeout1:	ldi3	YL, YH, temp4, timeoutSTART * CPU_MHZ
-		mov	temp7, temp4
-start_timeout2:	sts	wt_OCT1_tot_l, YL
-		sts	wt_OCT1_tot_h, YH
-		sts	wt_OCT1_tot_x, temp7
-		rcall	set_ocr1a_rel
-		ldi	XL, 0xff * CPU_MHZ / 16	; Force full ZC check count
-		rjmp	wait_for_edge1
-
+		sbrc	flags1, STARTUP
+		rjmp	wait_startup
 wait_for_blank:
 		ldi	temp4, 13 * 256 / 120
 		rcall	set_timing_degrees
@@ -3093,6 +3073,35 @@ wait_commutation:
 		pop	temp1			; Throw away return address
 		pop	temp1
 		rjmp	restart_control		; Restart control immediately on RC timeout
+
+; When starting, we have no idea what sort of motor may be connected,
+; or how much time it will take for the previous commutation current
+; to stop flowing. If the motor is not spinning and the sensing while
+; powerskipping fails, we apply power and check for back-EMF after an
+; increasing delay, building up further if the motor remains stalled.
+; This will stretch out short commutations caused by the comparator
+; sitting low or high when inputs are below the minimum offset.
+wait_startup:
+		ldi3	YL, YH, temp4, START_DELAY_US * CPU_MHZ
+		mov	temp7, temp4
+		.if byte3(START_DELAY_US * CPU_MHZ)
+		ldi	temp4, 0
+		.endif
+		lds	temp1, goodies
+		cpi	temp1, 2		; After some good commutations,
+		brcc	wait_startup1		; skip additional delay injection
+		lds	temp4, start_delay
+wait_startup1:	ldi3	temp1, temp2, temp3, START_DSTEP_US * CPU_MHZ * 0x100
+		rcall	update_timing_add_degrees	; Add temp4 (start_delay) START_DSTEPs of wait
+		rcall	set_ocr1a_rel
+		rcall	wait_OCT1_tot
+		ldi3	YL, YH, temp4, TIMEOUT_START * CPU_MHZ
+		mov	temp7, temp4
+		rcall	set_ocr1a_rel
+; Powered startup: Use a fixed (long) ZC check count until goodies reaches
+; ENOUGH_GOODIES and the STARTUP flag is cleared.
+		ldi	XL, 0xff * CPU_MHZ / 16
+		rjmp	wait_for_edge1
 
 ;-----bko-----------------------------------------------------------------
 ; init after reset
