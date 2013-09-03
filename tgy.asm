@@ -1486,7 +1486,7 @@ check_ain0_low:	sbiw	YL, 1
 		brts	hardware_check		; Do not allow further tests if stuck high
 
 		; If nothing is stuck high, pull up the motor by driving
-		; AIN0 and see if we can pull it low on each phase. We
+		; AIN0 and see if we can pull it low on each phase.
 		; While the star is driven high or connected to ground,
 		; voltage on one phase will not influence another unless
 		; a motor is attached. So, we have to skip a phase if it
