@@ -3084,16 +3084,13 @@ wait_commutation:
 wait_startup:
 		ldi3	YL, YH, temp4, START_DELAY_US * CPU_MHZ
 		mov	temp7, temp4
-		.if byte3(START_DELAY_US * CPU_MHZ)
-		ldi	temp4, 0
-		.endif
 		lds	temp1, goodies
 		cpi	temp1, 2		; After some good commutations,
 		brcc	wait_startup1		; skip additional delay injection
 		lds	temp4, start_delay
-wait_startup1:	ldi3	temp1, temp2, temp3, START_DSTEP_US * CPU_MHZ * 0x100
+		ldi3	temp1, temp2, temp3, START_DSTEP_US * CPU_MHZ * 0x100
 		rcall	update_timing_add_degrees	; Add temp4 (start_delay) START_DSTEPs of wait
-		rcall	set_ocr1a_rel
+wait_startup1:	rcall	set_ocr1a_rel
 		rcall	wait_OCT1_tot
 		ldi3	YL, YH, temp4, TIMEOUT_START * CPU_MHZ
 		mov	temp7, temp4
