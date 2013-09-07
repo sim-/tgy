@@ -1424,19 +1424,21 @@ mul_y_12x34:
 		ret
 
 ;-- Hardware diagnostics -------------------------------------------------
-; Any 3-phase brushless ESC based on the ATmega8 or similar must tie the
-; sense neutral star to AIN0, and the three sense lines to three ADC pins
-; or two ADC pins and AIN1. AIN0 and AIN1 are also normal I/O pins, so we
+; Any brushless ESC based on the ATmega8 or similar must tie the sense
+; neutral star to AIN0, and the three sense lines to three ADC pins or
+; two ADC pins and AIN1. All of these pins are also normal I/O pins, so
+; we can drive them and see if the ADC values move. A value that does not
+; move indicates a shorted FET or that an incorrect board target has been
+; flashed.
 ;
-; can drive them and see if the ADC values move. Also, any non-zero value
-; at power up indicates either a spinning motor, a stuck FET, or that
-; an incorrect board target has been flashed. We can prevent further
-; damage by halting if this is detected.
+; Note: Some FET drivers such as the LM5109 can pull up the output a bit,
+; making the "stuck high" test return a false positive. Perhaps it would
+; be sufficient to test that the phases read as 0 _or_ can be pulled down
+; by driving AIN0 to ground.
 ;
 ; In typical conditions on the ATmega8, I/O pins transition to low at
 ; about 1.42V and to high at about 1.86V. The ADC is 10-bit, however, and
-; will work in many more cases (such as with a lower input voltage or
-; stronger sense divider).
+; should work even with a strong sense voltage divider.
 ;
 ; Throughout all of this, the motor may be spinning. If so, we should wait
 ; long enough that each phase falls to 0V and all tests succeed.
@@ -1486,11 +1488,11 @@ check_ain0_low:	sbiw	YL, 1
 		brts	hardware_check		; Do not allow further tests if stuck high
 
 		; If nothing is stuck high, pull up the motor by driving
-		; AIN0 and see if we can pull it low on each phase. We
-		; While the star is driven high or connected to ground,
-		; voltage on one phase will not influence another unless
-		; a motor is attached. So, we have to skip a phase if it
-		; is connected to AIN1.
+		; the emulated neutral (AIN0) high, and try driving each
+		; phase low. While driven, leakage through the star is
+		; eliminated, so one phase will not influence another
+		; unless a motor is connected. A phase on AIN1 cannot be
+		; read by the ADC, so we must skip it.
 
 		sbi	DDRD, 6
 		sbi	PORTD, 6		; Drive AIN0 high
@@ -2880,8 +2882,8 @@ run6:
 		sbrs	flags1, POWER_ON
 		breq	run_to_brake
 		.endif
-		movw	YL, sys_control_l
-		adiw	YL, 0			; Test for zero
+		movw	YL, sys_control_l	; Each time TIMING_MAX is hit, sys_control is lsr'd
+		adiw	YL, 0			; If zero, try starting over (with powerskipping)
 		breq	restart_run
 		lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
