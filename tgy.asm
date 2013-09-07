@@ -2570,9 +2570,9 @@ i_rc_puls3:
 		rcall	beep_f4
 		rcall	beep_f4
 
-	; Fall through to init_startup
+	; Fall through to restart_control
 ;-----bko-----------------------------------------------------------------
-init_startup:
+restart_control:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
 		.if MOTOR_BRAKE || LOW_BRAKE
@@ -2875,9 +2875,9 @@ run6:
 		cpse	temp1, ZH
 		rjmp	run_to_brake
 		.endif
-		.if !MOTOR_BRAKE
-		; If last commutation timed out and power is off, return to init_startup
 		lds	temp1, goodies
+		.if !MOTOR_BRAKE
+		; If last commutation timed out and power is off, return to restart_control
 		cpi	temp1, 0
 		sbrs	flags1, POWER_ON
 		breq	run_to_brake
@@ -2885,7 +2885,6 @@ run6:
 		movw	YL, sys_control_l	; Each time TIMING_MAX is hit, sys_control is lsr'd
 		adiw	YL, 0			; If zero, try starting over (with powerskipping)
 		breq	restart_run
-		lds	temp1, goodies
 		cpi	temp1, ENOUGH_GOODIES
 		brcc	run6_2
 		inc	temp1
@@ -2911,10 +2910,7 @@ run6_3:		cp	YL, temp1
 run6_4:		movw	sys_control_l, YL
 		rjmp	run1
 
-restart_control:
-		sts	brake_want, ZH
-		rcall	switch_power_off
-run_to_brake:	rjmp	init_startup
+run_to_brake:	rjmp	restart_control
 restart_run:	rjmp	start_from_running
 
 ;-----bko-----------------------------------------------------------------
