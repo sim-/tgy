@@ -2659,7 +2659,7 @@ start_from_running:
 		; Set STARTUP flag and call update_timing which will set
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; set POWER_ON.
-		rcall	wait_timeout
+		rcall	wait_timeout_init
 		sts	start_delay, ZH
 		ldi	temp1, 2		; Start with a short timeout to stop quickly
 		mov	rc_timeout, temp1	; if we see no further pulses after the first.
@@ -2939,6 +2939,7 @@ wait_timeout:
 		subi	temp4, -START_DELAY_INC	; Increase start (blanking) delay,
 		sbrc	flags1, STARTUP		; unless we were running
 		sts	start_delay, temp4
+wait_timeout_init:
 		sbr	flags1, (1<<STARTUP)	; Leave running mode
 		rjmp	wait_commutation	; Update timing and duty.
 ;-----bko-----------------------------------------------------------------
