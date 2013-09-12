@@ -2992,6 +2992,7 @@ wait_for_edge:
 		mov	temp7, ZH
 		rcall	set_ocr1a_rel
 		ldi	XL, 4
+		ldi	XH, 4
 		rjmp	wait_for_edge1
 wait_pwm_enable:
 		cpi	ZL, low(pwm_wdr)
@@ -3037,7 +3038,8 @@ wait_for_demag:
 		adc	temp7, temp3
 		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
 
-wait_for_edge1:	mov	XH, XL
+		ldi	XH, 9			; Limit ZC filter backtracking while running
+wait_for_edge1:
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
@@ -3095,6 +3097,7 @@ wait_startup1:	rcall	set_ocr1a_rel
 ; Powered startup: Use a fixed (long) ZC check count until goodies reaches
 ; ENOUGH_GOODIES and the STARTUP flag is cleared.
 		ldi	XL, 0xff * CPU_MHZ / 16
+		mov	XH, XL
 		rjmp	wait_for_edge1
 
 ;-----bko-----------------------------------------------------------------
