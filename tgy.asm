@@ -3033,10 +3033,7 @@ wait_for_demag:
 		add	YL, temp1
 		adc	YH, temp2
 		adc	temp7, temp3
-		add	YL, temp1
-		adc	YH, temp2
-		adc	temp7, temp3
-		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
+		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 120 degrees
 
 		ldi	XH, 9			; Limit ZC filter backtracking while running
 wait_for_edge1:
