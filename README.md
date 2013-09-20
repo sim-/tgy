@@ -258,7 +258,7 @@ Sort out which software you will use for flashing. The KKMulticopter
 Flashtool now supports ESC flashing and is commonly used. You may also
 download AVR Studio and the AVR Toolchain from www.atmel.com, or try
 "avrdude" on most OSes. There are plenty of resources on the web for AVR
-ISP programming, and maybe ways to do it.
+ISP programming, and many ways to do it.
 
 Power the ESC from a current-limited supply and try to read the stock
 firmware (flash) _and_ EEPROM, to use as a backup. Most are locked and
@@ -335,6 +335,7 @@ to avoid calibration. With a flight board such as the Naze32 running
 baseflight, the min/max can be set with CLI commands as follows:
 
 set minthrottle=1064
+
 set maxthrottle=1864
 
 Otherwise, to calibrate the ESC, REMOVE ALL PROPELLERS and follow the
@@ -349,8 +350,8 @@ connected to an RX channel. The only requirement is that the input pulse
 has to be at or above PROGRAM_RC_PULS (default 1460us) to enter
 programming mode. This will differ slightly on boards with no external
 oscillator. If calibrating ESCs individually, try to maintain a close
-temperature and at least 6-7V input voltage (the ATmega8 oscillator also
-speeds up as VCC drops).
+temperature and at least 6-7V input voltage (the ATmega8 oscillator
+speeds up as temperature and Vcc decrease).
 
 With the propellers removed and the source (radio, servo tester, or flight
 control board) set to full throttle, power up the ESC and wait for a
@@ -417,9 +418,8 @@ when throttle goes non-zero. If you are unable to start the motor and are
 not hearing the forth, long beep, try lowering the throttle trim, or
 raise it all the way to start throttle calibration (above).
 
-If the motor is spinning, and no throttle command is received for about 1
-second, f3 f2 is beeped and the ESC returns to armed idle, waiting for a
-valid signal. There is no beep if the motor is already stopped, however.
+If no input command is received for about 1 second, f3 f2 is beeped and
+the ESC returns to disarmed state, waiting for a valid arming signal.
 
 The various beep frequencies use different FET combinations (rather than
 all FETs at the same time) to try to help diagnose boards with failed
