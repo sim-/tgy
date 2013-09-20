@@ -237,6 +237,7 @@
 .equ	START_DELAY_INC	= 15	; Wait step count increase (wraps in a byte)
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
+.equ	ZC_CHECK_FAST	= 12	; Number of ZC check loops under which PWM noise should not matter
 
 .equ	T0CLK		= (1<<CS01)	; clk/8 == 2MHz
 .equ	T1CLK		= (1<<CS10)+(USE_ICP<<ICES1)+(USE_ICP<<ICNC1)	; clk/1 == 16MHz
@@ -2930,8 +2931,13 @@ demag_timeout:
 		rjmp	wait_commutation
 ;-----bko-----------------------------------------------------------------
 wait_timeout:
-		sbrs	flags1, STARTUP		; Unless we were starting,
-		RED_on				; turn on red LED
+		sbrc	flags1, STARTUP
+		rjmp	wait_timeout_start
+		cpi	XH, ZC_CHECK_FAST
+		brcc	wait_for_edge_limited
+wait_timeout_run:
+		RED_on				; Turn on red LED
+wait_timeout_start:
 		sts	goodies, ZH		; Clear good commutation count
 		lds	temp4, start_delay
 		subi	temp4, -START_DELAY_INC	; Increase start (blanking) delay,
@@ -2992,7 +2998,6 @@ wait_for_edge:
 		mov	temp7, ZH
 		rcall	set_ocr1a_rel
 		ldi	XL, 4
-		ldi	XH, 4
 		rjmp	wait_for_edge1
 wait_pwm_enable:
 		cpi	ZL, low(pwm_wdr)
@@ -3007,7 +3012,7 @@ wait_for_blank:
 		rcall	set_timing_degrees
 		rcall	wait_OCT1_tot		; Wait for the minimum blanking period
 
-		ldi	temp4, (13+29) * 256 / 120
+		ldi	temp4, 24 * 256 / 120
 		rcall	set_timing_degrees	; Set timeout for maximum blanking period
 wait_for_demag:
 		sbrs	flags0, OCT1_PENDING
@@ -3030,13 +3035,18 @@ wait_for_demag:
 .if TIMING_MAX * CPU_MHZ / 0x100 < 3
 .error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
 .endif
+		cpi	XL, ZC_CHECK_FAST	; With slower (longer) timing, wait for ZC
+		brcc	wait_for_edge1		; first while 30 degree timer still active
+wait_for_edge_limited:
+		rcall	load_timing
 		add	YL, temp1
 		adc	YH, temp2
 		adc	temp7, temp3
 		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 120 degrees
+		ldi	XH, ZC_CHECK_FAST - 1	; Limit back-tracking
+		rjmp	wait_for_edge2		; Continue waiting with limited backtracking
 
-		ldi	XH, 9			; Limit ZC filter backtracking while running
-wait_for_edge1:
+wait_for_edge1: mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
@@ -3094,7 +3104,6 @@ wait_startup1:	rcall	set_ocr1a_rel
 ; Powered startup: Use a fixed (long) ZC check count until goodies reaches
 ; ENOUGH_GOODIES and the STARTUP flag is cleared.
 		ldi	XL, 0xff * CPU_MHZ / 16
-		mov	XH, XL
 		rjmp	wait_for_edge1
 
 ;-----bko-----------------------------------------------------------------
