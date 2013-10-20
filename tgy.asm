@@ -630,13 +630,13 @@ eeprom_defaults_w:
 		BpFET_off
 		CpFET_off
 .else
-	        in      @0, ApFET_port
+		in	@0, ApFET_port
 	.if (INIT_PB & ((ApFET_port == PORTB) << ApFET)) | (INIT_PC & ((ApFET_port == PORTC) << ApFET)) | (INIT_PD & ((ApFET_port == PORTD) << ApFET))
-		sbr     @0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+		sbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 	.else
-		cbr     @0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+		cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 	.endif
-		out     ApFET_port, @0
+		out	ApFET_port, @0
 .endif
 .endmacro
 
@@ -646,13 +646,13 @@ eeprom_defaults_w:
 		BnFET_off
 		CnFET_off
 .else
-	        in      @0, AnFET_port
+		in	@0, AnFET_port
 	.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
-		sbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	.else
-		cbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	.endif
-		out     AnFET_port, @0
+		out	AnFET_port, @0
 .endif
 .endmacro
 
@@ -662,13 +662,13 @@ eeprom_defaults_w:
 		BnFET_on
 		CnFET_on
 .else
-	        in      @0, AnFET_port
+		in	@0, AnFET_port
 	.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
-		cbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	.else
-		sbr     @0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	.endif
-		out     AnFET_port, @0
+		out	AnFET_port, @0
 .endif
 .endmacro
 
@@ -1808,7 +1808,7 @@ adc_read:
 		sbr	temp4, (1<<REFS0)	; Enable AVCC (5.0V) reference
 		out	ADMUX, temp4		; Set ADC channel, AVcc reference with cap at AREF (should be safe if bridged)
 		ldi	temp1, (1<<ADEN)+(1<<ADSC)+(1<<ADPS2)+(1<<ADPS1)+(1<<ADPS0)
-		out     ADCSRA, temp1		; Enable the ADC, start conversion
+		out	ADCSRA, temp1		; Enable the ADC, start conversion
 		wdr				; Will wait 25*128 cycles
 adc_wait:	sbic	ADCSRA, ADSC
 		rjmp	adc_wait
@@ -3134,7 +3134,7 @@ clear_loop1:	cp	ZL, r0
 
 	; Initialize ports
 		outi	PORTB, INIT_PB, temp1
-		outi	DDRB,  DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
+		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
 		outi	PORTC, INIT_PC, temp1
 		outi	DDRC, DIR_PC, temp1
 		outi	PORTD, INIT_PD, temp1
