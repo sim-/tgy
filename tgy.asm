@@ -161,8 +161,8 @@
 .equ	MOTOR_BRAKE	= 0	; Enable brake during neutral/idle ("motor drag" brake)
 .equ	LOW_BRAKE	= 0	; Enable brake on very short RC pulse ("thumb" brake like on Airtronics XL2P)
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
-.equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
-.equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
+.equ	RC_PULS_REVERSE	= 1	; Enable RC-car style forward/reverse throttle
+.equ	RC_CALIBRATION	= 0	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
 .if !defined(CHECK_HARDWARE)
@@ -190,7 +190,7 @@
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 
 .if	RC_PULS_REVERSE
-.equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
+.equ	RCP_DEADBAND	= 24	; Do not start until this much above or below neutral
 .equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS * 3) / 4	; Normally 1660
 .else
 .equ	RCP_DEADBAND	= 0
