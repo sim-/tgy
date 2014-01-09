@@ -106,6 +106,8 @@
 #include "dlux.inc"		; HobbyKing Dlux Turnigy ESC 20A
 #elif defined(diy0_esc)
 #include "diy0.inc"		; HobbyKing DIY Open ESC (unreleased rev 0)
+#elif defined(dys_nfet_esc)
+#include "dys_nfet.inc"		; DYS 30A ESC with all nFETs (ICP PWM, I2C, UART)
 #elif defined(hk200a_esc)
 #include "hk200a.inc"		; HobbyKing SS Series 190-200A with all nFETs (INT0 PWM)
 #elif defined(hm135a_esc)
