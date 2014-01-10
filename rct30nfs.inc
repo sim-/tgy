@@ -1,7 +1,7 @@
 ;***************************************************************
 ;* For RCTimer NFS 30A all n-Channel FETs 					   *
-;* Fuses should be set to -U lfuse:w:0xXX:m -U hfuse:w:0xXX:m  *
-;*        										               *
+;* Fuses should be set to -U lfuse:w:0x2f:m -U hfuse:w:0xCA:m  *
+;* By Nils Högberg								               *
 ;* 		                                                       *
 ;* https://github.com/sim-/tgy                                 *
 ;***************************************************************
@@ -21,19 +21,19 @@
 ; PORT D definitions *
 ;*********************
 
-.equ        AnFET                = 5
 .equ        ApFET                = 4
-.equ        BnFET                = 7
+.equ        AnFET                = 5
 .equ        BpFET                = 3
+.equ        BnFET                = 7
 .equ		CpFET                = 2
 
 .equ        rcp_in               = 0          ; r/c pulse input
 
-.equ        INIT_PD              = 0
+.equ        INIT_PD              = (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 .equ        DIR_PD               = (1<<AnFET)+(1<<ApFET)+(1<<BnFET)+(1<<BpFET)+(1<<CpFET)
 
-.equ        AnFET_port           = PORTD
 .equ        ApFET_port           = PORTD
+.equ        AnFET_port           = PORTD
 .equ        BpFET_port           = PORTD
 .equ        BnFET_port           = PORTD
 .equ        CpFET_port           = PORTD
@@ -41,8 +41,8 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-;.equ        i2c_clk             = 5        ; ADC5/SCL
-;.equ        i2c_data        	 = 4        ; ADC4/SDA
+.equ        i2c_clk              = 5        ; ADC5/SCL
+.equ        i2c_data        	 = 4        ; ADC4/SDA
 
 .equ        mux_b                = 7        ; ADC7
 .equ        mux_a                = 6        ; ADC6
@@ -55,7 +55,7 @@
 .equ        O_POWER              = 220
 .equ        O_GROUND             = 51
 
-.equ        INIT_PC              = 0        ; (1<<i2c_clk)+(1<<i2c_data)
+.equ        INIT_PC              = 0 ;(1<<i2c_clk)+(1<<i2c_data)
 .equ        DIR_PC               = 0
 
 ;*********************
