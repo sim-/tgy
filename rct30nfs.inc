@@ -12,8 +12,6 @@
 .equ        USE_UART        	 = 0
 .equ        USE_ICP              = 0
 
-.equ        DEAD_LOW_NS        	 = 300
-.equ        DEAD_HIGH_NS       	 = 300
 ;.equ       MOTOR_ADVANCE        = 15
 ;.equ       CHECK_HARDWARE       = 1
 
@@ -27,7 +25,7 @@
 .equ        BnFET                = 7
 .equ		CpFET                = 2
 
-.equ        rcp_in               = 0          ; r/c pulse input
+;.equ		c_comp	             = 6		;i common comparator input (AIN0)
 
 .equ        INIT_PD              = (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 .equ        DIR_PD               = (1<<AnFET)+(1<<ApFET)+(1<<BnFET)+(1<<BpFET)+(1<<CpFET)
@@ -41,11 +39,11 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-.equ        i2c_clk              = 5        ; ADC5/SCL
-.equ        i2c_data        	 = 4        ; ADC4/SDA
+;.equ        i2c_clk              = 5        ; ADC5/SCL
+;.equ        i2c_data        	 = 4        ; ADC4/SDA
 
-.equ        mux_b                = 7        ; ADC7
 .equ        mux_a                = 6        ; ADC6
+.equ        mux_b                = 7        ; ADC7
 .equ        mux_c                = 0        ; ADC0
 
 .equ        mux_voltage          = 2        ; ADC2 voltage input (? from Vbat, ? to gnd, ?V -> ?V at ADC2)
@@ -62,6 +60,8 @@
 ; PORT B definitions *
 ;*********************
 .equ        CnFET                = 1
+
+.equ        rcp_in               = 0          ; r/c pulse input
 
 .equ        INIT_PB              = 0
 .equ        DIR_PB               = (1<<CnFET)
