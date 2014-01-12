@@ -1,6 +1,6 @@
 ;***************************************************************
 ;* For RCTimer NFS 30A all n-Channel FETs 					   *
-;* Fuses should be set to -U lfuse:w:0x2f:m -U hfuse:w:0xCA:m  *
+;* Original fuses are -U lfuse:w:0x2f:m -U hfuse:w:0xCA:m      *
 ;* By Nils Högberg								               *
 ;* 		                                                       *
 ;* https://github.com/sim-/tgy                                 *
