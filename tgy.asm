@@ -240,6 +240,8 @@
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 .equ	ZC_CHECK_FAST	= 12	; Number of ZC check loops under which PWM noise should not matter
+.equ	ZC_CHECK_MAX	= POWER_RANGE / 32 ; Limit ZC checking to about 1/2 PWM interval
+.equ	ZC_CHECK_MIN	= 3
 
 .equ	T0CLK		= (1<<CS01)	; clk/8 == 2MHz
 .equ	T1CLK		= (1<<CS10)+(USE_ICP<<ICES1)+(USE_ICP<<ICNC1)	; clk/1 == 16MHz
@@ -2930,13 +2932,31 @@ demag_timeout:
 		.endif
 		all_nFETs_off temp1
 		RED_on
+		; Skip power for the next commutation. Note that we can't
+		; decrement powerskip because demag checking is skipped
+		; when powerskip is non-zero.
+		ldi	temp1, 1
+		sts	powerskip, temp1
 		rjmp	wait_commutation
 ;-----bko-----------------------------------------------------------------
 wait_timeout:
 		sbrc	flags1, STARTUP
 		rjmp	wait_timeout_start
 		cpi	XH, ZC_CHECK_FAST
-		brcc	wait_for_edge_limited
+		brcs	wait_timeout_run
+		ldi	XH, ZC_CHECK_FAST - 1	; Limit back-tracking
+		cp	XL, XH
+		brcc	wait_timeout1
+		mov	XL, XH			; Clip current distance from crossing
+wait_timeout1:	rcall	load_timing
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
+		rjmp	wait_for_edge2
 wait_timeout_run:
 		RED_on				; Turn on red LED
 wait_timeout_start:
@@ -2999,7 +3019,7 @@ wait_for_edge:
 		ldi	YH, byte2(0xff * 0x100)	; what would be 0xff at 60 degrees
 		mov	temp7, ZH
 		rcall	set_ocr1a_rel
-		ldi	XL, 4
+		ldi	XL, ZC_CHECK_MIN	; There shouldn't be much noise with no power
 		rjmp	wait_for_edge1
 wait_pwm_enable:
 		cpi	ZL, low(pwm_wdr)
@@ -3030,29 +3050,56 @@ wait_for_demag:
 		rjmp	wait_for_demag
 wait_for_edge0:
 		rcall	load_timing
-		mov	XL, temp2		; Copy high and check extended byte
-		cpse	temp3, ZH		; to calculate the ZC check count
-		ldi	XL, 0xff
-.if TIMING_MAX * CPU_MHZ / 0x100 < 3
-.error "TIMING_MAX is too fast for at least 3 zero-cross checks -- increase it or adjust this"
+		mov	XL, temp2		; Copy high and extended byte
+		mov	XH, temp3		; to calculate the ZC check count
+		lsr	XH			; Quarter to obtain timing / 1024
+		ror	XL
+		lsr	XH
+		ror	XL
+		cpi	XL, ZC_CHECK_MIN
+		cpc	XH, ZH
+		brcs	wait_for_edge_fast_min
+		breq	wait_for_edge_fast
+.if ZC_CHECK_MAX < 256
+		cpi	XL, ZC_CHECK_MAX
+.else
+		cpi	XL, 255
 .endif
-		cpi	XL, ZC_CHECK_FAST	; With slower (longer) timing, wait for ZC
-		brcc	wait_for_edge1		; first while 30 degree timer still active
-wait_for_edge_limited:
-		rcall	load_timing
+		cpc	XH, ZH
+		brcs	wait_for_edge_below_max
+		ldi	XL, ZC_CHECK_MAX	; Limit to ZC_CHECK_MAX
+wait_for_edge_below_max:
+		cpi	XL, ZC_CHECK_FAST	; For faster timing, set normal ZC timeout
+		brcs	wait_for_edge_fast
+		ldi	temp4, 24 * 256 / 120	; With slower (longer) timing, set timer
+		rcall	set_timing_degrees	; for limited backtracing
+		rjmp	wait_for_edge1
+wait_for_edge_fast_min:
+		ldi	XL, ZC_CHECK_MIN
+wait_for_edge_fast:
 		add	YL, temp1
 		adc	YH, temp2
 		adc	temp7, temp3
-		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 120 degrees
-		ldi	XH, ZC_CHECK_FAST - 1	; Limit back-tracking
-		rjmp	wait_for_edge2		; Continue waiting with limited backtracking
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
 
-wait_for_edge1: mov	XH, XL
+wait_for_edge1:	mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
 		in	temp3, ACSR
+.if 0
+		; Visualize comparator output on the flag pin
+		sbrc	temp3, ACO
+		flag_on
+		nop
+		flag_off
+		sbrs	temp3, ACO
+		flag_on
+.endif
 		eor	temp3, flags1
 		.if defined(HIGH_SIDE_PWM)
 		sbrs	temp3, ACO
