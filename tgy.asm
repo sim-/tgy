@@ -2994,7 +2994,7 @@ wait_for_edge:
 		brcs	wait_pwm_enable
 		sts	powerskip, temp1
 		sbrs	flags1, STARTUP
-		rjmp	wait_for_blank
+		rjmp	wait_for_edge0
 		ldi	YL, byte1(0xff * 0x100)	; Timing is 120 degrees, so wait for
 		ldi	YH, byte2(0xff * 0x100)	; what would be 0xff at 60 degrees
 		mov	temp7, ZH
@@ -3009,7 +3009,6 @@ wait_pwm_enable:
 wait_pwm_running:
 		sbrc	flags1, STARTUP
 		rjmp	wait_startup
-wait_for_blank:
 		ldi	temp4, 13 * 256 / 120
 		rcall	set_timing_degrees
 		rcall	wait_OCT1_tot		; Wait for the minimum blanking period
@@ -3029,7 +3028,7 @@ wait_for_demag:
 		sbrc	temp3, ACO		; Check for opposite level (demagnetization)
 		.endif
 		rjmp	wait_for_demag
-
+wait_for_edge0:
 		rcall	load_timing
 		mov	XL, temp2		; Copy high and check extended byte
 		cpse	temp3, ZH		; to calculate the ZC check count
