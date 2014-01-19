@@ -3014,7 +3014,7 @@ wait_for_blank:
 		rcall	set_timing_degrees
 		rcall	wait_OCT1_tot		; Wait for the minimum blanking period
 
-		ldi	temp4, 24 * 256 / 120
+		ldi	temp4, 42 * 256 / 120
 		rcall	set_timing_degrees	; Set timeout for maximum blanking period
 wait_for_demag:
 		sbrs	flags0, OCT1_PENDING
