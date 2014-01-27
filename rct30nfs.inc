@@ -45,12 +45,12 @@
 .equ        mux_b                = 7        ; ADC7
 .equ        mux_c                = 0        ; ADC0
 
-.equ        mux_voltage          = 2        ; ADC2 voltage input (? from Vbat, ? to gnd, ?V -> ?V at ADC2)
-.equ        mux_temperature      = 1        ; ADC1 temperature input (?k from +5V, ?k NTC to gnd at ADC1)
+.equ        mux_voltage          = 2        ; ADC2 voltage input (220 from Vbat, 39 to gnd, ?V -> ?V at ADC2)
+.equ        mux_temperature      = 1        ; ADC1 temperature input (100 from +5V, ?k NTC to gnd at ADC1)
 
 
 .equ        O_POWER              = 220
-.equ        O_GROUND             = 51
+.equ        O_GROUND             = 39
 
 .equ        INIT_PC              = 0 ;(1<<i2c_clk)+(1<<i2c_data)
 .equ        DIR_PC               = 0
