@@ -18,8 +18,8 @@
 ;*********************
 ; PORT D definitions *
 ;*********************
-;.equ                            = 7
-;.equ                            = 6        ; AIN0
+.equ        mux_c                = 7        ; AIN1
+.equ        c_comp               = 6        ; AIN0
 .equ        ApFET                = 5
 .equ        BpFET                = 4
 .equ		CpFET                = 3
@@ -38,12 +38,13 @@
 ; PORT C definitions *
 ;*********************
 ;.equ                            = 7        ; ADC7
-;.equ                            = 6        ; ADC6
+;.equ                            = 6        ; RESET
 .equ        mux_a                = 5        ; ADC5
 .equ        mux_b                = 4        ; ADC4
-.equ        mux_c                = 3        ; ADC3
+;.equ                            = 3        ; ADC3
+;.equ                            = 2        ; ADC2
 .equ        mux_temperature      = 1        ; ADC1 temperature input (897 from +5V, ?k NTC to gnd at ADC1)
-.equ        mux_voltage          = 0        ; ADC2 voltage input (220 from Vbat, 39 to gnd, ?V -> ?V at ADC2)
+.equ        mux_voltage          = 0        ; ADC0 voltage input (220 from Vbat, 39 to gnd, ?V -> ?V at ADC2)
 
 
 
