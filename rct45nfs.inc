@@ -11,18 +11,17 @@
 .equ        USE_I2C              = 0
 .equ        USE_UART        	 = 0
 .equ        USE_ICP              = 0
-.equ		MOTOR_ADVANCE        = 18		; Degrees of timing advance (0 - 30, 30 meaning no delay)
+.equ        MOTOR_ADVANCE        = 18		; Degrees of timing advance (0 - 30, 30 meaning no delay)
 .equ        TIMING_OFFSET        = 0
-.equ		CHECK_HARDWARE       = 0
 
 ;*********************
 ; PORT D definitions *
 ;*********************
-.equ        mux_c                = 7        ; AIN1
+;.equ                            = 7        ; AIN1
 .equ        c_comp               = 6        ; AIN0
 .equ        ApFET                = 5
 .equ        BpFET                = 4
-.equ		CpFET                = 3
+.equ        CpFET                = 3
 .equ        rcp_in               = 2        ; r/c pulse input
 ;.equ        txd                  = 1
 ;.equ        rxd                  = 0
@@ -48,8 +47,8 @@
 
 
 
-.equ        O_POWER              = 220
-.equ        O_GROUND             = 39
+.equ        O_POWER              = 10
+.equ        O_GROUND             = 1
 
 .equ        INIT_PC              = 0
 .equ        DIR_PC               = 0
@@ -57,8 +56,6 @@
 ;*********************
 ; PORT B definitions *
 ;*********************
-;.equ                            = 7
-;.equ                            = 6
 ;.equ                            = 5        ; SCK
 ;.equ                            = 4        ; MISO
 ;.equ                            = 3        ; MOSI
