@@ -216,6 +216,7 @@
 .endif
 
 .equ	MAX_POWER	= (POWER_RANGE-1)
+.equ	PWR_COOL_START	= (POWER_RANGE/24) ; Power limit while starting to reduce heating
 .equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit while starting (to start)
 .equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit while starting (if still not running)
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
@@ -237,6 +238,9 @@
 .endif
 .equ	START_DSTEP_US	= 8	; Microseconds per start delay step
 .equ	START_DELAY_INC	= 15	; Wait step count increase (wraps in a byte)
+.equ	START_MOD_INC	= 4	; Start power modulation step count increase (wraps in a byte)
+.equ	START_MOD_LIMIT	= 48	; Value at which power is reduced to avoid overheating
+.equ	START_FAIL_INC	= 16	; start_tries step count increase (wraps in a byte, upon which we disarm)
 
 .equ	ENOUGH_GOODIES	= 12	; This many start cycles without timeout will transition to running mode
 .equ	ZC_CHECK_FAST	= 12	; Number of ZC check loops under which PWM noise should not matter
@@ -337,6 +341,8 @@ com_time_l:	.byte	1	; time of last commutation
 com_time_h:	.byte	1
 com_time_x:	.byte	1
 start_delay:	.byte	1	; delay count after starting commutations before checking back-EMF
+start_modulate:	.byte	1	; Start modulation counter (to reduce heating from PWR_MAX_START if stuck)
+start_fail:	.byte   1	; Number of start_modulate loops for eventual failure and disarm
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 fwd_scale_l:	.byte	1	; 16.16 multipliers to scale input RC pulse to POWER_RANGE
@@ -2488,6 +2494,7 @@ control_disarm:
 		GRN_off
 		RED_off
 
+		cbr	flags0, (1<<SET_DUTY)	; We need to count a full rc_timeout for safe arming
 		rcall	puls_scale
 
 	; Enable timer interrupts (we only do this late to improve beep quality)
@@ -2670,6 +2677,8 @@ start_from_running:
 		; set POWER_ON.
 		rcall	wait_timeout_init
 		sts	start_delay, ZH
+		sts	start_modulate, ZH
+		sts	start_fail, ZH
 		ldi	temp1, 2		; Start with a short timeout to stop quickly
 		mov	rc_timeout, temp1	; if we see no further pulses after the first.
 		ldi	temp1, 6		; Do not enable FETs during first cycle to
@@ -2895,9 +2904,28 @@ run6:
 		; Build up sys_control to PWR_MAX_START in steps.
 		adiwx	YL, YH, (POWER_RANGE + 47) / 48
 		ldi2	temp1, temp2, PWR_MAX_START
+		; If we've been trying to start for a while,
+		; modulate power to reduce heating.
+		lds	temp3, start_fail
+		lds	temp4, start_modulate
+		subi	temp4, -START_MOD_INC
+		sts	start_modulate, temp4
+		brne	run6_1
+		; If we've been trying for a long while, give up.
+		subi	temp3, -START_FAIL_INC
+		breq	start_failed
+		sts	start_fail, temp3
+run6_1:		; Allow first two loops at full power, then modulate.
+		cpi	temp3, START_FAIL_INC + 1
+		brcs	run6_3
+		cpi	temp4, START_MOD_LIMIT
+		brcs	run6_3
+		ldi2	temp1, temp2, PWR_COOL_START
 		rjmp	run6_3
 
 run6_2:		cbr	flags1, (1<<STARTUP)
+		sts	start_fail, ZH
+		sts	start_modulate, ZH
 		RED_off
 		; Build up sys_control to MAX_POWER in steps.
 		; If SLOW_THROTTLE is disabled, this only limits
@@ -2915,6 +2943,21 @@ run6_4:		movw	sys_control_l, YL
 
 run_to_brake:	rjmp	restart_control
 restart_run:	rjmp	start_from_running
+
+;-----bko-----------------------------------------------------------------
+; If we were unable to start for a long time, just sit and beep unless
+; input goes back to no power. This might help us get found if crashed.
+start_failed:
+		rcall	switch_power_off
+		cbr	flags0, (1<<SET_DUTY)
+start_fail_beep:
+		rcall	wait240ms
+		rcall	wait240ms
+		rcall	beep_f4			; "Start failed" beacon
+		rcall	evaluate_rc		; Returns rc_duty when !SET_DUTY
+		adiw	YL, 0			; Test for zero
+		brne	start_fail_beep
+		rjmp	control_disarm
 
 ;-----bko-----------------------------------------------------------------
 demag_timeout:
