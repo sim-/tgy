@@ -180,7 +180,7 @@
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
-.equ	RCP_TOT		= 16	; Number of 65536us periods before considering rc pulse lost
+.equ	RCP_TOT		= 2	; Number of 65536us periods before considering rc pulse lost
 
 ; These are now defaults which can be adjusted via throttle calibration
 ; (stick high, stick low, (stick neutral) at start).
@@ -2001,10 +2001,10 @@ rc_duty_set:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
-		ldi	temp1, 2
+		ldi	temp1, RCP_TOT
 		mov	rc_timeout, temp1	; Short rc_timeout when driving
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
-rc_no_set_duty:	ldi	temp1, RCP_TOT
+rc_no_set_duty:	ldi	temp1, 0xff
 		cp	rc_timeout, temp1
 		adc	rc_timeout, ZH
 		ret
