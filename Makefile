@@ -25,9 +25,13 @@ clean:
 	-rm -f $(ALL_TARGETS) *.obj *.eep.hex *.eeprom
 
 binary_zip: $(ALL_TARGETS)
-	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`.zip"; \
-	git archive -9 -o "$$TARGET" HEAD && \
-	zip -9 "$$TARGET" $(ALL_TARGETS) && ls -l "$$TARGET"
+	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`"; \
+	mkdir "$$TARGET" && \
+	cp $(ALL_TARGETS) "$$TARGET" && \
+	git archive -9 --prefix="$$TARGET/" -o "$$TARGET".zip HEAD && \
+	zip -9 "$$TARGET".zip "$$TARGET"/*.hex && ls -l "$$TARGET".zip; \
+	rm -f "$$TARGET"/*.hex; \
+	rmdir "$$TARGET"
 
 program_tgy_%: %.hex
 	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -U flash:w:$<:i
