@@ -69,6 +69,12 @@ Tested boards by target:
     - Keda 12A rev B with inverted PWM input (30A should also work)
     - Dynam 18A, 25A with Blue Heat Shrink
     - Hobby King Multistar series (30A and under)
+- maytech30a:
+    - Maytech 30A and 20A, complementary PWM
+- maytech40a:
+    - Maytech 40A, complementary PWM
+- maytech60a:
+    - Maytech 60A, complementary PWM
 - mkblctrl1:
     - MikroKopter BL-Ctrl v1.x (flashable by ISP only)
 - rb50a.hex
