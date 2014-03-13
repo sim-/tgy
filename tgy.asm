@@ -1598,8 +1598,10 @@ check_sense_low:
 		ldi2	YL, YH, MAX_CHECK_LOOPS
 check_sense_low1:
 		rcall	adc_read
-		adiw	temp1, 0		; Test for zero
-		breq	check_sense_low_ret	; Return if pin reads at 0 (low)
+		; Up to 3.5V to account for ADC offset or driver pull-up.
+		.equ	OFF_MAX_ADC = 35 * 1024 * O_GROUND / (50 * (O_POWER + O_GROUND))
+		sbiwx	temp1, temp2, OFF_MAX_ADC
+		brcs	check_sense_low_ret	; Return if pin reads low
 		sbiw	YL, 1
 		brne	check_sense_low1	; Loop until timeout
 		rjmp	hw_error
