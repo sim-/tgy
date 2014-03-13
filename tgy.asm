@@ -240,6 +240,7 @@
 .equ	TIMING_MIN	= 0x8000 ; 8192us per commutation
 .equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
 .equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
+.equ	TIMING_RANGE3	= 0x1000 ; 1024us per commutation
 .equ	TIMING_MAX	= 0x00e0 ; 56us per commutation
 
 .equ	TIMEOUT_START	= 48000	; Timeout per commutation for ZC during starting
@@ -2177,17 +2178,47 @@ update_timing1:
 	; so this is just an approximation. It would be nice if we could
 	; do this with math instead of two constants, but we need a divide.
 	; Clobbers only temp4. Fastest in case of fastest timing.
-		cpi2	temp2, temp3, (TIMING_RANGE2 * CPU_MHZ / 2) >> 8, temp4
+
+		cpi2	temp2, temp3, (TIMING_RANGE3 * CPU_MHZ / 2) >> 8, temp4
 		ldi2	XL, XH, MAX_POWER
 		brcs	update_timing4
-		cpi2	temp2, temp3, (TIMING_RANGE1 * CPU_MHZ / 2) >> 8, temp4
-		ldi2	XL, XH, PWR_MAX_RPM2
-		brcs	update_timing4
-	; Limit minimum RPM (slowest timing)
-		cpi2	temp2, temp3, (TIMING_MIN * CPU_MHZ / 2) >> 8, temp4
-		brcs	update_timing2
-		ldi3	temp1, temp2, temp3, TIMING_MIN * CPU_MHZ / 2
-update_timing2:	ldi2	XL, YH, PWR_MAX_RPM1
+
+		; 24.8-bit fixed-point unsigned divide, inlined with available registers:
+		; duty (XL:XH) = MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / period (temp1:temp2:temp3)
+		; This takes about one microsecond per loop, but we only take this path
+		; when the motor is spinning slowly.
+
+		ldi	XL, byte3(MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / 0x100)
+		ldi	XH, 33		; Iteration counter
+		movw	timing_duty_l, XL
+		ldi2	XL, XH, MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / 0x100
+
+		mul	ZH, ZH		; Zero temp5, temp6
+		sub	temp4, temp4	; Zero temp4, clear carry
+		rjmp	fudiv24_ep	; Jump with carry clear
+fudiv24_loop:
+		rol	temp4
+		rol	temp5
+		rol	temp6
+		cp	temp4, temp1	; Divide by commutation period
+		cpc	temp5, temp2
+		cpc	temp6, temp3
+		brcs	fudiv24_ep
+		sub	temp4, temp1
+		sbc	temp5, temp2
+		sbc	temp6, temp3
+fudiv24_ep:
+		rol	XL
+		rol	XH
+		rol	timing_duty_l
+		dec	timing_duty_h
+		brne	fudiv24_loop
+		com	XL
+		com	XH
+
+		cpi2	XL, XH, PWR_MAX_RPM1, temp4
+		brcc	update_timing4
+		ldi2	XL, XH, PWR_MAX_RPM1
 update_timing4:	movw	timing_duty_l, XL
 
 		sts	timing_l, temp1		; Store timing (120 degrees)
