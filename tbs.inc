@@ -9,6 +9,7 @@
 .equ	USE_I2C		= 0
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 1
+.equ	COMP_PWM	= 1
 
 .equ	DEAD_LOW_NS	= 400
 .equ	DEAD_HIGH_NS	= 400
