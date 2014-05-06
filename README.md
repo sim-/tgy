@@ -251,6 +251,39 @@ Arduino or MultiWii board as a gateway between (USB and) serial and the
 wire protocol used by the boot loader. See the ArduinoUSBLinker project
 by Chris Osgood: https://github.com/c---/ArduinoUSBLinker
 
+Boot Loader Fuses
+-----------------
+Since the 2012-09-30 release, long periods of high PWM input while
+disarmed will cause a jump to the boot loader, if present. Since the
+2013-04-24 release, this became detangled from the included boot loader
+(BOOT_JUMP vs BOOT_LOADER), so other boot loaders may be used instead.
+
+As a result of the automatic jumping, it is not necessary to change the
+fuses to enable the boot loader. It may or may not be desirable to set
+the BOOTRST flag depending on intended operation and the hardware in use.
+
+If the hardware does not have any low pass filter or pull-down on the PWM
+input, it may easily float high by the time the boot loader checks it,
+which can prevent normal startup if another input (eg: I2C) is expected
+to be used. There should be pull-down or load present on the PWM input
+to prevent this if BOOTRST is enabled.
+
+Confusion may also result if the pin floats high with nothing connected
+and power is connected to check for starting beeps. Likewise, touching
+the connector or connecting it later may drain the input and cause normal
+startup to occur, which may seem like the ESC is resetting while powered.
+This is not a problem if the PWM input is normally intended to be used.
+
+On the other hand, with BOOTRST not set, it is not possible to recover
+from an interrupted flash, flash of the wrong board type, or flash of
+other software or versions older than 2012-09-30 without connecting to
+the ISP pins to do the flashing.
+
+To enable the the boot loader on ATmega8 boards, the low nibble of the
+hfuse should be set to 'a'. See "make bootload_usbasp" to do this
+automatically. BOOTRST and BOOTSZ1 should be enabled to set 512 words,
+start at $0E00.
+
 Flashing and Testing
 --------------------
 Sort out how you want to connect an ISP programming device to the chip.
