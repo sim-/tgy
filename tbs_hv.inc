@@ -1,6 +1,7 @@
 ;*****************************************
-;* TBS ESC                               *
-;* 2013-03-27                            *
+;* TBS high voltage ESC                  *
+;* tbs.inc without inverted high-side    *
+;* 2014-03-25                            *
 ;* Fuses should be lfuse=0x3f hfuse=0xca *
 ;*****************************************
 
@@ -11,8 +12,8 @@
 .equ	USE_ICP		= 1
 .equ	COMP_PWM	= 1
 
-.equ	DEAD_LOW_NS	= 400
-.equ	DEAD_HIGH_NS	= 400
+.equ	DEAD_LOW_NS	= 1400	; Not yet calibrated
+.equ	DEAD_HIGH_NS	= 1700	; Not yet calibrated
 .equ	CHECK_HARDWARE	= 1
 
 ;*********************
@@ -45,7 +46,7 @@
 .equ	O_POWER		= 180
 .equ	O_GROUND	= 33
 
-.equ	INIT_PC		= (1<<BpFET)
+.equ	INIT_PC		= 0
 .equ	DIR_PC		= (1<<AnFET)+(1<<BpFET)
 
 .equ	BpFET_port	= PORTC
@@ -63,7 +64,7 @@
 .equ	txd		= 1
 .equ	rxd		= 0
 
-.equ	INIT_PD		= (1<<ApFET)+(1<<CpFET)+(1<<txd)
+.equ	INIT_PD		= (1<<txd)
 .equ	DIR_PD		= (1<<ApFET)+(1<<CnFET)+(1<<CpFET)+(1<<BnFET)+(1<<txd)
 
 .equ	ApFET_port	= PORTD
