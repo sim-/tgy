@@ -1,6 +1,6 @@
 ;***************************************************************
 ;* For HK Blue Series with only n-Channel FETs                 *
-;* Fuses should be set to -U lfuse:w:0x3f:m -U hfuse:w:0xd7:m  *
+;* Fuses should be set to -U lfuse:w:0x2e:m -U hfuse:w:0xcf:m  *
 ;* or similar (even intrc will work now)                       *
 ;* 09/2011                                                     *
 ;* https://github.com/sim-/tgy                                 *

@@ -1,7 +1,7 @@
 ;***************************************************************
 ;* For HK Blue Series 40A (not F-40A) -- the same as "bs" but  *
 ;* with flipped AnFET and CnFET pins.                          *
-;* Fuses should be set to -U lfuse:w:0x3f:m -U hfuse:w:0xc7:m  *
+;* Fuses should be set to -U lfuse:w:0x2e:m -U hfuse:w:0xcf:m  *
 ;* https://github.com/sim-/tgy                                 *
 ;***************************************************************
 
