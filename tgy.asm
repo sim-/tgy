@@ -118,6 +118,8 @@
 #include "maytech30a.inc"	; Maytech 30A and 20A with all nFETs (INT0 PWM)
 #elif defined(maytech40a_esc)
 #include "maytech40a.inc"	; Maytech 40A with all nFETs (INT0 PWM)
+#elif defined(maytech50_hv_esc)
+#include "maytech50_hv.inc"	; Maytech 50A HV with all nFETs (INT0 PWM)
 #elif defined(maytech60a_esc)
 #include "maytech60a.inc"	; Maytech 60A with all nFETs (INT0 PWM)
 #elif defined(rb50a_esc)
