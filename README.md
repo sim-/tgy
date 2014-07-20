@@ -68,7 +68,10 @@ Tested boards by target:
 - kda:
     - Keda 12A rev B with inverted PWM input (30A should also work)
     - Dynam 18A, 25A with Blue Heat Shrink
-    - Hobby King Multistar series (30A and under)
+    - Hobby King Multistar series (30A and under, older)
+- kda_nfet:
+    - (Assumed) newer Keda boards as above
+    - Hobby King Multistar series (30A at least)
 - maytech30a:
     - Maytech 30A and 20A, complementary PWM
 - maytech40a:
