@@ -2958,8 +2958,8 @@ run6:
 		subi	temp3, -START_FAIL_INC
 		breq	start_failed
 		sts	start_fail, temp3
-run6_1:		; Allow first two loops at full power, then modulate.
-		cpi	temp3, START_FAIL_INC + 1
+run6_1:		; Allow first loop at full power, then modulate.
+		cpi	temp3, START_FAIL_INC
 		brcs	run6_3
 		cpi	temp4, START_MOD_LIMIT
 		brcs	run6_3
