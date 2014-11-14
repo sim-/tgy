@@ -72,8 +72,13 @@ Tested boards by target:
 - kda_8khz:
     - Keda/Multistar 20A, 30A with TPC8123 pFETs (early 2014)
 - kda_nfet:
-    - (Assumed) newer Keda boards as above
+    - Newer Keda boards as above (as of mid 2014)
     - Hobby King Multistar series up to 30A with all nFETs
+    - Sunrise 20A - 40A ESCs, NPN-inverted input
+- kda_nfet_ni:
+    - Multistar 6A
+    - Sunrise 20A - 40A ESCs with non-inverted input
+    - Other boards like kda_nfet but where NPNs have been jumpered over
 - mkblctrl1:
     - MikroKopter BL-Ctrl v1.x (flashable by ISP only)
 - rb50a.hex
