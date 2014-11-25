@@ -1962,7 +1962,7 @@ evaluate_rc_puls:
 		.endif
 		movw	temp1, rx_l		; Atomic copy of rc pulse length
 		.if defined(MIN_RC_PULS)
-		cpi2	temp1, temp2, MIN_RC_PULS, temp3
+		cpi2	temp1, temp2, MIN_RC_PULS * CPU_MHZ, temp3
 		brcc	puls_long_enough
 		ret
 puls_long_enough:
