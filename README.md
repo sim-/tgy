@@ -455,6 +455,8 @@ looping f1 f1 f3 f3: Watchdog reset (previous execution locked up)
 
 looping beeps (8) of f2 or f4: Unknown (beeps out all MCUCSR bits, LSF)
 
+fast repeating beeps of f4 while power off: Noise on PWM input detected
+
 Once a valid input source is found and receiving idle throttle, f4 f4 f4
 (a long f4 beep) indicates that the ESC is armed and will start the motor
 when throttle goes non-zero. If you are unable to start the motor and are

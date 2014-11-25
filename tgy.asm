@@ -292,7 +292,7 @@
 .def	flags0		= r16	; state flags
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
 	.equ	SET_DUTY	= 1	; if set when armed, set duty during evaluate_rc
-;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
+	.equ	RCP_ERROR	= 2	; if set, corrupted PWM input was seen
 ;	.equ	GET_STATE	= 3	; set if state is to be send
 	.equ	EEPROM_RESET	= 4	; if set, reset EEPROM
 	.equ	EEPROM_WRITE	= 5	; if set, save settings to EEPROM
@@ -1093,7 +1093,7 @@ rising_edge:
 
 rcpint_fail:
 		in	i_sreg, SREG
-		clr	rc_timeout
+		sbr	flags0, (1<<RCP_ERROR)
 		rjmp	rcpint_exit
 
 falling_edge:
@@ -1964,6 +1964,7 @@ evaluate_rc_puls:
 		.if defined(MIN_RC_PULS)
 		cpi2	temp1, temp2, MIN_RC_PULS * CPU_MHZ, temp3
 		brcc	puls_long_enough
+		sbr	flags0, (1<<RCP_ERROR)
 		ret
 puls_long_enough:
 		.endif
@@ -2630,6 +2631,7 @@ i_rc_puls3:
 		rcall	beep_f4			; signal: rcpuls ready
 		rcall	beep_f4
 		rcall	beep_f4
+		cbr     flags0, (1<<RCP_ERROR)
 
 	; Fall through to restart_control
 ;-----bko-----------------------------------------------------------------
@@ -2681,6 +2683,8 @@ wait_for_power_on:
 		wdr
 		sbrc	flags1, EVAL_RC
 		rjmp	wait_for_power_rx
+		sbrc	flags0, RCP_ERROR	; Check if we've seen bad PWM edges
+		rcall	rcp_error_beep
 		tst	rc_timeout
 		brne	wait_for_power_on	; Tight loop unless rc_timeout is zero
 		.if BOOT_JUMP
@@ -2694,6 +2698,12 @@ wait_for_power_on:
 		rcall	beep_f3			; Play beeps for signal lost, disarming
 		rcall	beep_f2
 		rjmp	control_disarm		; Do not start motor until neutral signal received once again
+rcp_error_beep:
+		rcall	switch_power_off	; Brake may have been on
+		rcall	wait30ms
+		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
+		rjmp	beep_f4_freq
+
 wait_for_power_rx:
 		.if USE_I2C
 		sbrc	flags0, EEPROM_RESET
