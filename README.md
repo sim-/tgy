@@ -466,6 +466,9 @@ raise it all the way to start throttle calibration (above).
 If no input command is received for about 1 second, f3 f2 is beeped and
 the ESC returns to disarmed state, waiting for a valid arming signal.
 
+If no valid input is received while disarmed and BEACON is enabled, an f3
+beep will be emitted after about 8 seconds and then every 4 seconds.
+
 The various beep frequencies use different FET combinations (rather than
 all FETs at the same time) to try to help diagnose boards with failed
 FETs or possible incorrect firmware pin configuration (build target). If
