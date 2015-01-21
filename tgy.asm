@@ -2514,6 +2514,127 @@ rcp_error_beep:
 		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
 		rjmp	beep_f4_freq
 ;-----bko-----------------------------------------------------------------
+main:
+		clr	r0
+		out	SREG, r0		; Clear interrupts and flags
+
+	; Set up stack
+		ldi2	ZL, ZH, RAMEND
+		out	SPH, ZH
+		out	SPL, ZL
+	; Clear RAM and all registers
+clear_loop:	st	-Z, r0
+		cpi	ZL, SRAM_START
+		cpc	ZH, r0
+		brne	clear_loop1
+		ldi	ZL, 30			; Start clearing registers
+clear_loop1:	cp	ZL, r0
+		cpc	ZH, r0
+		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
+
+	; Save original OSCCAL and reset cause
+		in	temp1, OSCCAL
+		sts	orig_osccal, temp1
+		in	temp7, MCUCSR		; Store reset reason in register not used for a while
+		out	MCUCSR, ZH
+
+	; Initialize ports
+		outi	PORTB, INIT_PB, temp1
+		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
+		outi	PORTC, INIT_PC, temp1
+		outi	DDRC, DIR_PC, temp1
+		outi	PORTD, INIT_PD, temp1
+		outi	DDRD, DIR_PD, temp1
+
+		.if DEBUG_TX
+		rcall	init_debug_tx
+		.endif
+
+	; Start timers except output PWM
+		outi	TCCR0, T0CLK, temp1	; timer0: beep control, delays
+		outi	TCCR1B, T1CLK, temp1	; timer1: commutation timing, RC pulse measurement
+		out	TCCR2, ZH		; timer2: PWM, stopped
+
+	; Enable watchdog (WDTON may be set or unset)
+		ldi	temp1, (1<<WDCE)+(1<<WDE)
+		out	WDTCR, temp1
+		ldi	temp1, (1<<WDE)		; Fastest option: ~16.3ms timeout
+		out	WDTCR, temp1
+
+	; Wait for power to settle -- this must be no longer than 64ms
+	; (with 64ms delayed start fuses) for i2c V2 protocol detection
+		rcall	wait30ms		; Running at unadjusted speed(!)
+
+	; Debugging hooks
+		.if DEBUG_ADC_DUMP
+		rcall	adc_input_dump
+		.endif
+
+	; Read EEPROM block to RAM
+		rcall	eeprom_read_block	; Also calls osccal_set
+		rcall	eeprom_check_reset
+
+	; Early input initialization is required for i2c BL-Ctrl V2 detection
+	; This serves data from the EEPROM, so this is as early as possible.
+		.if USE_I2C
+		rcall	i2c_init
+		.endif
+
+	; Enable interrupts for early input (i2c)
+		sei
+
+	; Check hardware (before making any beeps)
+		.if CHECK_HARDWARE
+		rcall	hardware_check
+		.endif
+
+	; Check reset cause
+		bst	temp7, PORF		; Power-on reset
+		cpse	temp7, ZH		; or zero
+		brtc	init_no_porf
+		rcall	beep_f1			; Usual startup beeps
+		rcall	beep_f2
+		rcall	beep_f3
+		rjmp	control_start
+init_no_porf:
+		sbrs	temp7, BORF		; Brown-out reset
+		rjmp	init_no_borf
+		rcall	beep_f3			; "dead cellphone"
+		rcall	beep_f1
+		sbr	flags0, (1<<NO_CALIBRATION)
+		rjmp	control_start
+init_no_borf:
+		sbrs	temp7, EXTRF		; External reset
+		rjmp	init_no_extrf
+		rcall	beep_f4			; Single beep
+		rjmp	control_start
+init_no_extrf:
+		cli				; Disable interrupts for terminal reset causes
+
+		sbrs	temp7, WDRF		; Watchdog reset
+		rjmp	init_no_wdrf
+init_wdrf1:	rcall	beep_f1			; "siren"
+		rcall	beep_f1
+		rcall	beep_f3
+		rcall	beep_f3
+		rjmp	init_wdrf1		; Loop forever
+init_no_wdrf:
+
+	; Unknown reset cause: Beep out all 8 bits
+	; Sometimes I can cause this by touching the oscillator.
+init_bitbeep1:	rcall	wait240ms
+		mov	i_temp1, temp7
+		ldi	i_temp2, 8
+init_bitbeep2:	sbrs	i_temp1, 0
+		rcall	beep_f2
+		sbrc	i_temp1, 0
+		rcall	beep_f4
+		rcall	wait120ms
+		lsr	i_temp1
+		dec	i_temp2
+		brne	init_bitbeep2
+		rjmp	init_bitbeep1		; Loop forever
+
 control_start:
 
 ; Check cell count
@@ -3256,125 +3377,10 @@ wait_startup1:	rcall	set_ocr1a_rel
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
-reset:		clr	r0
-		out	SREG, r0		; Clear interrupts and flags
-
-	; Set up stack
-		ldi2	ZL, ZH, RAMEND
-		out	SPH, ZH
-		out	SPL, ZL
-	; Clear RAM and all registers
-clear_loop:	st	-Z, r0
-		cpi	ZL, SRAM_START
-		cpc	ZH, r0
-		brne	clear_loop1
-		ldi	ZL, 30			; Start clearing registers
-clear_loop1:	cp	ZL, r0
-		cpc	ZH, r0
-		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
-
-	; Save original OSCCAL and reset cause
-		in	temp1, OSCCAL
-		sts	orig_osccal, temp1
-		in	temp7, MCUCSR		; Store reset reason in register not used for a while
-		out	MCUCSR, ZH
-
-	; Initialize ports
-		outi	PORTB, INIT_PB, temp1
-		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
-		outi	PORTC, INIT_PC, temp1
-		outi	DDRC, DIR_PC, temp1
-		outi	PORTD, INIT_PD, temp1
-		outi	DDRD, DIR_PD, temp1
-
-		.if DEBUG_TX
-		rcall	init_debug_tx
-		.endif
-
-	; Start timers except output PWM
-		outi	TCCR0, T0CLK, temp1	; timer0: beep control, delays
-		outi	TCCR1B, T1CLK, temp1	; timer1: commutation timing, RC pulse measurement
-		out	TCCR2, ZH		; timer2: PWM, stopped
-
-	; Enable watchdog (WDTON may be set or unset)
-		ldi	temp1, (1<<WDCE)+(1<<WDE)
-		out	WDTCR, temp1
-		ldi	temp1, (1<<WDE)		; Fastest option: ~16.3ms timeout
-		out	WDTCR, temp1
-
-	; Wait for power to settle -- this must be no longer than 64ms
-	; (with 64ms delayed start fuses) for i2c V2 protocol detection
-		rcall	wait30ms		; Running at unadjusted speed(!)
-
-	; Debugging hooks
-		.if DEBUG_ADC_DUMP
-		rcall	adc_input_dump
-		.endif
-
-	; Read EEPROM block to RAM
-		rcall	eeprom_read_block	; Also calls osccal_set
-		rcall	eeprom_check_reset
-
-	; Early input initialization is required for i2c BL-Ctrl V2 detection
-	; This serves data from the EEPROM, so this is as early as possible.
-		.if USE_I2C
-		rcall	i2c_init
-		.endif
-
-	; Enable interrupts for early input (i2c)
-		sei
-
-	; Check hardware (before making any beeps)
-		.if CHECK_HARDWARE
-		rcall	hardware_check
-		.endif
-
-	; Check reset cause
-		bst	temp7, PORF		; Power-on reset
-		cpse	temp7, ZH		; or zero
-		brtc	init_no_porf
-		rcall	beep_f1			; Usual startup beeps
-		rcall	beep_f2
-		rcall	beep_f3
-		rjmp	control_start
-init_no_porf:
-		sbrs	temp7, BORF		; Brown-out reset
-		rjmp	init_no_borf
-		rcall	beep_f3			; "dead cellphone"
-		rcall	beep_f1
-		sbr	flags0, (1<<NO_CALIBRATION)
-		rjmp	control_start
-init_no_borf:
-		sbrs	temp7, EXTRF		; External reset
-		rjmp	init_no_extrf
-		rcall	beep_f4			; Single beep
-		rjmp	control_start
-init_no_extrf:
-		cli				; Disable interrupts for terminal reset causes
-
-		sbrs	temp7, WDRF		; Watchdog reset
-		rjmp	init_no_wdrf
-init_wdrf1:	rcall	beep_f1			; "siren"
-		rcall	beep_f1
-		rcall	beep_f3
-		rcall	beep_f3
-		rjmp	init_wdrf1		; Loop forever
-init_no_wdrf:
-
-	; Unknown reset cause: Beep out all 8 bits
-	; Sometimes I can cause this by touching the oscillator.
-init_bitbeep1:	rcall	wait240ms
-		mov	i_temp1, temp7
-		ldi	i_temp2, 8
-init_bitbeep2:	sbrs	i_temp1, 0
-		rcall	beep_f2
-		sbrc	i_temp1, 0
-		rcall	beep_f4
-		rcall	wait120ms
-		lsr	i_temp1
-		dec	i_temp2
-		brne	init_bitbeep2
-		rjmp	init_bitbeep1		; Loop forever
+; The reset vector points here, right at the end of the main program.
+; This nop-sleds to the boot loader if the program flash was incomplete.
+reset:
+		rjmp	main
 
 .if BOOT_LOADER
 .include "boot.inc"
