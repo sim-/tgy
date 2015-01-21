@@ -2508,6 +2508,12 @@ i2c_init:
 		ret
 .endif
 ;-----bko-----------------------------------------------------------------
+rcp_error_beep:
+		rcall	switch_power_off	; Brake may have been on
+		rcall	wait30ms
+		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
+		rjmp	beep_f4_freq
+;-----bko-----------------------------------------------------------------
 control_start:
 
 ; Check cell count
@@ -2698,11 +2704,6 @@ wait_for_power_on:
 		rcall	beep_f3			; Play beeps for signal lost, disarming
 		rcall	beep_f2
 		rjmp	control_disarm		; Do not start motor until neutral signal received once again
-rcp_error_beep:
-		rcall	switch_power_off	; Brake may have been on
-		rcall	wait30ms
-		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
-		rjmp	beep_f4_freq
 
 wait_for_power_rx:
 		.if USE_I2C
