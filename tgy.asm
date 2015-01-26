@@ -2899,14 +2899,16 @@ start_from_running:
 ;-----bko-----------------------------------------------------------------
 ; **** running control loop ****
 
-run1:		.if MOTOR_REVERSE
+run1:
+		.if MOTOR_REVERSE
 		sbrs	flags1, REVERSE
 		.else
 		sbrc	flags1, REVERSE
 		.endif
 		rjmp	run_reverse
 
-run_forward:	rcall	wait_for_high
+run_forward:
+		rcall	wait_for_high
 		com1com2
 		sync_off
 		rcall	wait_for_low
@@ -2922,7 +2924,8 @@ run_forward:	rcall	wait_for_high
 		com6com1
 		rjmp	run6
 
-run_reverse:	rcall	wait_for_low
+run_reverse:
+		rcall	wait_for_low
 		com1com6
 		sync_on
 		rcall	wait_for_high
@@ -2979,7 +2982,8 @@ run6_1:		; Allow first loop at full power, then modulate.
 		ldi2	temp1, temp2, PWR_COOL_START
 		rjmp	run6_3
 
-run6_2:		cbr	flags1, (1<<STARTUP)
+run6_2:
+		cbr	flags1, (1<<STARTUP)
 		sts	start_fail, ZH
 		sts	start_modulate, ZH
 		RED_off
@@ -2989,16 +2993,20 @@ run6_2:		cbr	flags1, (1<<STARTUP)
 		; will stay at MAX_POWER unless timing is lost.
 		adiwx	YL, YH, (POWER_RANGE + 31) / 32
 		ldi2	temp1, temp2, MAX_POWER
-run6_3:		cp	YL, temp1
+run6_3:
+		cp	YL, temp1
 		cpc	YH, temp2
 		brcs	run6_4
 		movw	sys_control_l, temp1
 		rjmp	run1
-run6_4:		movw	sys_control_l, YL
+run6_4:
+		movw	sys_control_l, YL
 		rjmp	run1
 
-run_to_brake:	rjmp	restart_control
-restart_run:	rjmp	start_from_running
+run_to_brake:
+		rjmp	restart_control
+restart_run:
+		rjmp	start_from_running
 
 ;-----bko-----------------------------------------------------------------
 ; If we were unable to start for a long time, just sit and beep unless
@@ -3047,7 +3055,8 @@ wait_timeout:
 		cp	XL, XH
 		brcc	wait_timeout1
 		mov	XL, XH			; Clip current distance from crossing
-wait_timeout1:	rcall	load_timing
+wait_timeout1:
+		rcall	load_timing
 		add	YL, temp1
 		adc	YH, temp2
 		adc	temp7, temp3
@@ -3068,10 +3077,12 @@ wait_timeout_init:
 		sbr	flags1, (1<<STARTUP)	; Leave running mode
 		rjmp	wait_commutation	; Update timing and duty.
 ;-----bko-----------------------------------------------------------------
-wait_for_low:	cbr	flags1, (1<<ACO_EDGE_HIGH)
+wait_for_low:
+		cbr	flags1, (1<<ACO_EDGE_HIGH)
 		rjmp	wait_for_edge
 ;-----bko-----------------------------------------------------------------
-wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
+wait_for_high:
+		sbr	flags1, (1<<ACO_EDGE_HIGH)
 ;-----bko-----------------------------------------------------------------
 ; Here we wait for the zero-crossing on the undriven phase to synchronize
 ; with the motor timing. The voltage of the undriven phase should cross
@@ -3184,8 +3195,10 @@ wait_for_edge_fast:
 		adc	temp7, temp3
 		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
 
-wait_for_edge1:	mov	XH, XL
-wait_for_edge2:	sbrs	flags0, OCT1_PENDING
+wait_for_edge1:
+		mov	XH, XL
+wait_for_edge2:
+		sbrs	flags0, OCT1_PENDING
 		rjmp	wait_timeout
 		sbrc	flags1, EVAL_RC
 		rcall	evaluate_rc
@@ -3209,7 +3222,8 @@ wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		cp	XL, XH			; Not yet crossed
 		adc	XL, ZH			; Increment if not at zc_filter
 		rjmp	wait_for_edge2
-wait_for_edge3:	dec	XL			; Zero-cross has happened
+wait_for_edge3:
+		dec	XL			; Zero-cross has happened
 		brne	wait_for_edge2		; Check again unless temp1 is zero
 
 wait_commutation:
@@ -3243,7 +3257,8 @@ wait_startup:
 		lds	temp4, start_delay
 		ldi3	temp1, temp2, temp3, START_DSTEP_US * CPU_MHZ * 0x100
 		rcall	update_timing_add_degrees	; Add temp4 (start_delay) START_DSTEPs of wait
-wait_startup1:	rcall	set_ocr1a_rel
+wait_startup1:
+		rcall	set_ocr1a_rel
 		rcall	wait_OCT1_tot
 		ldi3	YL, YH, temp4, TIMEOUT_START * CPU_MHZ
 		mov	temp7, temp4
@@ -3256,7 +3271,8 @@ wait_startup1:	rcall	set_ocr1a_rel
 ;-----bko-----------------------------------------------------------------
 ; init after reset
 
-reset:		clr	r0
+reset:
+		clr	r0
 		out	SREG, r0		; Clear interrupts and flags
 
 	; Set up stack
@@ -3264,12 +3280,14 @@ reset:		clr	r0
 		out	SPH, ZH
 		out	SPL, ZL
 	; Clear RAM and all registers
-clear_loop:	st	-Z, r0
+clear_loop:
+		st	-Z, r0
 		cpi	ZL, SRAM_START
 		cpc	ZH, r0
 		brne	clear_loop1
 		ldi	ZL, 30			; Start clearing registers
-clear_loop1:	cp	ZL, r0
+clear_loop1:
+		cp	ZL, r0
 		cpc	ZH, r0
 		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
 
@@ -3354,7 +3372,8 @@ init_no_extrf:
 
 		sbrs	temp7, WDRF		; Watchdog reset
 		rjmp	init_no_wdrf
-init_wdrf1:	rcall	beep_f1			; "siren"
+init_wdrf1:
+		rcall	beep_f1			; "siren"
 		rcall	beep_f1
 		rcall	beep_f3
 		rcall	beep_f3
@@ -3363,10 +3382,12 @@ init_no_wdrf:
 
 	; Unknown reset cause: Beep out all 8 bits
 	; Sometimes I can cause this by touching the oscillator.
-init_bitbeep1:	rcall	wait240ms
+init_bitbeep1:
+		rcall	wait240ms
 		mov	i_temp1, temp7
 		ldi	i_temp2, 8
-init_bitbeep2:	sbrs	i_temp1, 0
+init_bitbeep2:
+		sbrs	i_temp1, 0
 		rcall	beep_f2
 		sbrc	i_temp1, 0
 		rcall	beep_f4
