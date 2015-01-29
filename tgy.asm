@@ -1305,8 +1305,8 @@ beep:		out	TCNT0, ZH
 beep1:		in	temp1, TCNT0
 		cpi	temp1, 2*CPU_MHZ	; 32µs on
 		brlo	beep1
-		all_nFETs_off temp3
 		all_pFETs_off temp3
+		all_nFETs_off temp3
 		ldi	temp3, CPU_MHZ
 beep2:		out	TCNT0, ZH
 		wdr
