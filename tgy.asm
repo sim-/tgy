@@ -594,105 +594,385 @@ eeprom_defaults_w:
 ; Careful: "if" conditions split over multiple lines (with backslashes)
 ; work with arva, but avrasm2.exe silently produces wrong results.
 
-.macro FET_on
-.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
+.if defined(AnFET)
+; Direct high and low side drive (inverted if INIT_Px is set)
+
+	.equ CPWM_SOFT = COMP_PWM
+
+	.macro FET_on
+		.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
 		cbi	@0, @1
-.else
+		.else
 		sbi	@0, @1
-.endif
-.endmacro
+		.endif
+	.endmacro
 
-.macro FET_off
-.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
+	.macro FET_off
+		.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
 		sbi	@0, @1
-.else
+		.else
 		cbi	@0, @1
-.endif
-.endmacro
+		.endif
+	.endmacro
 
-.macro AnFET_on
-		FET_on	AnFET_port, AnFET
-.endmacro
-.macro AnFET_off
-		FET_off	AnFET_port, AnFET
-.endmacro
-.macro ApFET_on
-		FET_on	ApFET_port, ApFET
-.endmacro
-.macro ApFET_off
-		FET_off	ApFET_port, ApFET
-.endmacro
-.macro BnFET_on
-		FET_on	BnFET_port, BnFET
-.endmacro
-.macro BnFET_off
-		FET_off	BnFET_port, BnFET
-.endmacro
-.macro BpFET_on
-		FET_on	BpFET_port, BpFET
-.endmacro
-.macro BpFET_off
-		FET_off	BpFET_port, BpFET
-.endmacro
-.macro CnFET_on
-		FET_on	CnFET_port, CnFET
-.endmacro
-.macro CnFET_off
-		FET_off	CnFET_port, CnFET
-.endmacro
-.macro CpFET_on
-		FET_on	CpFET_port, CpFET
-.endmacro
-.macro CpFET_off
-		FET_off	CpFET_port, CpFET
-.endmacro
+	.macro AnFET_on
+			FET_on	AnFET_port, AnFET
+	.endmacro
+	.macro AnFET_off
+			FET_off	AnFET_port, AnFET
+	.endmacro
+	.macro ApFET_on
+			FET_on	ApFET_port, ApFET
+	.endmacro
+	.macro ApFET_off
+			FET_off	ApFET_port, ApFET
+	.endmacro
+	.macro BnFET_on
+			FET_on	BnFET_port, BnFET
+	.endmacro
+	.macro BnFET_off
+			FET_off	BnFET_port, BnFET
+	.endmacro
+	.macro BpFET_on
+			FET_on	BpFET_port, BpFET
+	.endmacro
+	.macro BpFET_off
+			FET_off	BpFET_port, BpFET
+	.endmacro
+	.macro CnFET_on
+			FET_on	CnFET_port, CnFET
+	.endmacro
+	.macro CnFET_off
+			FET_off	CnFET_port, CnFET
+	.endmacro
+	.macro CpFET_on
+			FET_on	CpFET_port, CpFET
+	.endmacro
+	.macro CpFET_off
+			FET_off	CpFET_port, CpFET
+	.endmacro
 
-.macro all_pFETs_off
-.if ApFET_port != BpFET_port || ApFET_port != CpFET_port
+	.macro ENABLE_A_on
+	.endmacro
+	.macro ENABLE_B_on
+	.endmacro
+	.macro ENABLE_C_on
+	.endmacro
+
+	.macro COMMUTATE_A_on
+		ApFET_on
+	.endmacro
+	.macro COMMUTATE_A_off
+		ApFET_off
+	.endmacro
+	.macro COMMUTATE_B_on
+		BpFET_on
+	.endmacro
+	.macro COMMUTATE_B_off
+		BpFET_off
+	.endmacro
+	.macro COMMUTATE_C_on
+		CpFET_on
+	.endmacro
+	.macro COMMUTATE_C_off
+		CpFET_off
+	.endmacro
+
+	.macro PWM_FOCUS_A_on
+	.endmacro
+	.macro PWM_FOCUS_A_off
+		.if COMP_PWM
+		ApFET_off
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_B_on
+	.endmacro
+	.macro PWM_FOCUS_B_off
+		.if COMP_PWM
+		BpFET_off
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_C_on
+	.endmacro
+	.macro PWM_FOCUS_C_off
+		.if COMP_PWM
+		CpFET_off
+		.endif
+	.endmacro
+
+	.macro all_pFETs_off
+	.if ApFET_port != BpFET_port || ApFET_port != CpFET_port
 		ApFET_off
 		BpFET_off
 		CpFET_off
-.else
-		in	@0, ApFET_port
-	.if (INIT_PB & ((ApFET_port == PORTB) << ApFET)) | (INIT_PC & ((ApFET_port == PORTC) << ApFET)) | (INIT_PD & ((ApFET_port == PORTD) << ApFET))
-		sbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 	.else
+		in	@0, ApFET_port
+		.if (INIT_PB & ((ApFET_port == PORTB) << ApFET)) | (INIT_PC & ((ApFET_port == PORTC) << ApFET)) | (INIT_PD & ((ApFET_port == PORTD) << ApFET))
+		sbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+		.else
 		cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
-	.endif
+		.endif
 		out	ApFET_port, @0
-.endif
-.endmacro
+	.endif
+	.endmacro
 
-.macro all_nFETs_off
-.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
+	.macro all_nFETs_off
+	.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
 		AnFET_off
 		BnFET_off
 		CnFET_off
-.else
-		in	@0, AnFET_port
-	.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
-		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	.else
+		in	@0, AnFET_port
+		.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
+		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		.else
 		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	.endif
+		.endif
 		out	AnFET_port, @0
-.endif
-.endmacro
+	.endif
+	.endmacro
 
-.macro nFET_brake
-.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
+	.macro nFET_brake
+	.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
 		AnFET_on
 		BnFET_on
 		CnFET_on
-.else
-		in	@0, AnFET_port
-	.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
-		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 	.else
+		in	@0, AnFET_port
+		.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
+		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		.else
 		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	.endif
+		.endif
 		out	AnFET_port, @0
+	.endif
+	.endmacro
+
+	.macro PWM_ALL_off
+		all_nFETs_off @0
+	.endmacro
+
+.elif defined(ENABLE_ALL)
+; Driver with PWM/ENABLE-style logic input, but with off state (or diode
+; emulation mode) when the PWM pin is pulled up rather than driven high.
+; Every FET toggle can be a single I/O instruction with this method,
+; rather than having to select high or low in advance to toggling enable.
+;
+; We leave ENABLE high once initialized as some drivers will actually
+; shut down rather than just using the input as a logic gate.
+;
+; We enforce HIGH_SIDE_PWM as diode emulation mode in these drivers
+; typically allows active freewheeling only in this orientation, and
+; because the bootstrap charge is typically not enough to hold up the
+; high-side gate for the commutation period.
+
+	.equ HIGH_SIDE_PWM = 1
+	.equ CPWM_SOFT = 0
+
+	.macro AnFET_on
+		cbi	PWM_A_PORT, PWM_A
+	.endmacro
+	.macro AnFET_off
+		sbi	PWM_A_PORT, PWM_A
+	.endmacro
+	.macro ApFET_on
+		sbi	PWM_A_DDR, PWM_A
+	.endmacro
+	.macro ApFET_off
+		cbi	PWM_A_DDR, PWM_A
+	.endmacro
+	.macro BnFET_on
+		cbi	PWM_B_PORT, PWM_B
+	.endmacro
+	.macro BnFET_off
+		sbi	PWM_B_PORT, PWM_B
+	.endmacro
+	.macro BpFET_on
+		sbi	PWM_B_DDR, PWM_B
+	.endmacro
+	.macro BpFET_off
+		cbi	PWM_B_DDR, PWM_B
+	.endmacro
+	.macro CnFET_on
+		cbi	PWM_C_PORT, PWM_C
+	.endmacro
+	.macro CnFET_off
+		sbi	PWM_C_PORT, PWM_C
+	.endmacro
+	.macro CpFET_on
+		sbi	PWM_C_DDR, PWM_C
+	.endmacro
+	.macro CpFET_off
+		cbi	PWM_C_DDR, PWM_C
+	.endmacro
+
+	.macro ENABLE_A_on
+		sbi     ENABLE_A_PORT, ENABLE_A
+	.endmacro
+	.macro ENABLE_B_on
+		sbi     ENABLE_B_PORT, ENABLE_B
+	.endmacro
+	.macro ENABLE_C_on
+		sbi     ENABLE_C_PORT, ENABLE_C
+	.endmacro
+
+	.macro COMMUTATE_A_on
+		AnFET_on
+	.endmacro
+	.macro COMMUTATE_A_off
+		AnFET_off
+	.endmacro
+	.macro COMMUTATE_B_on
+		BnFET_on
+	.endmacro
+	.macro COMMUTATE_B_off
+		BnFET_off
+	.endmacro
+	.macro COMMUTATE_C_on
+		CnFET_on
+	.endmacro
+	.macro COMMUTATE_C_off
+		CnFET_off
+	.endmacro
+
+	.macro PWM_FOCUS_A_on
+		.if COMP_PWM
+		sbrc	flags1, POWER_ON
+		ApFET_on
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_A_off
+		.if COMP_PWM
+		ApFET_off
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_B_on
+		.if COMP_PWM
+		sbrc	flags1, POWER_ON
+		BpFET_on
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_B_off
+		.if COMP_PWM
+		BpFET_off
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_C_on
+		.if COMP_PWM
+		sbrc	flags1, POWER_ON
+		CpFET_on
+		.endif
+	.endmacro
+	.macro PWM_FOCUS_C_off
+		.if COMP_PWM
+		CpFET_off
+		.endif
+	.endmacro
+
+	.macro all_pFETs_off
+	.if PWM_A_DDR != PWM_B_DDR || PWM_A_DDR != PWM_C_DDR
+		ApFET_off
+		BpFET_off
+		CpFET_off
+	.else
+		in	@0, PWM_A_DDR
+		cbr	@0, (1<<PWM_A)+(1<<PWM_B)+(1<<PWM_C)
+		out	PWM_A_DDR, @0
+	.endif
+	.endmacro
+
+	.macro all_nFETs_off
+	.if PWM_A_PORT != PWM_B_PORT || PWM_A_PORT != PWM_C_PORT
+		AnFET_off
+		BnFET_off
+		CnFET_off
+	.else
+		in	@0, PWM_A_PORT
+		sbr	@0, (1<<PWM_A)+(1<<PWM_B)+(1<<PWM_C)
+		out	PWM_A_PORT, @0
+	.endif
+	.endmacro
+
+	.macro nFET_brake
+	.if PWM_A_PORT != PWM_B_PORT || PWM_A_PORT != PWM_C_PORT
+		AnFET_on
+		BnFET_on
+		CnFET_on
+	.else
+		in	@0, PWM_A_PORT
+		cbr	@0, (1<<PWM_A)+(1<<PWM_B)+(1<<PWM_C)
+		out	PWM_A_PORT, @0
+	.endif
+	.endmacro
+
+	.macro PWM_ALL_off
+		all_pFETs_off @0
+	.endmacro
+
+	; For PWM state mirroring in commutation routines
+	.equ	AnFET_port = PWM_A_PORT
+	.equ	BnFET_port = PWM_B_PORT
+	.equ	CnFET_port = PWM_C_PORT
 .endif
+
+.macro PWM_A_on
+	.if defined(AnFET)
+		AnFET_on
+	.elif COMP_PWM
+		sbi	PWM_A_PORT, PWM_A
+	.else
+		sbi	PWM_A_DDR, PWM_A
+	.endif
+.endmacro
+
+.macro PWM_A_off
+	.if defined(AnFET)
+		AnFET_off
+	.elif COMP_PWM
+		cbi	PWM_A_PORT, PWM_A
+	.else
+		cbi	PWM_A_DDR, PWM_A
+	.endif
+.endmacro
+
+.macro PWM_B_on
+	.if defined(BnFET)
+		BnFET_on
+	.elif COMP_PWM
+		sbi	PWM_B_PORT, PWM_B
+	.else
+		sbi	PWM_B_DDR, PWM_B
+	.endif
+.endmacro
+
+.macro PWM_B_off
+	.if defined(BnFET)
+		BnFET_off
+	.elif COMP_PWM
+		cbi	PWM_B_PORT, PWM_B
+	.else
+		cbi	PWM_B_DDR, PWM_B
+	.endif
+.endmacro
+
+.macro PWM_C_on
+	.if defined(CnFET)
+		CnFET_on
+	.elif COMP_PWM
+		sbi	PWM_C_PORT, PWM_C
+	.else
+		sbi	PWM_C_DDR, PWM_C
+	.endif
+.endmacro
+
+.macro PWM_C_off
+	.if defined(CnFET)
+		CnFET_off
+	.elif COMP_PWM
+		cbi	PWM_C_PORT, PWM_C
+	.else
+		cbi	PWM_C_DDR, PWM_C
+	.endif
 .endmacro
 
 ;-- RC pulse setup and edge handling macros ------------------------------
@@ -919,7 +1199,7 @@ pwm_brake_off:
 .endif
 
 pwm_on_fast_high:
-.if COMP_PWM && EXTRA_DEAD_TIME_HIGH > MAX_BUSY_WAIT_CYCLES
+.if CPWM_SOFT && EXTRA_DEAD_TIME_HIGH > MAX_BUSY_WAIT_CYCLES
 		in	i_sreg, SREG
 		dec	tcnt2h
 		brne	pwm_on_fast_high_again
@@ -944,7 +1224,7 @@ pwm_again:
 		reti
 
 pwm_on:
-.if COMP_PWM
+.if CPWM_SOFT
 		sbrc	flags2, A_FET
 		ApFET_off
 		sbrc	flags2, B_FET
@@ -973,11 +1253,11 @@ pwm_on:
 .endif
 pwm_on_fast:
 		sbrc	flags2, A_FET
-		AnFET_on
+		PWM_A_on
 		sbrc	flags2, B_FET
-		BnFET_on
+		PWM_B_on
 		sbrc	flags2, C_FET
-		CnFET_on
+		PWM_C_on
 		ldi	ZL, pwm_off
 		mov	tcnt2h, duty_h
 		out	TCNT2, duty_l
@@ -996,13 +1276,13 @@ pwm_off:
 		lds	ZL, pwm_on_ptr		; 2 cycles
 		mov	tcnt2h, off_duty_h	; 1 cycle
 		sbrc	flags2, A_FET		; 2 cycles if skip, 1 cycle otherwise
-		AnFET_off			; 2 cycles (off at 12 cycles from entry)
+		PWM_A_off			; 2 cycles (off at 12 cycles from entry)
 		sbrc	flags2, B_FET		; Offset by 2 cycles here,
-		BnFET_off			; but still equal on-time
+		PWM_B_off			; but still equal on-time
 		sbrc	flags2, C_FET
-		CnFET_off
+		PWM_C_off
 		out	TCNT2, off_duty_l	; 1 cycle
-		.if COMP_PWM
+		.if CPWM_SOFT
 		sbrc	flags2, SKIP_CPWM	; 2 cycles if skip, 1 cycle otherwise
 		reti
 		.if DEAD_TIME_LOW > 9
@@ -2325,7 +2605,7 @@ set_new_duty13:
 set_new_duty_set:
 		; When off duty is short, skip complementary PWM; otherwise,
 		; compensate the off_duty time to account for the overhead.
-	.if COMP_PWM
+	.if CPWM_SOFT
 		set
 		ldi	temp4, pwm_on_fast	; Short off period: skip complementary PWM
 		cpse	temp2, ZH
@@ -2345,9 +2625,9 @@ set_new_duty21:
 		cli				; Critical section (off_duty & flags together)
 		movw	off_duty_l, temp1	; Set new OFF duty for PWM interrupt
 		sts	pwm_on_ptr, temp4	; Set Next PWM ON interrupt vector
-		.if COMP_PWM
+	.if CPWM_SOFT
 		bld	flags2, SKIP_CPWM	; If to skip complementary PWM
-		.endif
+	.endif
 		sei
 		ret
 set_new_duty_full:
@@ -2358,9 +2638,9 @@ set_new_duty_zero:
 		; Power off
 		cbr	flags1, (1<<FULL_POWER)+(1<<POWER_ON)
 		ldi	temp4, pwm_off		; Skip the on phase entirely
-		.if COMP_PWM
+	.if CPWM_SOFT
 		set				; Skip complementary PWM
-		.endif
+	.endif
 		rjmp	set_new_duty21
 ;-----bko-----------------------------------------------------------------
 ; Multiply the 24-bit timing in temp1:temp2:temp3 by temp4 and add the top
@@ -2545,6 +2825,10 @@ clear_loop1:	cp	ZL, r0
 		outi	DDRC, DIR_PC, temp1
 		outi	PORTD, INIT_PD, temp1
 		outi	DDRD, DIR_PD, temp1
+
+		ENABLE_A_on
+		ENABLE_B_on
+		ENABLE_C_on
 
 		.if DEBUG_TX
 		rcall	init_debug_tx
@@ -2870,17 +3154,17 @@ start_from_running:
 .macro com1com2
 		; Bp off, Ap on
 		set_comp_phase_b temp1
-		BpFET_off
+		COMMUTATE_B_off
 		sbrc	flags1, POWER_ON
-		ApFET_on
+		COMMUTATE_A_on
 .endmacro
 
 .macro com2com1
 		; Bp on, Ap off
 		set_comp_phase_a temp1
-		ApFET_off
+		COMMUTATE_A_off
 		sbrc	flags1, POWER_ON
-		BpFET_on
+		COMMUTATE_B_on
 .endmacro
 
 .macro com2com3
@@ -2889,14 +3173,13 @@ start_from_running:
 		cli
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<B_FET)
-		.if COMP_PWM
-		CpFET_off
-		.endif
+		PWM_FOCUS_C_off
 		in	temp1, CnFET_port
-		CnFET_off
+		PWM_C_off
 		in	temp2, CnFET_port
 		cpse	temp1, temp2
-		BnFET_on
+		PWM_B_on
+		PWM_FOCUS_B_on
 		sei
 .endmacro
 
@@ -2906,31 +3189,30 @@ start_from_running:
 		cli
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<C_FET)
-		.if COMP_PWM
-		BpFET_off
-		.endif
+		PWM_FOCUS_B_off
 		in	temp1, BnFET_port
-		BnFET_off
+		PWM_B_off
 		in	temp2, BnFET_port
 		cpse	temp1, temp2
-		CnFET_on
+		PWM_C_on
+		PWM_FOCUS_C_on
 		sei
 .endmacro
 
 .macro com3com4
 		; Ap off, Cp on
 		set_comp_phase_a temp1
-		ApFET_off
+		COMMUTATE_A_off
 		sbrc	flags1, POWER_ON
-		CpFET_on
+		COMMUTATE_C_on
 .endmacro
 
 .macro com4com3
 		; Ap on, Cp off
 		set_comp_phase_c temp1
-		CpFET_off
+		COMMUTATE_C_off
 		sbrc	flags1, POWER_ON
-		ApFET_on
+		COMMUTATE_A_on
 .endmacro
 
 .macro com4com5
@@ -2939,14 +3221,13 @@ start_from_running:
 		cli
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<A_FET)
-		.if COMP_PWM
-		BpFET_off
-		.endif
+		PWM_FOCUS_B_off
 		in	temp1, BnFET_port
-		BnFET_off
+		PWM_B_off
 		in	temp2, BnFET_port
 		cpse	temp1, temp2
-		AnFET_on
+		PWM_A_on
+		PWM_FOCUS_A_on
 		sei
 .endmacro
 
@@ -2956,31 +3237,30 @@ start_from_running:
 		cli
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<B_FET)
-		.if COMP_PWM
-		ApFET_off
-		.endif
+		PWM_FOCUS_A_off
 		in	temp1, AnFET_port
-		AnFET_off
+		PWM_A_off
 		in	temp2, AnFET_port
 		cpse	temp1, temp2
-		BnFET_on
+		PWM_B_on
+		PWM_FOCUS_B_on
 		sei
 .endmacro
 
 .macro com5com6
 		; Cp off, Bp on
 		set_comp_phase_c temp1
-		CpFET_off
+		COMMUTATE_C_off
 		sbrc	flags1, POWER_ON
-		BpFET_on
+		COMMUTATE_B_on
 .endmacro
 
 .macro com6com5
 		; Cp on, Bp off
 		set_comp_phase_b temp1
-		BpFET_off
+		COMMUTATE_B_off
 		sbrc	flags1, POWER_ON
-		CpFET_on
+		COMMUTATE_C_on
 .endmacro
 
 .macro com6com1
@@ -2989,14 +3269,13 @@ start_from_running:
 		cli
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<C_FET)
-		.if COMP_PWM
-		ApFET_off
-		.endif
+		PWM_FOCUS_A_off
 		in	temp1, AnFET_port
-		AnFET_off
+		PWM_A_off
 		in	temp2, AnFET_port
 		cpse	temp1, temp2
-		CnFET_on
+		PWM_C_on
+		PWM_FOCUS_C_on
 		sei
 .endmacro
 
@@ -3006,14 +3285,13 @@ start_from_running:
 		cli
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<A_FET)
-		.if COMP_PWM
-		CpFET_off
-		.endif
+		PWM_FOCUS_C_off
 		in	temp1, CnFET_port
-		CnFET_off
+		PWM_C_off
 		in	temp2, CnFET_port
 		cpse	temp1, temp2
-		AnFET_on
+		PWM_A_on
+		PWM_FOCUS_A_on
 		sei
 .endmacro
 
@@ -3144,13 +3422,13 @@ demag_timeout:
 		; Turn off complementary PWM if it was on,
 		; but leave on the high side commutation FET.
 		sbrc	flags2, A_FET
-		ApFET_off
+		PWM_FOCUS_A_off
 		sbrc	flags2, B_FET
-		BpFET_off
+		PWM_FOCUS_B_off
 		sbrc	flags2, C_FET
-		CpFET_off
+		PWM_FOCUS_C_off
 		.endif
-		all_nFETs_off temp1
+		PWM_ALL_off temp1
 		RED_on
 		; Skip power for the next commutation. Note that we can't
 		; decrement powerskip because demag checking is skipped
