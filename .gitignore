@@ -1,2 +1,9 @@
 *.hex
 *.obj
+*.cof
+*.cproject
+*.project
+*.asm
+!tgy.asm
+tgy.sublime-project
+tgy.sublime-workspace
