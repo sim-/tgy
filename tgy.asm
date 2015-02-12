@@ -2150,10 +2150,10 @@ evaluate_rc_init:
 		.endif
 		.if RC_CALIBRATION && (USE_ICP || USE_INT0)
 		cbr	flags1, (1<<EVAL_RC)
-	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
-		ldi2	YL, YH, puls_high_l	; Start with high pulse calibration
 		sbrc	flags0, NO_CALIBRATION	; Is it safe to calibrate now?
 		rjmp	evaluate_rc_puls
+	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
+		ldi2	YL, YH, puls_high_l	; Start with high pulse calibration
 		rjmp	rc_prog1
 rc_prog0:	rcall	wait240ms		; Wait for stick movement to settle
 	; Collect average of throttle input pulse length
