@@ -360,6 +360,7 @@ com_time_x:	.byte	1
 start_delay:	.byte	1	; delay count after starting commutations before checking back-EMF
 start_modulate:	.byte	1	; Start modulation counter (to reduce heating from PWR_MAX_START if stuck)
 start_fail:	.byte   1	; Number of start_modulate loops for eventual failure and disarm
+rcp_beep_count:	.byte	1	; Number of RC pulse error beeps
 rc_duty_l:	.byte	1	; desired duty cycle
 rc_duty_h:	.byte	1
 fwd_scale_l:	.byte	1	; 16.16 multipliers to scale input RC pulse to POWER_RANGE
@@ -2795,6 +2796,12 @@ i2c_init:
 rcp_error_beep:
 		rcall	switch_power_off	; Brake may have been on
 		rcall	wait30ms
+		lds	temp4, rcp_beep_count
+		subi	temp4, -4
+		sts	rcp_beep_count, temp4
+		brne	rcp_error_beep_more
+		cbr	flags0, (1<<RCP_ERROR)
+rcp_error_beep_more:
 		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
 		rjmp	beep_f4_freq
 ;-----bko-----------------------------------------------------------------
