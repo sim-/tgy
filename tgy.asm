@@ -477,7 +477,7 @@ eeprom_defaults_w:
 
 ; Smaller version for r24 and above, Z flag not reliable
 .macro adiwx
-	.if (@2) & ~0x3f
+	.if !(@2 & 0xff) || (@2) & ~0x3f
 		adi2	@0, @1, @2
 	.else
 		adiw	@0, @2
@@ -547,7 +547,7 @@ eeprom_defaults_w:
 
 ; Smaller version for r24 and above, Z flag not reliable
 .macro sbiwx
-	.if (@2) & ~0x3f
+	.if !(@2 & 0xff) || (@2) & ~0x3f
 		sbi2	@0, @1, @2
 	.else
 		sbiw	@0, @2
