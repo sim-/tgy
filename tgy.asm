@@ -2395,11 +2395,13 @@ puls_scale:
 ; m = (POWER_RANGE - MIN_DUTY) * 65536 / (1000us * 16MHz)
 ; If the input range is < 100us at 8MHz, < 50us at 16MHz, we return
 ; too low a multiplicand (higher won't fit in 16 bits).
+; We preload temp1:temp2 with the weakest possible scale based on the
+; fact that we can't accept a wider range than MAX_RC_PULS microseconds.
 puls_find_multiplicand:
 		.if RCP_DEADBAND
 		sbi2	temp3, temp4, RCP_DEADBAND * CPU_MHZ
 		.endif
-		ldi2	temp1, temp2, (POWER_RANGE - MIN_DUTY) * 65536 / MAX_RC_PULS / CPU_MHZ
+		ldi2	temp1, temp2, (POWER_RANGE - MIN_DUTY) * 65536 / (MAX_RC_PULS * CPU_MHZ)
 puls_find1:	adiw	temp1, 1
 		wdr
 		cpi	temp2, 0xff
