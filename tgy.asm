@@ -2741,6 +2741,9 @@ switch_power_off:
 		ldi	ZL, low(pwm_wdr)	; Stop PWM switching
 		all_pFETs_off temp1
 		all_nFETs_off temp1
+		.if MOTOR_BRAKE || LOW_BRAKE
+		sts	brake_active, ZH	; No active brake
+		.endif
 		ret
 ;-----bko-----------------------------------------------------------------
 .if BOOT_JUMP
@@ -3060,9 +3063,6 @@ i_rc_puls3:
 restart_control:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
-		.if MOTOR_BRAKE || LOW_BRAKE
-		sts	brake_active, ZH	; No active brake
-		.endif
 		GRN_on				; Green on while armed and idle or braking
 		RED_off
 wait_for_power_on_init:
