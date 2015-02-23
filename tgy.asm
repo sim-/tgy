@@ -2311,7 +2311,7 @@ rc_duty_set:	sts	rc_duty_l, YL
 		ldi	temp1, RCP_TOT
 		mov	rc_timeout, temp1	; Short rc_timeout when driving
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
-rc_no_set_duty:	ldi	temp1, 0xff
+rc_no_set_duty:	ldi	temp1, 12		; More than 10 needed to arm
 		cp	rc_timeout, temp1
 		adc	rc_timeout, ZH
 		ret
@@ -3151,7 +3151,7 @@ start_from_running:
 		sts	start_delay, ZH
 		sts	start_modulate, ZH
 		sts	start_fail, ZH
-		ldi	temp1, 2		; Start with a short timeout to stop quickly
+		ldi	temp1, RCP_TOT		; Start with a short timeout to stop quickly
 		mov	rc_timeout, temp1	; if we see no further pulses after the first.
 		ldi	temp1, 6		; Do not enable FETs during first cycle to
 		sts	powerskip, temp1	; see if motor is running, and align to it.
