@@ -3131,10 +3131,10 @@ wait_for_power_rx:
 		rcall	eeprom_write_block
 		.endif
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
-		adiw	YL, 0			; Test for zero
-		breq	wait_for_power_on_init
-		tst	rc_timeout
-		breq	wait_for_power_on_init
+		tst	rc_timeout		; If not a valid signal, loop
+		breq	wait_for_power_on	; while increasing boot/beacon timers
+		adiw	YL, 0			; If no power requested yet, loop
+		breq	wait_for_power_on_init	; while resetting boot/beacon timers
 
 start_from_running:
 		rcall	switch_power_off
