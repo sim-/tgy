@@ -204,8 +204,9 @@
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
-.equ	MIN_RC_PULS	= 100	; Throw away any pulses shorter than this
+.equ	MIN_RC_PULS	= 768	; Throw away any pulses shorter than this
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
+.equ	RCP_ALIAS_SHIFT	= 3	; Enable 1/8th PWM input alias ("oneshot125")
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
@@ -297,7 +298,7 @@
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
 	.equ	SET_DUTY	= 1	; if set when armed, set duty during evaluate_rc
 	.equ	RCP_ERROR	= 2	; if set, corrupted PWM input was seen
-;	.equ	GET_STATE	= 3	; set if state is to be send
+	.equ	RCP_ALIAS	= 3	; if set, rc alias (shifted) range is active
 	.equ	EEPROM_RESET	= 4	; if set, reset EEPROM
 	.equ	EEPROM_WRITE	= 5	; if set, save settings to EEPROM
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
@@ -2149,8 +2150,18 @@ evaluate_rc_init:
 		sbrc	flags1, I2C_MODE
 		rjmp	evaluate_rc_i2c
 		.endif
-		.if RC_CALIBRATION && (USE_ICP || USE_INT0)
+		.if USE_ICP || USE_INT0
 		cbr	flags1, (1<<EVAL_RC)
+	; Check if pulse is in aliased input range and toggle RCP_ALIAS to match
+		.if defined(RCP_ALIAS_SHIFT)
+		movw	temp1, rx_l		; Atomic copy of rc pulse length
+		sbiwx	temp1, temp2, MIN_RC_PULS * CPU_MHZ
+		sbc	temp3, temp3		; All temp3 bits <- carry (set if in aliased range)
+		eor	temp3, flags0		; XOR against current flags0 value
+		sbrc	temp3, RCP_ALIAS	; Skip if zero (no change)
+		rjmp	puls_scale_alias_toggle	; or toggle RCP_ALIAS and rescale
+		.endif
+		.if RC_CALIBRATION
 		sbrc	flags0, NO_CALIBRATION	; Is it safe to calibrate now?
 		rjmp	evaluate_rc_puls
 	; If input is above PROGRAM_RC_PULS, we try calibrating throttle
@@ -2158,37 +2169,38 @@ evaluate_rc_init:
 		rjmp	rc_prog1
 rc_prog0:	rcall	wait240ms		; Wait for stick movement to settle
 	; Collect average of throttle input pulse length
-rc_prog1:	movw	temp3, rx_l		; Save the starting pulse length
+rc_prog1:	rcall	rc_prog_get_rx		; Pulse length into temp1:temp2
+		movw	temp3, temp1		; Save starting pulse length
 		wdr
 rc_prog2:	mul	ZH, ZH			; Clear 24-bit result registers (0 * 0 -> temp5:temp6)
 		clr	temp7
 		cpi	YL, low(puls_high_l)	; Are we learning the high pulse?
 		brne	rc_prog3		; No, maybe the low pulse
+		ldi	temp2, 32 * 31/32	; Full speed pulse averaging count (slightly below exact)
 		cpi2	temp3, temp4, PROGRAM_RC_PULS * CPU_MHZ, temp1
-		brcs	evaluate_rc_puls	; Lower than PROGRAM_RC_PULS - exit programming
-		ldi	temp1, 32 * 31/32	; Full speed pulse averaging count (slightly below exact)
-		rjmp	rc_prog5
+		brcc	rc_prog5		; Equal to or higher than PROGRAM_RC_PULS - start measuring
+		rjmp	evaluate_rc_puls	; Lower than PROGRAM_RC_PULS - exit programming
 rc_prog3:	lds	temp1, puls_high_l	; If not learning the high pulse, we should stay below it
 		cp	temp3, temp1
 		lds	temp1, puls_high_h
 		cpc	temp4, temp1
+rc_prog_brcc_prog1:				; Branch trampoline
 		brcc	rc_prog1		; Restart while pulse not lower than learned high pulse
+		ldi	temp2, 32 * 17/16	; Stop/reverse pulse (slightly above exact)
 		cpi	YL, low(puls_low_l)	; Are we learning the low pulse?
-		brne	rc_prog4		; No, must be the neutral pulse
-		ldi	temp1, 32 * 17/16	; Stop/reverse pulse (slightly above exact)
-		rjmp	rc_prog5
+		breq	rc_prog5		; Yes, start measuring
 rc_prog4:	lds	temp1, puls_low_l
 		cp	temp3, temp1
 		lds	temp1, puls_low_h
 		cpc	temp4, temp1
 		brcs	rc_prog1		; Restart while pulse lower than learned low pulse
-		ldi	temp1, 32		; Neutral pulse measurement (exact)
-rc_prog5:	mov	tcnt2h, temp1		; Abuse tcnt2h as pulse counter
+		ldi	temp2, 32		; Neutral pulse measurement (exact)
+rc_prog5:	mov	tcnt2h, temp2		; Abuse tcnt2h as pulse counter
 rc_prog6:	wdr
 		sbrs	flags1, EVAL_RC		; Wait for next pulse
 		rjmp	rc_prog6
 		cbr	flags1, (1<<EVAL_RC)
-		movw	temp1, rx_l		; Atomic copy of new rc pulse length
+		rcall	rc_prog_get_rx		; Pulse length into temp1:temp2
 		add	temp5, temp1		; Accumulate 24-bit average
 		adc	temp6, temp2
 		adc	temp7, ZH
@@ -2210,13 +2222,13 @@ rc_prog6:	wdr
 	; One beep: high (full speed) pulse received
 		rcall	beep_f3
 		cpi	YL, low(puls_high_l+2)
-		breq	rc_prog1		; Go back to get low pulse
+		breq	rc_prog_brcc_prog1	; Go back to get low pulse
 	; Two beeps: low (stop/reverse) pulse received
 		rcall	wait30ms
 		rcall	beep_f3
 		cpi	YL, low(puls_low_l+2)
 		.if RC_PULS_REVERSE
-		breq	rc_prog1		; Go back to get neutral pulse
+		breq	rc_prog_brcc_prog1	; Go back to get neutral pulse
 		.else
 		breq	rc_prog_done
 		.endif
@@ -2225,7 +2237,22 @@ rc_prog6:	wdr
 		rcall	beep_f3
 rc_prog_done:	rcall	eeprom_write_block
 		rjmp	puls_scale		; Calculate the new scaling factors
+rc_prog_get_rx:
+		movw	temp1, rx_l		; Atomic copy of rc pulse length
+		.if defined(RCP_ALIAS_SHIFT)
+		sbrs	flags0, RCP_ALIAS
+		ret
+		ldi	XL, RCP_ALIAS_SHIFT
+rc_prog_get_rx1:
+		lsl	temp1
+		rol	temp2
+		dec	XL
+		brne	rc_prog_get_rx1
 		.endif
+		ret
+		.endif
+		.endif
+	; Fall through from evaluate_rc_init
 ;-----bko-----------------------------------------------------------------
 ; These routines may clobber temp* and Y, but not X.
 evaluate_rc:
@@ -2246,13 +2273,13 @@ evaluate_rc_puls:
 		sts	brake_want, ZH
 		.endif
 		movw	temp1, rx_l		; Atomic copy of rc pulse length
-		.if defined(MIN_RC_PULS)
 		cpi2	temp1, temp2, MIN_RC_PULS * CPU_MHZ, temp3
-		brcc	puls_long_enough
-		sbr	flags0, (1<<RCP_ERROR)
-		ret
-puls_long_enough:
+		brcs	puls_length_short	; Branch if short pulse
+		.if defined(RCP_ALIAS)
+		sbrc	flags0, RCP_ALIAS
+		rjmp	puls_length_error	; Throw away long pulse if alias range expected
 		.endif
+puls_alias:
 		.if LOW_BRAKE
 		lds	YL, puls_low_l		; Lowest calibrated pulse (regardless of RC_PULS_REVERSE)
 		lds	YH, puls_low_h
@@ -2289,6 +2316,18 @@ puls_zero_brake:
 puls_zero:	clr	YL
 		clr	YH
 		rjmp	rc_duty_set
+puls_length_short:
+		.if defined(RCP_ALIAS_SHIFT)
+		; Additional length checks for aliased range
+		cpi2	temp1, temp2, (MIN_RC_PULS * CPU_MHZ) >> RCP_ALIAS_SHIFT, temp3
+		brcs	puls_length_error
+		cpi2	temp1, temp2, (MAX_RC_PULS * CPU_MHZ) >> RCP_ALIAS_SHIFT, temp3
+		sbrc	flags0, RCP_ALIAS	; If alias range expected
+		brcs	puls_alias
+		.endif
+puls_length_error:
+		sbr	flags0, (1<<RCP_ERROR)
+		ret
 puls_plus:
 		lds	temp3, fwd_scale_l	; Load forward scaling factor
 		lds	temp4, fwd_scale_h
@@ -2354,6 +2393,26 @@ evaluate_rc_uart:
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
+; If an input alias is defined, shift the values in temp3:temp4 and
+; temp1:temp2 to follow.
+.if defined(RCP_ALIAS_SHIFT)
+puls_scale_alias_shift:
+		ldi	YL, RCP_ALIAS_SHIFT
+puls_scale_alias_shift1:
+		lsr	temp4
+		ror	temp3
+		lsr	temp2
+		ror	temp1
+		dec	YL
+		brne	puls_scale_alias_shift1
+		ret
+;-----bko-----------------------------------------------------------------
+; Toggle RCP_ALIAS and fall through to pulse_scale
+puls_scale_alias_toggle:
+		ldi	temp1, (1<<RCP_ALIAS)
+		eor	flags0, temp1
+.endif
+;-----bko-----------------------------------------------------------------
 ; Calculate the neutral offset and forward (and reverse) scaling factors
 ; to line up with the high/low (and neutral) pulse lengths.
 puls_scale:
@@ -2364,13 +2423,17 @@ puls_scale:
 		lds	temp1, puls_low_l
 		lds	temp2, puls_low_h
 		.endif
-		sts	neutral_l, temp1
-		sts	neutral_h, temp2
+		lds	temp3, puls_high_l
+		lds	temp4, puls_high_h
+		.if defined(RCP_ALIAS_SHIFT)
+		sbrc	flags0, RCP_ALIAS
+		rcall	puls_scale_alias_shift
+		.endif
 	; Find the distance to full throttle and fit it to match the
 	; distance between FULL_RC_PULS and STOP_RC_PULS by walking
 	; for the lowest 16.16 multiplier that just brings us in range.
-		lds	temp3, puls_high_l
-		lds	temp4, puls_high_h
+		sts	neutral_l, temp1
+		sts	neutral_h, temp2
 		sub	temp3, temp1
 		sbc	temp4, temp2
 		rcall	puls_find_multiplicand
@@ -2381,6 +2444,10 @@ puls_scale:
 		lds	temp4, puls_neutral_h
 		lds	temp1, puls_low_l
 		lds	temp2, puls_low_h
+		.if defined(RCP_ALIAS_SHIFT)
+		sbrc	flags0, RCP_ALIAS
+		rcall	puls_scale_alias_shift
+		.endif
 		sub	temp3, temp1
 		sbc	temp4, temp2
 		rcall	puls_find_multiplicand
