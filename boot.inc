@@ -706,7 +706,7 @@ description:
 	.db "http://github.com/sim-/tgy/", 0	; Hello!
 avrisp_response_w:
 	.equ SIGNATURE_LENGTH = 8
-	.db "AVRISP_2"				; stk500v2 signature
+	.db "AVRISP*2"				; stk500v2 signature  (changed '_' to '*' to get a chance to identify - AVRdude does not care)
 
 boot_spm_wait:	in	r23, SPMCR		; Wait for previous SPM to finish
 		sbrc	r23, SPMEN
