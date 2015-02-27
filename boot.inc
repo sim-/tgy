@@ -669,10 +669,12 @@ boot_eeprom_rw:	rcall	boot_spm_wait
 ; Erase flash space before boot loader (used for "chip erase")
 boot_clear_flash:
 		movw	r14, ZL			; Save Z
-		ldi	ZL, low(BOOT_START)
-		ldi	ZH, high(BOOT_START)
+		ldi	ZL, low(BOOT_START<<1)
+		ldi	ZH, high(BOOT_START<<1)
 		ldi	r22, (1<<PGERS)+(1<<SPMEN)
-boot_clear_fl1:	sbiw	ZL, PAGESIZE
+boot_clear_fl1:	
+		subi 	ZL, low(PAGESIZE<<1)
+		sbci 	ZH, high(PAGESIZE<<1)
 		rcall	boot_spm		; Erase page (never this code)
 		brne	boot_clear_fl1
 		movw	r12, ZL			; Zero r12:r13 (for EEPROM address later)
@@ -697,7 +699,6 @@ boot_clear_fl1:	sbiw	ZL, PAGESIZE
 		nop
 		nop
 		nop
-		nop
 
 ; Keep these addresses within a page so that we can self-update.
 .org FLASHEND + 1 - 32
@@ -705,7 +706,7 @@ description:
 	.db "http://github.com/sim-/tgy/", 0	; Hello!
 avrisp_response_w:
 	.equ SIGNATURE_LENGTH = 8
-	.db "AVRISP_2"				; stk500v2 signature
+	.db "AVRISP*2"				; stk500v2 signature  (changed '_' to '*' to get a chance to identify - AVRdude does not care)
 
 boot_spm_wait:	in	r23, SPMCR		; Wait for previous SPM to finish
 		sbrc	r23, SPMEN
