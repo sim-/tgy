@@ -669,10 +669,12 @@ boot_eeprom_rw:	rcall	boot_spm_wait
 ; Erase flash space before boot loader (used for "chip erase")
 boot_clear_flash:
 		movw	r14, ZL			; Save Z
-		ldi	ZL, low(BOOT_START)
-		ldi	ZH, high(BOOT_START)
+		ldi	ZL, low(BOOT_START<<1)
+		ldi	ZH, high(BOOT_START<<1)
 		ldi	r22, (1<<PGERS)+(1<<SPMEN)
-boot_clear_fl1:	sbiw	ZL, PAGESIZE
+boot_clear_fl1:	
+		subi 	ZL, low(PAGESIZE<<1)
+		sbci 	ZH, high(PAGESIZE<<1)
 		rcall	boot_spm		; Erase page (never this code)
 		brne	boot_clear_fl1
 		movw	r12, ZL			; Zero r12:r13 (for EEPROM address later)
@@ -694,7 +696,6 @@ boot_clear_fl1:	sbiw	ZL, PAGESIZE
 		nop
 		nop
 
-		nop
 		nop
 		nop
 		nop
