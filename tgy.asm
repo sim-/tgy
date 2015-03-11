@@ -148,6 +148,8 @@
 #include "tgy6a.inc"		; Turnigy Plush 6A (INT0 PWM)
 #elif defined(tgy_esc)
 #include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PWM)
+#elif defined(ali20red_esc)
+#include "ali20red.inc"              ; cheap aliexpres 20A esc in red shrinkwrap
 #else
 #error "Unrecognized board type."
 #endif
