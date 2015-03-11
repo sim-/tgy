@@ -1,9 +1,11 @@
 ;***********************************************************
-;* generic 20A / red shrinkwrap from aliexpress            *
+;* cheap 20A esc from aliexpress/banggood etc              *
 ;* with nFETs on PORTD, nFETs on PORTB (NIKOS P0403BD)     *
-;* got them foor 4,5$/each, very low quality boards        *
-;* =use recycled mega8, bad land patterns, bad solderjoints*
-;* they come in red shrinkwrap with 20A on it              *
+;* got them for 4,5$/each, very low quality boards:        *
+;* recycled mega8, bad land patterns, bad solderjoints,    *
+;* heat spreader not fixed properly (laying on motor cable)*
+;* they usually come in red shrinkwrap with 20A on it      *
+;* NO CRYSTAL!                                             *
 ;* based on tgy.inc                                        *
 ;* Mar.2015                                                *
 ;* fishpepper <AT> gmail.com                               *
@@ -15,12 +17,16 @@
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
 
-.equ    DEAD_LOW_NS     = 450	; May work on some boards, but be careful!
+.equ    DEAD_LOW_NS     = 450	; copied from example, no idea if this is a safe value
 .equ    DEAD_HIGH_NS    = 8000
 
 ;*********************
 ; PORT D definitions *
 ;*********************
+;note: phase_c (mux_c) is connected to portd.7
+;      which is also AIN1, so not defining mux_c
+;      will force the code to use AIN1. so this
+;      is correct (and tested). do not uncomment it!
 ;.equ	mux_c		= 7	;i <plus> comparator input (AIN0)
 .equ	c_comp		= 6	;i common comparator input (AIN0)
 .equ	ApFET		= 5	;o
