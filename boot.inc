@@ -53,7 +53,7 @@
 ; r6: stk500v2 message length low
 ; r7: stk500v2 message length high
 ; r8: 7/8th bit time in timer2 ticks
-; r9: Unused
+; r9: stk500v2 sequence number
 ; r10: Doubled (word) address l
 ; r11: Doubled (word) address h
 ; r12: Address l
@@ -370,7 +370,7 @@ stk_rx_start:	nop				; Future expansion nops
 		mov	r5, r22			; Start checksum in r5
 		adiw	ZL, stk_rx_seq - stk_rx_start
 		rjmp	boot_rx_cont
-stk_rx_seq:	mov	i_sreg, r22		; Store sequence number in i_sreg
+stk_rx_seq:	mov	r9, r22			; Store sequence number in r9
 		eor	r5, r22
 		adiw	ZL, stk_rx_size_h - stk_rx_seq
 		rjmp	boot_rx_cont
@@ -414,7 +414,7 @@ stk_rx:
 		movw	ZL, XL			; Start checksumming from here
 		ldi	r23, MESSAGE_START
 		st	Z, r23			; Message start
-		std	Z+1, i_sreg		; Sequence number
+		std	Z+1, r9			; Sequence number
 		std	Z+2, r16		; Message body size high
 		ldi	r23, 2
 		std	Z+3, r23		; Message body size low
