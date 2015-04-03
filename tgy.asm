@@ -90,6 +90,8 @@
 #include "afro_nfet.inc"	; AfroESC 3 with all nFETs (ICP PWM, I2C, UART)
 #elif defined(afro_pr0_esc)
 #include "afro_pr0.inc"		; AfroESC prototype rev0 with NCP5911 (ICP PWM)
+#elif defined(afro_pr1_esc)
+#include "afro_pr1.inc"		; AfroESC prototype rev1 with NCP5911 (ICP PWM)
 #elif defined(arctictiger_esc)
 #include "arctictiger.inc"	; Arctic Tiger 30A ESC with all nFETs (ICP PWM)
 #elif defined(birdie70a_esc)
@@ -813,13 +815,21 @@ eeprom_defaults_w:
 	.endmacro
 
 	.macro ENABLE_A_on
+		.if defined(ENABLE_A_PORT)
 		sbi     ENABLE_A_PORT, ENABLE_A
+		.else
+		sbi	ENABLE_ALL_PORT, ENABLE_ALL
+		.endif
 	.endmacro
 	.macro ENABLE_B_on
+		.if defined(ENABLE_B_PORT)
 		sbi     ENABLE_B_PORT, ENABLE_B
+		.endif
 	.endmacro
 	.macro ENABLE_C_on
+		.if defined(ENABLE_C_PORT)
 		sbi     ENABLE_C_PORT, ENABLE_C
+		.endif
 	.endmacro
 
 	.macro COMMUTATE_A_on
