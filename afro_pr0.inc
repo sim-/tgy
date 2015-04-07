@@ -15,7 +15,7 @@
 
 .equ	DEAD_LOW_NS	= 300
 .equ	DEAD_HIGH_NS	= 900
-.equ	MOTOR_ADVANCE	= 5
+.equ	MOTOR_ADVANCE	= 15
 .equ	CHECK_HARDWARE	= 1
 .equ	ENABLE_ALL	= 1
 
