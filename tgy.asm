@@ -926,9 +926,15 @@ eeprom_defaults_w:
 	.endmacro
 
 	; For PWM state mirroring in commutation routines
-	.equ	AnFET_port = PWM_A_PORT
-	.equ	BnFET_port = PWM_B_PORT
-	.equ	CnFET_port = PWM_C_PORT
+	.if COMP_PWM
+		.equ	AnFET_port = PWM_A_PORT
+		.equ	BnFET_port = PWM_B_PORT
+		.equ	CnFET_port = PWM_C_PORT
+	.else
+		.equ	AnFET_port = PWM_A_DDR
+		.equ	BnFET_port = PWM_B_DDR
+		.equ	CnFET_port = PWM_C_DDR
+	.endif
 .endif
 
 .macro PWM_A_on
