@@ -2633,9 +2633,10 @@ update_timing4:	movw	timing_duty_l, XL
 
 		sbrc	flags1, EVAL_RC
 		rjmp	evaluate_rc		; Set new duty either way
+	; Fall through to set_new_duty
 ;-----bko-----------------------------------------------------------------
-; Unlike update_timing above, we try not to clobber XL, XH used as a loop
-; counter in wait_for_edge.
+; Unlike update_timing above, we try not to clobber XL and XH which are
+; used for loop-counting in wait_for_edge.
 set_new_duty:	lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 set_new_duty_l:	cp	YL, timing_duty_l
@@ -3518,9 +3519,9 @@ demag_timeout:
 		.endif
 		PWM_ALL_off temp1
 		RED_on
-		; Skip power for the next commutation. Note that we can't
-		; decrement powerskip because demag checking is skipped
-		; when powerskip is non-zero.
+		; Skip power for the next commutation. Note that this
+		; won't decrease a non-zero powerskip because demag
+		; checking is skipped when powerskip is non-zero.
 		ldi	temp1, 1
 		sts	powerskip, temp1
 		rjmp	wait_commutation
