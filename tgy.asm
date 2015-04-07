@@ -2541,16 +2541,14 @@ update_timing:
 update_timing1:
 
 	; Calculate a hopefully sane duty cycle limit from this timing,
-	; to prevent excessive current if high duty is requested when the
-	; current duty is low. This is the best we can do without a current
-	; sensor. The actual current will depend on motor KV and voltage,
-	; so this is just an approximation. It would be nice if we could
-	; do this with math instead of two constants, but we need a divide.
-	; Clobbers only temp4. Fastest in case of fastest timing.
-
+	; to prevent excessive current if high duty is requested at low
+	; speed. This is the best we can do without a current sensor.
+	; The actual current peak will depend on motor KV and voltage,
+	; so this is just an approximation. This is calculated smoothly
+	; with a (very slow) software divide only if timing permits.
 		cpi2	temp2, temp3, (TIMING_RANGE3 * CPU_MHZ / 2) >> 8, temp4
 		ldi2	XL, XH, MAX_POWER
-		brcs	update_timing4
+		brcs	update_timing4	; Fast timing: no duty limit.
 
 		; 24.8-bit fixed-point unsigned divide, inlined with available registers:
 		; duty (XL:XH) = MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / period (temp1:temp2:temp3)
