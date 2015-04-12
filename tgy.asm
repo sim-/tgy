@@ -211,6 +211,7 @@
 .equ	MIN_RC_PULS	= 768	; Throw away any pulses shorter than this
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 .equ	RCP_ALIAS_SHIFT	= 3	; Enable 1/8th PWM input alias ("oneshot125")
+.equ	BEEP_RCP_ERROR	= 0	; Beep at stop if invalid PWM pulses were received
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
@@ -2995,6 +2996,7 @@ i2c_init:
 		ret
 .endif
 ;-----bko-----------------------------------------------------------------
+.if BEEP_RCP_ERROR
 rcp_error_beep:
 		rcall	switch_power_off	; Brake may have been on
 		rcall	wait30ms
@@ -3006,6 +3008,7 @@ rcp_error_beep:
 rcp_error_beep_more:
 		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
 		rjmp	beep_f4_freq
+.endif
 ;-----bko-----------------------------------------------------------------
 main:
 		clr	r0
@@ -3304,8 +3307,10 @@ wait_for_power_on:
 		wdr
 		sbrc	flags1, EVAL_RC
 		rjmp	wait_for_power_rx
+		.if BEEP_RCP_ERROR
 		sbrc	flags0, RCP_ERROR	; Check if we've seen bad PWM edges
 		rcall	rcp_error_beep
+		.endif
 		tst	rc_timeout
 		brne	wait_for_power_on	; Tight loop unless rc_timeout is zero
 		.if BOOT_JUMP
