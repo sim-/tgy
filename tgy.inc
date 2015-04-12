@@ -7,7 +7,7 @@
 ;* http://home.versanet.de/~b-konze/blc_18a/blc_18a.htm    *
 ;***********************************************************
 
-.equ	F_CPU		= 16000000
+.set	F_CPU		= 16000000
 .equ	USE_INT0	= 1
 .equ	USE_I2C		= 0
 .equ	USE_UART	= 0
