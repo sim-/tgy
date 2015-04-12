@@ -18,6 +18,7 @@
 .equ	MOTOR_ADVANCE	= 15
 .equ	CHECK_HARDWARE	= 1
 .equ	ENABLE_ALL	= 1
+.equ	HIGH_SIDE_PWM	= 1
 
 ;*********************
 ; PORT B definitions *

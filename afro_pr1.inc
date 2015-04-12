@@ -17,6 +17,7 @@
 .equ	DEAD_HIGH_NS	= 900
 .equ	MOTOR_ADVANCE	= 15
 .equ	CHECK_HARDWARE	= 1
+.equ	HIGH_SIDE_PWM	= 1
 
 ;*********************
 ; PORT B definitions *

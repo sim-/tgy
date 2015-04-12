@@ -3,12 +3,12 @@
 ;* 2012-12-02                            *
 ;*****************************************
 
-; P and N are actually reversed here to do high side PWM to work around
-; the sense divider being too weak for phase voltages higher than 10V.
-; Also, the 100nf filtering capacitors shift the timing so much that
-; there is no point for further waiting in software. We also need to add
-; a delay before checking the comparator during starting to avoid being
-; fooled by the same lag.
+; High side PWM mode is required here to work around the sense divider
+; being too weak for phase voltages higher than 10V. Also, the 100nf
+; filtering capacitors shift the timing so much that there is no point
+; for further waiting in software. We also need to add a delay before
+; checking the comparator during starting to avoid being fooled by the
+; same lag.
 
 .equ	F_CPU		= 16000000
 .equ	USE_INT0	= 0
@@ -28,17 +28,17 @@
 .equ	adr1		= 6	;i address pad adr1 (1-2)
 ;.equ			= 5	(sck)
 ;.equ			= 4	(miso)
-.equ	AnFET		= 3	;o (mosi)
-.equ	BnFET		= 2	;o
-.equ	CnFET		= 1	;o
+.equ	ApFET		= 3	;o (mosi)
+.equ	BpFET		= 2	;o
+.equ	CpFET		= 1	;o
 .equ	rcp_in		= 0	;i r/c pulse input
 
 .equ	INIT_PB		= (1<<adr1)+(1<<adr2)
-.equ	DIR_PB		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+.equ	DIR_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 
-.equ	AnFET_port	= PORTB
-.equ	BnFET_port	= PORTB
-.equ	CnFET_port	= PORTB
+.equ	ApFET_port	= PORTB
+.equ	BpFET_port	= PORTB
+.equ	CpFET_port	= PORTB
 
 ;*********************
 ; PORT C definitions *
@@ -70,19 +70,19 @@
 ;*********************
 .equ	green_led	= 7
 ;.equ	sense_star	= 6
-.equ	CpFET		= 5
-.equ	BpFET		= 4
-.equ	ApFET		= 3
+.equ	CnFET		= 5
+.equ	BnFET		= 4
+.equ	AnFET		= 3
 ;.equ	int0		= 2
 .equ	txd		= 1
 .equ	rxd		= 0
 
 .equ	INIT_PD		= (1<<txd)
-.equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)+(1<<green_led)+(1<<txd)
+.equ	DIR_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<green_led)+(1<<txd)
 
-.equ	ApFET_port	= PORTD
-.equ	BpFET_port	= PORTD
-.equ	CpFET_port	= PORTD
+.equ	AnFET_port	= PORTD
+.equ	BnFET_port	= PORTD
+.equ	CnFET_port	= PORTD
 
 .MACRO GRN_on
 	cbi	PORTD, green_led
