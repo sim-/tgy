@@ -698,13 +698,13 @@ eeprom_defaults_w:
 
 	; For PWM state mirroring in commutation routines
 	.if HIGH_SIDE_PWM
-		.equ	PWM_A_PORT_in = ApFET_PORT
-		.equ	PWM_B_PORT_in = BpFET_PORT
-		.equ	PWM_C_PORT_in = CpFET_PORT
+		.equ	PWM_A_PORT_in = ApFET_port
+		.equ	PWM_B_PORT_in = BpFET_port
+		.equ	PWM_C_PORT_in = CpFET_port
 	.else
-		.equ	PWM_A_PORT_in = AnFET_PORT
-		.equ	PWM_B_PORT_in = BnFET_PORT
-		.equ	PWM_C_PORT_in = CnFET_PORT
+		.equ	PWM_A_PORT_in = AnFET_port
+		.equ	PWM_B_PORT_in = BnFET_port
+		.equ	PWM_C_PORT_in = CnFET_port
 	.endif
 
 	.macro all_pFETs_off
@@ -981,15 +981,19 @@ eeprom_defaults_w:
 ; just toggle the PORT value after PWM_FOCUS sets DDR (output mode).
 ; This results in the following macro arrangement:
 ;
-; TRI	CPWM	HIGH_SIDE_PWM	: PWM ON	PWM OFF		XnFET_port
-; 0	0	0		: XnFET_on	XnFET_off	as set
-; 0	0	1		: XpFET_on	XpFET_off	as set
-; 0	1	0		: XnFET_on	XnFET_off	as set
-; 0	1	1		: XpFET_on	XpFET_off	as set
+; TRI	CPWM	HIGH_SIDE_PWM	: PWM ON	PWM OFF		PWM_X_PORT_in
+; 0	0	0		: XnFET_on	XnFET_off	XnFET_port
+; 0	0	1		: XpFET_on	XpFET_off	XpFET_port
+; 0	1	0		: XnFET_on	XnFET_off	XnFET_port
+; 0	1	1		: XpFET_on	XpFET_off	XpFET_port
 ; 1	0	0		: XnFET_on	XnFET_off	PWM_X_PORT
 ; 1	0	1		: XpFET_on	XpFET_off	PWM_X_DDR
 ; 1	1	0		: XnFET_on	XnFET_off	PWM_X_PORT
 ; 1	1	1		: XnFET_off	XnFET_on	PWM_X_PORT
+;
+; For the last case, PWM_X_off actually turns low side on which isn't how
+; we want to leave the phase, so we have to also have a PWM_X_clear just
+; for this case.
 
 .macro PWM_A_on
 	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
@@ -1047,6 +1051,24 @@ eeprom_defaults_w:
 	.elif HIGH_SIDE_PWM
 		CpFET_off
 	.else
+		CnFET_off
+	.endif
+.endmacro
+
+.macro PWM_A_clear
+	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
+		AnFET_off
+	.endif
+.endmacro
+
+.macro PWM_B_clear
+	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
+		BnFET_off
+	.endif
+.endmacro
+
+.macro PWM_C_clear
+	.if !defined(CnFET) && COMP_PWM && HIGH_SIDE_PWM
 		CnFET_off
 	.endif
 .endmacro
@@ -3392,6 +3414,7 @@ start_from_running:
 		in	temp1, PWM_C_PORT_in
 		PWM_C_off
 		in	temp2, PWM_C_PORT_in
+		PWM_C_clear
 		cpse	temp1, temp2
 		PWM_B_on
 		PWM_FOCUS_B_on
@@ -3408,6 +3431,7 @@ start_from_running:
 		in	temp1, PWM_B_PORT_in
 		PWM_B_off
 		in	temp2, PWM_B_PORT_in
+		PWM_B_clear
 		cpse	temp1, temp2
 		PWM_C_on
 		PWM_FOCUS_C_on
@@ -3440,6 +3464,7 @@ start_from_running:
 		in	temp1, PWM_B_PORT_in
 		PWM_B_off
 		in	temp2, PWM_B_PORT_in
+		PWM_B_clear
 		cpse	temp1, temp2
 		PWM_A_on
 		PWM_FOCUS_A_on
@@ -3456,6 +3481,7 @@ start_from_running:
 		in	temp1, PWM_A_PORT_in
 		PWM_A_off
 		in	temp2, PWM_A_PORT_in
+		PWM_A_clear
 		cpse	temp1, temp2
 		PWM_B_on
 		PWM_FOCUS_B_on
@@ -3488,6 +3514,7 @@ start_from_running:
 		in	temp1, PWM_A_PORT_in
 		PWM_A_off
 		in	temp2, PWM_A_PORT_in
+		PWM_A_clear
 		cpse	temp1, temp2
 		PWM_C_on
 		PWM_FOCUS_C_on
@@ -3504,6 +3531,7 @@ start_from_running:
 		in	temp1, PWM_C_PORT_in
 		PWM_C_off
 		in	temp2, PWM_C_PORT_in
+		PWM_C_clear
 		cpse	temp1, temp2
 		PWM_A_on
 		PWM_FOCUS_A_on
