@@ -83,7 +83,7 @@
 .equ	PWM_A		= 0
 
 .equ	INIT_PD		= (1<<txd)+(1<<PWM_A)
-.equ	DIR_PD		= (1<<txd)+(1<<ENABLE_ALL)
+.equ	DIR_PD		= (1<<txd)
 
 .equ	ENABLE_ALL_PORT	= PORTD
 .equ	VBAT_HIGH_PORT	= PORTD
