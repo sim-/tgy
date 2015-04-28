@@ -3548,7 +3548,8 @@ run1:		.if MOTOR_REVERSE
 		.endif
 		rjmp	run_reverse
 
-run_forward:	rcall	wait_for_high
+run_forward:
+		rcall	wait_for_high
 		com1com2
 		sync_off
 		rcall	wait_for_low
@@ -3564,7 +3565,8 @@ run_forward:	rcall	wait_for_high
 		com6com1
 		rjmp	run6
 
-run_reverse:	rcall	wait_for_low
+run_reverse:
+		rcall	wait_for_low
 		com1com6
 		sync_on
 		rcall	wait_for_high
@@ -3621,7 +3623,8 @@ run6_1:		; Allow first loop at full power, then modulate.
 		ldi2	temp1, temp2, PWR_COOL_START
 		rjmp	run6_3
 
-run6_2:		cbr	flags1, (1<<STARTUP)
+run6_2:
+		cbr	flags1, (1<<STARTUP)
 		sts	start_fail, ZH
 		sts	start_modulate, ZH
 		RED_off
