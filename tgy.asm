@@ -375,6 +375,14 @@ rev_scale_l:	.byte	1
 rev_scale_h:	.byte	1
 neutral_l:	.byte	1	; Offset for neutral throttle (in CPU_MHZ)
 neutral_h:	.byte	1
+.if RCP_DEADBAND && defined(RCP_ALIAS_SHIFT)
+deadband_l:	.byte	1	; Deadband scaled for possible input alias
+deadband_h:	.byte	1
+.endif
+.if LOW_BRAKE
+low_brake_l:	.byte	1	; Low brake position with deadband applied
+low_brake_h:	.byte	1
+.endif
 .if USE_I2C
 i2c_max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
 i2c_rx_state:	.byte	1
@@ -2435,10 +2443,8 @@ evaluate_rc_puls:
 		.endif
 puls_alias:
 		.if LOW_BRAKE
-		lds	YL, puls_low_l		; Lowest calibrated pulse (regardless of RC_PULS_REVERSE)
-		lds	YH, puls_low_h
-		sbiwx	YL, YH, RCP_LOW_DBAND * CPU_MHZ
-		brcs	puls_not_low_brake
+		lds	YL, low_brake_l
+		lds	YH, low_brake_h
 		cp	temp1, YL
 		cpc	temp2, YH
 		brcc	puls_not_low_brake
@@ -2487,7 +2493,14 @@ puls_plus:
 		lds	temp4, fwd_scale_h
 puls_not_zero:
 		.if RCP_DEADBAND
+		.if defined(RCP_ALIAS_SHIFT)
+		lds	YL, deadband_l		; Load dynamic deadband
+		lds	YH, deadband_h
+		sub	temp1, YL
+		sbc	temp2, YH
+		.else
 		sbiwx	temp1, temp2, RCP_DEADBAND * CPU_MHZ
+		.endif
 		brmi	puls_zero_brake
 		.endif
 .endif
@@ -2570,6 +2583,8 @@ puls_scale_alias_toggle:
 ; Calculate the neutral offset and forward (and reverse) scaling factors
 ; to line up with the high/low (and neutral) pulse lengths.
 puls_scale:
+	; If reversible input is enabled, scale from neutral; otherwise,
+	; scale from the lowest point.
 		.if RC_PULS_REVERSE
 		lds	temp1, puls_neutral_l
 		lds	temp2, puls_neutral_h
@@ -2593,6 +2608,9 @@ puls_scale:
 		rcall	puls_find_multiplicand
 		sts	fwd_scale_l, temp1
 		sts	fwd_scale_h, temp2
+
+	; If reversible input is enabled, calculate the reverse scaling
+	; factor.
 		.if RC_PULS_REVERSE
 		lds	temp3, puls_neutral_l
 		lds	temp4, puls_neutral_h
@@ -2608,6 +2626,37 @@ puls_scale:
 		sts	rev_scale_l, temp1
 		sts	rev_scale_h, temp2
 		.endif
+
+	; If a deadband is enabled and input aliases are supported,
+	; calculate the scaled deadband in advance.
+		.if RCP_DEADBAND && defined(RCP_ALIAS_SHIFT)
+		ldi2	temp1, temp2, RCP_DEADBAND * CPU_MHZ
+		sbrc	flags0, RCP_ALIAS
+		rcall	puls_scale_alias_shift
+		sts	deadband_l, temp1
+		sts	deadband_h, temp2
+		.endif
+
+	; If low brake is enabled, store the position where it starts
+	; after subtracting the deadband. This avoids the calculation
+	; in the receive path.
+		.if LOW_BRAKE
+		lds	temp1, puls_low_l		; Lowest calibrated pulse (regardless of RC_PULS_REVERSE)
+		lds	temp2, puls_low_h
+		ldi2	temp3, temp4, RCP_LOW_DBAND * CPU_MHZ
+		.if defined(RCP_ALIAS_SHIFT)
+		sbrc	flags0, RCP_ALIAS
+		rcall	puls_scale_alias_shift
+		.endif
+		sub	temp1, temp3
+		sbc	temp2, temp4
+		brcc	puls_low_brake_save
+		ldi2	temp1, temp2, 0
+puls_low_brake_save:
+		sts	low_brake_l, temp1
+		sts	low_brake_h, temp2
+		.endif
+
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Find the lowest 16.16 multiplicand that brings us to full throttle
