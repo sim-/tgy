@@ -366,7 +366,40 @@ Troubleshooting
 ---------------
 
 There are 4 main beep frequencies used at different intervals and lengths
-to signal the various operation and fault states.
+to signal the various operation and fault states. These beep frequencies
+are labelled here as f1 through f4, where a higher number indicates a
+higher frequency. Repetition indicates longer beeps.
+
+If CHECK_HARDWARE is enabled (default on the Afro and TBS boards), the
+drive and sense circuitry will be tested for correct operation at boot.
+This check will prevent beeping if it would be unsafe to do so (for
+example, if beeping would end up completing a short circuit), and so may
+prevent further damage in some cases.
+
+Error conditions from CHECK_HARDWARE are flashed through the LED(s), if
+present, or beeped (if possible) before anything else, in a looping
+pattern, for as long as the error condition(s) persist. All conditions
+cannot be checked on some hardware due to pin routing, but will be
+indicated by beeping or flashing a particular count followed by a pause.
+If more than one error condition is present, each error will be reported
+in sequence. The error conditions are:
+
+	1: Phase A stuck high
+	2: Phase B stuck high
+	3: Phase C stuck high
+	4: AIN1 stuck high
+	5: AIN0 stuck high
+	6: Phase A low-side drive broken
+	7: Phase B low-side drive broken
+	8: Phase C low-side drive broken
+	9: Phase A high-side drive broken
+	10: Phase B high-side drive broken
+	11: Phase C high-side drive broken
+
+Note that if the ESC resets while the motor is still spinning (such as
+after a brief power cut), it is possible that the induced current will
+cause some transient errors that will clear once the motor stops, and
+then operation will continue.
 
 During boot, the MCUCSR register is checked to see the reason for reset.
 For exact behaviour, see near "Check reset cause" in tgy.asm. Here are the
@@ -382,7 +415,7 @@ looping f1 f1 f3 f3: Watchdog reset (previous execution locked up)
 
 looping beeps (8) of f2 or f4: Unknown (beeps out all MCUCSR bits, LSF)
 
-fast repeating beeps of f4 while power off: Noise on PWM input detected
+fast repeating beeps of f4 while idle: Noise on PWM input detected
 
 Once a valid input source is found and receiving idle throttle, f4 f4 f4
 (a long f4 beep) indicates that the ESC is armed and will start the motor
