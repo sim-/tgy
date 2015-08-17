@@ -12,19 +12,21 @@
 ;
 ; All transmissions have a leader of 23 1-bits followed by 1 0-bit.
 ; Bit encoding starts at the least significant bit and is 8 bits wide.
-; 1-bits are encoded as 64.0us high, 72.8us low (135.8us total).
-; 0-bits are encoded as 27.8us high, 34.5us low, 34.4us high, 37.9 low
-; (134.6us total)
-; End of encoding adds 34.0us high, then return to input mode.
-; The last 0-bit low time is 32.6us instead of 37.9us, for some reason.
+; Measuring the Turnigy USB Linker results in the following timings:
+; 1-bits are encoded as 62.0us high, 72.0us low.
+; 0-bits are encoded as 27.7us high, 34.4us low, 34.4us high, 37.7 low.
+; Bit encoding takes about 134us in total.
+; End of encoding adds 34.4us high, then returns to input/pull-up mode.
 ;
-; We always learn the actual timing from the host's leader. It seems to
-; be possible to respond faster or slower, but faster will cause drops
-; between the host and its serial-to-USB conversion at 9600baud. It does
-; seem to work to use an average of high and low times as the actual bit
-; timing, but since it doesn't quite fit in one byte at clk/8 at 16MHz,
-; we store the high and low times separately, and copy the same timings.
-; We should still work even at many times the bit rate.
+; For this implementation, we always learn the actual timing from the
+; host's leader. The USB linker's implementation seems to accept faster
+; or slower responses, but faster will cause drops between the host and
+; its serial-to-USB conversion at 9600baud, so we always try to match or
+; be slower than the host's timing. It works to use an even fraction for
+; the actual bit timing, but since the total doesn't quite fit in a byte
+; at clk/8 at 16MHz, we store and use the high and low times separately.
+; This implementation should work with much faster pulses than currently
+; used by the USB linker.
 ;
 ; We support self-flashing ourselves (yo dawg), but doing so in a way
 ; that can still respond after each page update is a bit tricky. Some
