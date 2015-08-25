@@ -11,12 +11,13 @@
 ; or set to start at pulses shorter than the linker timing.
 ;
 ; All transmissions have a leader of 23 1-bits followed by 1 0-bit.
-; Bit encoding starts at the least significant bit and is 8 bits wide.
+; Byte encoding starts at the least significant bit and is 8 bits wide.
 ; Measuring the Turnigy USB Linker results in the following timings:
 ; 1-bits are encoded as 62.0us high, 72.0us low.
 ; 0-bits are encoded as 27.7us high, 34.4us low, 34.4us high, 37.7 low.
 ; Bit encoding takes about 134us in total.
 ; End of encoding adds 34.4us high, then returns to input/pull-up mode.
+; Minimum restart time is 37.0us in input state before the next leader.
 ;
 ; For this implementation, we always learn the actual timing from the
 ; host's leader. The USB linker's implementation seems to accept faster
@@ -33,9 +34,9 @@
 ; nops are present for future expansion without bumping addresses.
 ;
 ; We implement STK500v2, as recommended by the avrdude author, rather
-; than implementing a random new protocol. STK500v2 protocol is the only
-; serial protocol that passes the chip signature bytes directly instead
-; of using a lookup table. However, avrdude uses CMD_SPI_MULTI to get
+; than implementing a random new protocol. STK500v2 is the only serial
+; protocol that passes the chip signature bytes directly instead of
+; using a lookup table. However, avrdude uses CMD_SPI_MULTI to get
 ; these, which is for direct SPI access. We have to catch this and fake
 ; the response. We respond to CMD_SIGN_ON with "AVRISP_2", which keeps
 ; all messages in the same format and with xor-checksums. We could say
@@ -45,6 +46,19 @@
 ; Note that to work with the Turnigy USB linker, the baud rate must be
 ; set to 9600.
 ;
+; There seem to be some bugs in the USB linker implementation. With a gap
+; of 5.35ms - 5.75ms between two test characters, the decision seems to
+; be made that another byte is not ready to fit in time, and a second
+; leader is scheduled to start after the minimum restart gap. However,
+; the second byte seems to make it in the first transmission after all,
+; leaving the second one with an empty body. We will process the packet
+; at the end of receiving it, but we won't reply until there is silence,
+; so this should cause no ill effect. However, with a gap of 5.8ms, the
+; linker holds the line low for the duration of the second byte (1056us),
+; drives high for 34.4us, returns to input mode for 447us, then starts a
+; new leader with an empty body. This is not recoverable and may cause us
+; to exit to the application.
+;--
 ; Registers:
 ; r0: Temporary, spm data (temp5)
 ; r1: Temporary, spm data (temp6)
@@ -182,12 +196,12 @@ boot_reset:	ldi	ZL, high(RAMEND)	; Set up stack
 boot_rx_time:	inc	r21
 		breq	boot_exit		; Exit if too many unsuccessful rx restarts
 		ldi	r20, (1<<TOV2)+(1<<OCF2)
-		out	TCNT2, r16
-		out	TIFR, r20
+		out	TCNT2, r16		; Start TCNT2 at 0
+		out	TIFR, r20		; Clear overflow flags
 boot_rx_time1:	cpi	XL, low(TX_BUFFER)
-		breq	boot_rx_no_tx
+		breq	boot_rx_no_tx		; Skip transmit if TX_BUFFER empty
 		in	r14, TIFR
-		sbrc	r14, TOV2
+		sbrc	r14, TOV2		; Transmit only once timer has wrapped
 		rjmp	boot_tx_bytes
 boot_rx_no_tx:	sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx_time1		; Loop while high, waiting for low edge
@@ -195,7 +209,7 @@ boot_rx_no_tx:	sbic	RCP_PIN, rcp_in
 		out	TIFR, r20
 boot_rx_time2:	in	r14, TIFR
 		sbrc	r14, TOV2
-boot_exit:	rjmp	FLASHEND + 1		; Low too long -- exit boot loader
+boot_exit:	rjmp	FLASHEND + 1		; Low too long, exit boot loader
 		sbis	RCP_PIN, rcp_in		; Loop while low
 		rjmp	boot_rx_time2
 		out	TCNT2, r16
