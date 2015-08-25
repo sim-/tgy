@@ -276,9 +276,9 @@ boot_rx3:	in	r14, TIFR
 		rjmp	boot_rx3
 		clc				; Receiving 0-bit
 boot_rx4:	in	r14, TIFR
-		sbrc	r14, TOV2
-		rjmp	boot_rx_bit		; Timeout, must be 0-bit
 		sbis	RCP_PIN, rcp_in
+		sbrc	r14, TOV2
+		rjmp	boot_rx_bit		; Timeout or high, must be 0-bit
 		rjmp	boot_rx4
 
 boot_tx_bytes:
