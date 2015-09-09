@@ -675,13 +675,6 @@ eeprom_defaults_w:
 		FET_off	CpFET_port, CpFET
 	.endmacro
 
-	.macro ENABLE_A_on
-	.endmacro
-	.macro ENABLE_B_on
-	.endmacro
-	.macro ENABLE_C_on
-	.endmacro
-
 	.macro PWM_FOCUS_A_on
 	.endmacro
 	.macro PWM_FOCUS_A_off
@@ -814,24 +807,6 @@ eeprom_defaults_w:
 	.endmacro
 	.macro CpFET_off
 		cbi	PWM_C_DDR, PWM_C
-	.endmacro
-
-	.macro ENABLE_A_on
-		.if defined(ENABLE_A_PORT)
-		sbi     ENABLE_A_PORT, ENABLE_A
-		.else
-		sbi	ENABLE_ALL_PORT, ENABLE_ALL
-		.endif
-	.endmacro
-	.macro ENABLE_B_on
-		.if defined(ENABLE_B_PORT)
-		sbi     ENABLE_B_PORT, ENABLE_B
-		.endif
-	.endmacro
-	.macro ENABLE_C_on
-		.if defined(ENABLE_C_PORT)
-		sbi     ENABLE_C_PORT, ENABLE_C
-		.endif
 	.endmacro
 
 	.macro PWM_FOCUS_A_on
@@ -3113,9 +3088,19 @@ clear_loop1:	cp	ZL, r0
 		outi	PORTD, INIT_PD, temp1
 		outi	DDRD, DIR_PD, temp1
 
-		ENABLE_A_on
-		ENABLE_B_on
-		ENABLE_C_on
+	; For PWM-enable drivers, set enable after initializing ports
+		.if defined(ENABLE_ALL_PORT)
+		sbi	ENABLE_ALL_PORT, ENABLE_ALL
+		.endif
+		.if defined(ENABLE_A_PORT)
+		sbi     ENABLE_A_PORT, ENABLE_A
+		.endif
+		.if defined(ENABLE_B_PORT)
+		sbi     ENABLE_B_PORT, ENABLE_B
+		.endif
+		.if defined(ENABLE_C_PORT)
+		sbi     ENABLE_C_PORT, ENABLE_C
+		.endif
 
 		.if DEBUG_TX
 		rcall	init_debug_tx
