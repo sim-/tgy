@@ -810,12 +810,7 @@ eeprom_defaults_w:
 	.endmacro
 
 	.macro PWM_FOCUS_A_on
-		.if COMP_PWM && HIGH_SIDE_PWM
-		sbrs	flags1, POWER_ON
-		rjmp	PC + 2
-		AnFET_on
-		ApFET_on
-		.elif COMP_PWM
+		.if COMP_PWM
 		sbrc	flags1, POWER_ON
 		ApFET_on
 		.endif
@@ -827,12 +822,7 @@ eeprom_defaults_w:
 	.endmacro
 
 	.macro PWM_FOCUS_B_on
-		.if COMP_PWM && HIGH_SIDE_PWM
-		sbrs	flags1, POWER_ON
-		rjmp	PC + 2
-		BnFET_on
-		BpFET_on
-		.elif COMP_PWM
+		.if COMP_PWM
 		sbrc	flags1, POWER_ON
 		BpFET_on
 		.endif
@@ -844,12 +834,7 @@ eeprom_defaults_w:
 	.endmacro
 
 	.macro PWM_FOCUS_C_on
-		.if COMP_PWM && HIGH_SIDE_PWM
-		sbrs	flags1, POWER_ON
-		rjmp	PC + 2
-		CnFET_on
-		CpFET_on
-		.elif COMP_PWM
+		.if COMP_PWM
 		sbrc	flags1, POWER_ON
 		CpFET_on
 		.endif
@@ -975,8 +960,8 @@ eeprom_defaults_w:
 ; 1	1	1		: XnFET_off	XnFET_on	PWM_X_PORT
 ;
 ; For the last case, PWM_X_off actually turns low side on which isn't how
-; we want to leave the phase, so we have to also have a PWM_X_clear just
-; for this case.
+; we want to leave the phase after commutating. PWM_X_clear will take care
+; of this.
 
 .macro PWM_A_on
 	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
@@ -987,7 +972,6 @@ eeprom_defaults_w:
 		AnFET_on
 	.endif
 .endmacro
-
 .macro PWM_A_off
 	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
 		AnFET_on
@@ -995,6 +979,24 @@ eeprom_defaults_w:
 		ApFET_off
 	.else
 		AnFET_off
+	.endif
+.endmacro
+.macro PWM_A_clear
+	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
+		AnFET_off
+	.elif HIGH_SIDE_PWM
+		ApFET_off
+	.else
+		AnFET_off
+	.endif
+.endmacro
+.macro PWM_A_copy
+	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
+		AnFET_on
+	.elif HIGH_SIDE_PWM
+		ApFET_on
+	.else
+		AnFET_on
 	.endif
 .endmacro
 
@@ -1007,7 +1009,6 @@ eeprom_defaults_w:
 		BnFET_on
 	.endif
 .endmacro
-
 .macro PWM_B_off
 	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
 		BnFET_on
@@ -1015,6 +1016,24 @@ eeprom_defaults_w:
 		BpFET_off
 	.else
 		BnFET_off
+	.endif
+.endmacro
+.macro PWM_B_clear
+	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
+		BnFET_off
+	.elif HIGH_SIDE_PWM
+		BpFET_off
+	.else
+		BnFET_off
+	.endif
+.endmacro
+.macro PWM_B_copy
+	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
+		BnFET_on
+	.elif HIGH_SIDE_PWM
+		BpFET_on
+	.else
+		BnFET_on
 	.endif
 .endmacro
 
@@ -1027,7 +1046,6 @@ eeprom_defaults_w:
 		CnFET_on
 	.endif
 .endmacro
-
 .macro PWM_C_off
 	.if !defined(CnFET) && COMP_PWM && HIGH_SIDE_PWM
 		CnFET_on
@@ -1037,22 +1055,22 @@ eeprom_defaults_w:
 		CnFET_off
 	.endif
 .endmacro
-
-.macro PWM_A_clear
-	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
-		AnFET_off
-	.endif
-.endmacro
-
-.macro PWM_B_clear
-	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
-		BnFET_off
-	.endif
-.endmacro
-
 .macro PWM_C_clear
 	.if !defined(CnFET) && COMP_PWM && HIGH_SIDE_PWM
 		CnFET_off
+	.elif HIGH_SIDE_PWM
+		CpFET_off
+	.else
+		CnFET_off
+	.endif
+.endmacro
+.macro PWM_C_copy
+	.if !defined(CnFET) && COMP_PWM && HIGH_SIDE_PWM
+		CnFET_on
+	.elif HIGH_SIDE_PWM
+		CpFET_on
+	.else
+		CnFET_on
 	.endif
 .endmacro
 
@@ -3446,11 +3464,10 @@ start_from_running:
 		sbr	flags2, (1<<B_FET)
 		PWM_FOCUS_C_off
 		in	temp1, PWM_C_PORT_in
-		PWM_C_off
-		in	temp2, PWM_C_PORT_in
 		PWM_C_clear
+		in	temp2, PWM_C_PORT_in
 		cpse	temp1, temp2
-		PWM_B_on
+		PWM_B_copy
 		PWM_FOCUS_B_on
 		sei
 .endmacro
@@ -3463,11 +3480,10 @@ start_from_running:
 		sbr	flags2, (1<<C_FET)
 		PWM_FOCUS_B_off
 		in	temp1, PWM_B_PORT_in
-		PWM_B_off
-		in	temp2, PWM_B_PORT_in
 		PWM_B_clear
+		in	temp2, PWM_B_PORT_in
 		cpse	temp1, temp2
-		PWM_C_on
+		PWM_C_copy
 		PWM_FOCUS_C_on
 		sei
 .endmacro
@@ -3496,11 +3512,10 @@ start_from_running:
 		sbr	flags2, (1<<A_FET)
 		PWM_FOCUS_B_off
 		in	temp1, PWM_B_PORT_in
-		PWM_B_off
-		in	temp2, PWM_B_PORT_in
 		PWM_B_clear
+		in	temp2, PWM_B_PORT_in
 		cpse	temp1, temp2
-		PWM_A_on
+		PWM_A_copy
 		PWM_FOCUS_A_on
 		sei
 .endmacro
@@ -3513,11 +3528,10 @@ start_from_running:
 		sbr	flags2, (1<<B_FET)
 		PWM_FOCUS_A_off
 		in	temp1, PWM_A_PORT_in
-		PWM_A_off
-		in	temp2, PWM_A_PORT_in
 		PWM_A_clear
+		in	temp2, PWM_A_PORT_in
 		cpse	temp1, temp2
-		PWM_B_on
+		PWM_B_copy
 		PWM_FOCUS_B_on
 		sei
 .endmacro
@@ -3546,11 +3560,10 @@ start_from_running:
 		sbr	flags2, (1<<C_FET)
 		PWM_FOCUS_A_off
 		in	temp1, PWM_A_PORT_in
-		PWM_A_off
-		in	temp2, PWM_A_PORT_in
 		PWM_A_clear
+		in	temp2, PWM_A_PORT_in
 		cpse	temp1, temp2
-		PWM_C_on
+		PWM_C_copy
 		PWM_FOCUS_C_on
 		sei
 .endmacro
@@ -3563,11 +3576,10 @@ start_from_running:
 		sbr	flags2, (1<<A_FET)
 		PWM_FOCUS_C_off
 		in	temp1, PWM_C_PORT_in
-		PWM_C_off
-		in	temp2, PWM_C_PORT_in
 		PWM_C_clear
+		in	temp2, PWM_C_PORT_in
 		cpse	temp1, temp2
-		PWM_A_on
+		PWM_A_copy
 		PWM_FOCUS_A_on
 		sei
 .endmacro
