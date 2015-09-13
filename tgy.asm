@@ -254,7 +254,7 @@
 .equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
 .equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
 .equ	TIMING_RANGE3	= 0x1000 ; 1024us per commutation
-.equ	TIMING_MAX	= 0x00e0 ; 56us per commutation
+.equ	TIMING_MAX	= 0x0080 ; 32us per commutation (312,500eRPM)
 
 .equ	TIMEOUT_START	= 48000	; Timeout per commutation for ZC during starting
 .if !defined(START_DELAY_US)
@@ -323,6 +323,7 @@
 	.equ	B_FET		= 1	; if set, B FET is being PWMed
 	.equ	C_FET		= 2	; if set, C FET is being PWMed
 	.equ	ALL_FETS	= (1<<A_FET)+(1<<B_FET)+(1<<C_FET)
+	.equ	TIMING_FAST	= 6	; if set, timing fits in 16 bits
 	.equ	SKIP_CPWM	= 7	; if set, skip complementary PWM (for short off period)
 ;.def			= r19
 .def	i_temp1		= r20		; interrupt temporary
@@ -2892,7 +2893,17 @@ update_timing4:	movw	timing_duty_l, XL
 		sts	com_time_l, YL		; Store start of next commutation
 		sts	com_time_h, YH
 		sts	com_time_x, temp7
-		rcall	set_ocr1a_abs		; Set timer for start of next commutation
+
+		cpi	temp2, 0x10		; Will 240 degrees fit in 15 bits?
+		cpc	temp3, ZH
+		brcs	update_timing_fast
+		cbr	flags2, (1<<TIMING_FAST)
+		rcall	set_ocr1a_abs_slow	; Set timer for start of next commutation
+		rjmp	update_timing_out
+update_timing_fast:
+		sbr	flags2, (1<<TIMING_FAST)
+		rcall	set_ocr1a_abs_fast
+update_timing_out:
 
 		sbrc	flags1, EVAL_RC
 		rjmp	evaluate_rc		; Set new duty either way
@@ -3012,10 +3023,21 @@ load_timing:
 		lds	YH, com_time_h
 		lds	temp7, com_time_x
 		ret
-set_timing_degrees:
+;-----bko-----------------------------------------------------------------
+; Set zero-crossing timeout to 240 degrees
+set_ocr1a_zct_slow:
+		rcall	load_timing
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		add	YL, temp1
+		adc	YH, temp2
+		adc	temp7, temp3
+		rjmp	set_ocr1a_abs_slow
+set_timing_degrees_slow:
 		rcall	load_timing
 		rcall	update_timing_add_degrees
-	; Fall through to set_ocr1a_abs
+	; Fall through to set_ocr1a_abs_slow
 ;-----bko-----------------------------------------------------------------
 ; Set OCT1_PENDING until the absolute time specified by YL:YH:temp7 passes.
 ; Returns current TCNT1(L:H:X) value in temp1:temp2:temp3.
@@ -3025,7 +3047,7 @@ set_timing_degrees:
 ; instruction between interrupts, and several other higher-priority
 ; interrupts may (have) come up. So, we must save tcnt1x and TIFR with
 ; interrupts disabled, then do a correction.
-set_ocr1a_abs:
+set_ocr1a_abs_slow:
 		in	temp4, TIMSK
 		mov	temp5, temp4
 		cbr	temp4, (1<<TOIE1)+(1<<OCIE1A)
@@ -3048,9 +3070,55 @@ set_ocr1a_abs:
 		sbc	YH, temp2		; passed -- if so, clear pending flag.
 		sbc	temp7, temp3
 		sts	ocr1ax, temp7
-		brpl	set_ocr1a_abs1		; Skip set if time has passed
+		brpl	set_ocr1a_abs_slow1	; Skip set if time has passed
 		cbr	flags0, (1<<OCT1_PENDING)
-set_ocr1a_abs1:	out	TIMSK, temp5		; Enable TOIE1 and OCIE1A again
+set_ocr1a_abs_slow1:
+		out	TIMSK, temp5		; Enable TOIE1 and OCIE1A again
+		ret
+
+; Variants of the above with a fast path when timing is guaranteed to fit
+; within 15 bits.
+set_ocr1a_zct:
+		sbrs	flags2, TIMING_FAST
+		rjmp	set_ocr1a_zct_slow
+		lds	temp1, timing_l
+		lds	temp2, timing_h
+		lds	YL, com_time_l
+		lds	YH, com_time_h
+		add	YL, temp1
+		adc	YH, temp2
+		add	YL, temp1
+		adc	YH, temp2
+		rjmp	set_ocr1a_abs_fast
+set_timing_degrees:
+		sbrs	flags2, TIMING_FAST
+		rjmp	set_timing_degrees_slow
+		lds	temp1, timing_l
+		lds	temp2, timing_h
+		lds	YL, com_time_l
+		lds	YH, com_time_h
+		mul	temp1, temp4
+		add	YL, temp6
+		adc	YH, ZH
+		mul	temp2, temp4
+		add	YL, temp5
+		adc	YH, temp6
+set_ocr1a_abs_fast:
+		ldi	temp4, (1<<OCF1A)
+		cli
+		out	OCR1AH, YH
+		out	OCR1AL, YL
+		out	TIFR, temp4		; Clear any pending OCF1A interrupt
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		sbr	flags0, (1<<OCT1_PENDING)
+		sts	ocr1ax, ZH
+		sei
+		sub	YL, temp1		; Check that time might have already
+		sbc	YH, temp2		; passed -- if so, clear pending flag.
+		brpl	set_ocr1a_abs_fast1	; Skip set if time has passed
+		cbr	flags0, (1<<OCT1_PENDING)
+set_ocr1a_abs_fast1:
 		ret
 ;-----bko-----------------------------------------------------------------
 ; Set OCT1_PENDING until the relative time specified by YL:YH:temp7 passes.
@@ -3821,14 +3889,7 @@ wait_timeout:
 		cp	XL, XH
 		brcc	wait_timeout1
 		mov	XL, XH			; Clip current distance from crossing
-wait_timeout1:	rcall	load_timing
-		add	YL, temp1
-		adc	YH, temp2
-		adc	temp7, temp3
-		add	YL, temp1
-		adc	YH, temp2
-		adc	temp7, temp3
-		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
+wait_timeout1:	rcall	set_ocr1a_zct		; Set zero-crossing timeout
 		rjmp	wait_for_edge2
 wait_timeout_run:
 		RED_on				; Turn on red LED
@@ -3922,9 +3983,8 @@ wait_for_demag:
 		.endif
 		rjmp	wait_for_demag
 wait_for_edge0:
-		rcall	load_timing
-		mov	XL, temp2		; Copy high and extended byte
-		mov	XH, temp3		; to calculate the ZC check count
+		lds	XL, timing_h		; Copy high and extended byte
+		lds	XH, timing_x		; to calculate the ZC check count
 		lsr	XH			; Quarter to obtain timing / 1024
 		ror	XL
 		lsr	XH
@@ -3950,13 +4010,7 @@ wait_for_edge_below_max:
 wait_for_edge_fast_min:
 		ldi	XL, ZC_CHECK_MIN
 wait_for_edge_fast:
-		add	YL, temp1
-		adc	YH, temp2
-		adc	temp7, temp3
-		add	YL, temp1
-		adc	YH, temp2
-		adc	temp7, temp3
-		rcall	set_ocr1a_abs		; Set zero-crossing timeout to 240 degrees
+		rcall	set_ocr1a_zct		; Set zero-crossing timeout
 
 wait_for_edge1:	mov	XH, XL
 wait_for_edge2:	sbrs	flags0, OCT1_PENDING
