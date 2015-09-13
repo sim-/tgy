@@ -618,7 +618,8 @@ eeprom_defaults_w:
 .endif
 
 .if defined(AnFET)
-; Direct high and low side drive (inverted if INIT_Px is set)
+; Traditional direct high and low side drive, inverted if INIT_Px is set.
+; Dead-time insertion is supported for COMP_PWM.
 
 	.equ CPWM_SOFT = COMP_PWM
 
@@ -676,24 +677,42 @@ eeprom_defaults_w:
 	.endmacro
 
 	.macro PWM_FOCUS_A_on
+		.if COMP_PWM
+		cpse	temp3, temp4
+		PWM_COMP_A_on
+		.endif
 	.endmacro
 	.macro PWM_FOCUS_A_off
 		.if COMP_PWM
+		in	temp3, PWM_COMP_A_PORT_in
 		PWM_COMP_A_off
+		in	temp4, PWM_COMP_A_PORT_in
 		.endif
 	.endmacro
 	.macro PWM_FOCUS_B_on
+		.if COMP_PWM
+		cpse	temp3, temp4
+		PWM_COMP_B_on
+		.endif
 	.endmacro
 	.macro PWM_FOCUS_B_off
 		.if COMP_PWM
+		in	temp3, PWM_COMP_B_PORT_in
 		PWM_COMP_B_off
+		in	temp4, PWM_COMP_B_PORT_in
 		.endif
 	.endmacro
 	.macro PWM_FOCUS_C_on
+		.if COMP_PWM
+		cpse	temp3, temp4
+		PWM_COMP_C_on
+		.endif
 	.endmacro
 	.macro PWM_FOCUS_C_off
 		.if COMP_PWM
+		in	temp3, PWM_COMP_C_PORT_in
 		PWM_COMP_C_off
+		in	temp4, PWM_COMP_C_PORT_in
 		.endif
 	.endmacro
 
@@ -702,11 +721,25 @@ eeprom_defaults_w:
 		.equ	PWM_A_PORT_in = ApFET_port
 		.equ	PWM_B_PORT_in = BpFET_port
 		.equ	PWM_C_PORT_in = CpFET_port
+		.equ	PWM_COMP_A_PORT_in = AnFET_port
+		.equ	PWM_COMP_B_PORT_in = BnFET_port
+		.equ	PWM_COMP_C_PORT_in = CnFET_port
 	.else
 		.equ	PWM_A_PORT_in = AnFET_port
 		.equ	PWM_B_PORT_in = BnFET_port
 		.equ	PWM_C_PORT_in = CnFET_port
+		.equ	PWM_COMP_A_PORT_in = ApFET_port
+		.equ	PWM_COMP_B_PORT_in = BpFET_port
+		.equ	PWM_COMP_C_PORT_in = CpFET_port
 	.endif
+
+	.macro PWM_ALL_off
+		.if HIGH_SIDE_PWM
+		all_pFETs_off @0
+		.else
+		all_nFETs_off @0
+		.endif
+	.endmacro
 
 	.macro all_pFETs_off
 	.if ApFET_port != BpFET_port || ApFET_port != CpFET_port
@@ -757,18 +790,40 @@ eeprom_defaults_w:
 	.endmacro
 
 .elif defined(ENABLE_ALL)
-; Driver with PWM/ENABLE-style logic input, but with off state (or diode
-; emulation mode) when the PWM pin is pulled up rather than driven high.
-; Every FET toggle can be a single I/O instruction with this method,
-; rather than having to select high or low in advance to toggling enable.
+; Three logic level PWM/ENABLE-style driver, with diode emulation mode or
+; off state at the middle level on the PWM pin. This is accomplished by
+; setting a pull-up rather than drive high. With this method, every FET
+; toggle can be a single I/O instruction, rather than having to select
+; high or low in advance to toggling enable. The following macros are used:
+;
+; XnFET_on  -> cbi PWM_X_PORT, PWM_X (drain through ext pull-down)
+; XnFET_off -> sbi PWM_X_PORT, PWM_X (pull-up pin with ext pull-down)
+; XpFET_on  -> sbi PWM_X_DDR, PWM_X (drive-up pin)
+; XpFET_off -> cbi PWM_X_DDR, PWM_X (pull-up pin with ext pull-down)
+;
+; COMP_PWM on these is done in hardware rather than software, so we can
+; just toggle the PORT value after PWM_FOCUS sets DDR (output mode).
+; This results in the following macro arrangement:
+;
+; TRI	CPWM	HIGH_SIDE_PWM	: PWM ON	PWM OFF		PWM_X_PORT_in
+; 0	0	0		: XnFET_on	XnFET_off	XnFET_port
+; 0	0	1		: XpFET_on	XpFET_off	XpFET_port
+; 0	1	0		: XnFET_on	XnFET_off	XnFET_port
+; 0	1	1		: XpFET_on	XpFET_off	XpFET_port
+; 1	0	0		: XnFET_on	XnFET_off	PWM_X_PORT
+; 1	0	1		: XpFET_on	XpFET_off	PWM_X_DDR
+; 1	1	0		: XnFET_on	XnFET_off	PWM_X_PORT
+; 1	1	1		: XnFET_off	XnFET_on	PWM_X_PORT
+;
+; For the last case, PWM_X_off actually turns low side on which isn't how
+; we want to leave the phase after commutating. PWM_X_clear will take care
+; of this.
 ;
 ; We leave ENABLE high once initialized as some drivers will actually
 ; shut down rather than just using the input as a logic gate.
 ;
-; We enforce HIGH_SIDE_PWM as diode emulation mode in these drivers
-; typically allows active freewheeling only in this orientation, and
-; because the bootstrap charge is typically not enough to hold up the
-; high-side gate for the commutation period.
+; We prefer HIGH_SIDE_PWM as diode emulation mode in these drivers
+; typically allows active freewheeling only in this orientation.
 
 	.equ CPWM_SOFT = 0
 
@@ -856,6 +911,10 @@ eeprom_defaults_w:
 		.equ	PWM_C_PORT_in = PWM_C_DDR
 	.endif
 
+	.macro PWM_ALL_off
+		all_nFETs_off @0
+	.endmacro
+
 	.macro all_pFETs_off
 		.if PWM_A_DDR != PWM_B_DDR || PWM_A_DDR != PWM_C_DDR
 			ApFET_off
@@ -937,31 +996,6 @@ eeprom_defaults_w:
 .endif
 
 ;-- PWM macros -----------------------------------------------------------
-;
-; For tristate-PWM-style drivers, the following macros are used:
-;
-; XnFET_on  -> cbi PWM_X_PORT, PWM_X (drain through ext pull-down)
-; XnFET_off -> sbi PWM_X_PORT, PWM_X (pull-up pin with ext pull-down)
-; XpFET_on  -> sbi PWM_X_DDR, PWM_X (drive-up pin)
-; XpFET_off -> cbi PWM_X_DDR, PWM_X (pull-up pin with ext pull-down)
-;
-; COMP_PWM on these is done in hardware rather than software, so we can
-; just toggle the PORT value after PWM_FOCUS sets DDR (output mode).
-; This results in the following macro arrangement:
-;
-; TRI	CPWM	HIGH_SIDE_PWM	: PWM ON	PWM OFF		PWM_X_PORT_in
-; 0	0	0		: XnFET_on	XnFET_off	XnFET_port
-; 0	0	1		: XpFET_on	XpFET_off	XpFET_port
-; 0	1	0		: XnFET_on	XnFET_off	XnFET_port
-; 0	1	1		: XpFET_on	XpFET_off	XpFET_port
-; 1	0	0		: XnFET_on	XnFET_off	PWM_X_PORT
-; 1	0	1		: XpFET_on	XpFET_off	PWM_X_DDR
-; 1	1	0		: XnFET_on	XnFET_off	PWM_X_PORT
-; 1	1	1		: XnFET_off	XnFET_on	PWM_X_PORT
-;
-; For the last case, PWM_X_off actually turns low side on which isn't how
-; we want to leave the phase after commutating. PWM_X_clear will take care
-; of this.
 
 .macro PWM_A_on
 	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
@@ -982,6 +1016,7 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 .macro PWM_A_clear
+		in	temp1, PWM_A_PORT_in
 	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
 		AnFET_off
 	.elif HIGH_SIDE_PWM
@@ -989,8 +1024,10 @@ eeprom_defaults_w:
 	.else
 		AnFET_off
 	.endif
+		in	temp2, PWM_A_PORT_in
 .endmacro
 .macro PWM_A_copy
+		cpse	temp1, temp2
 	.if !defined(AnFET) && COMP_PWM && HIGH_SIDE_PWM
 		AnFET_on
 	.elif HIGH_SIDE_PWM
@@ -1019,6 +1056,7 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 .macro PWM_B_clear
+		in	temp1, PWM_B_PORT_in
 	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
 		BnFET_off
 	.elif HIGH_SIDE_PWM
@@ -1026,8 +1064,10 @@ eeprom_defaults_w:
 	.else
 		BnFET_off
 	.endif
+		in	temp2, PWM_B_PORT_in
 .endmacro
 .macro PWM_B_copy
+		cpse	temp1, temp2
 	.if !defined(BnFET) && COMP_PWM && HIGH_SIDE_PWM
 		BnFET_on
 	.elif HIGH_SIDE_PWM
@@ -1056,6 +1096,7 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 .macro PWM_C_clear
+		in	temp1, PWM_C_PORT_in
 	.if !defined(CnFET) && COMP_PWM && HIGH_SIDE_PWM
 		CnFET_off
 	.elif HIGH_SIDE_PWM
@@ -1063,8 +1104,10 @@ eeprom_defaults_w:
 	.else
 		CnFET_off
 	.endif
+		in	temp2, PWM_C_PORT_in
 .endmacro
 .macro PWM_C_copy
+		cpse	temp1, temp2
 	.if !defined(CnFET) && COMP_PWM && HIGH_SIDE_PWM
 		CnFET_on
 	.elif HIGH_SIDE_PWM
@@ -1073,16 +1116,6 @@ eeprom_defaults_w:
 		CnFET_on
 	.endif
 .endmacro
-
-.if HIGH_SIDE_PWM
-	.macro PWM_ALL_off
-		all_pFETs_off @0
-	.endmacro
-.else
-	.macro PWM_ALL_off
-		all_nFETs_off @0
-	.endmacro
-.endif
 
 ;-- Complementary PWM macros ---------------------------------------------
 
@@ -3463,10 +3496,7 @@ start_from_running:
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<B_FET)
 		PWM_FOCUS_C_off
-		in	temp1, PWM_C_PORT_in
 		PWM_C_clear
-		in	temp2, PWM_C_PORT_in
-		cpse	temp1, temp2
 		PWM_B_copy
 		PWM_FOCUS_B_on
 		sei
@@ -3479,10 +3509,7 @@ start_from_running:
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<C_FET)
 		PWM_FOCUS_B_off
-		in	temp1, PWM_B_PORT_in
 		PWM_B_clear
-		in	temp2, PWM_B_PORT_in
-		cpse	temp1, temp2
 		PWM_C_copy
 		PWM_FOCUS_C_on
 		sei
@@ -3511,10 +3538,7 @@ start_from_running:
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<A_FET)
 		PWM_FOCUS_B_off
-		in	temp1, PWM_B_PORT_in
 		PWM_B_clear
-		in	temp2, PWM_B_PORT_in
-		cpse	temp1, temp2
 		PWM_A_copy
 		PWM_FOCUS_A_on
 		sei
@@ -3527,10 +3551,7 @@ start_from_running:
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<B_FET)
 		PWM_FOCUS_A_off
-		in	temp1, PWM_A_PORT_in
 		PWM_A_clear
-		in	temp2, PWM_A_PORT_in
-		cpse	temp1, temp2
 		PWM_B_copy
 		PWM_FOCUS_B_on
 		sei
@@ -3559,10 +3580,7 @@ start_from_running:
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<C_FET)
 		PWM_FOCUS_A_off
-		in	temp1, PWM_A_PORT_in
 		PWM_A_clear
-		in	temp2, PWM_A_PORT_in
-		cpse	temp1, temp2
 		PWM_C_copy
 		PWM_FOCUS_C_on
 		sei
@@ -3575,10 +3593,7 @@ start_from_running:
 		cbr	flags2, ALL_FETS
 		sbr	flags2, (1<<A_FET)
 		PWM_FOCUS_C_off
-		in	temp1, PWM_C_PORT_in
 		PWM_C_clear
-		in	temp2, PWM_C_PORT_in
-		cpse	temp1, temp2
 		PWM_A_copy
 		PWM_FOCUS_A_on
 		sei
@@ -3710,9 +3725,16 @@ start_fail_beep:
 demag_timeout:
 		ldi	ZL, low(pwm_wdr)	; Stop PWM switching
 		; Interrupts will not turn on any FETs now
-		.if COMP_PWM
+		.if COMP_PWM && CPWM_SOFT
 		; Turn off complementary PWM if it was on,
 		; but leave on the high side commutation FET.
+		sbrc	flags2, A_FET
+		PWM_COMP_A_off
+		sbrc	flags2, B_FET
+		PWM_COMP_B_off
+		sbrc	flags2, C_FET
+		PWM_COMP_C_off
+		.elif COMP_PWM && !CPWM_SOFT
 		sbrc	flags2, A_FET
 		PWM_FOCUS_A_off
 		sbrc	flags2, B_FET
