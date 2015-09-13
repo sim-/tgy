@@ -1757,39 +1757,47 @@ urxc_exit:	out	SREG, i_sreg
 beep_f1:	ldi	temp2, 80
 		ldi	temp4, 200
 		RED_on
+		BLUE_on
 beep_f1_on:	BpFET_on
 		AnFET_on
 		rcall	beep
 		brne	beep_f1_on
+		BLUE_off
 		RED_off
 		ret
 
 beep_f2:	ldi	temp2, 100
 		ldi	temp4, 180
 		GRN_on
+		BLUE_on
 beep_f2_on:	CpFET_on
 		BnFET_on
 		rcall	beep
 		brne	beep_f2_on
+		BLUE_off
 		GRN_off
 		ret
 
 beep_f3:	ldi	temp2, 120
 		ldi	temp4, 160
+		BLUE_on
 beep_f3_on:	ApFET_on
 		CnFET_on
 		rcall	beep
 		brne	beep_f3_on
+		BLUE_off
 		ret
 
 beep_f4:	ldi	temp2, 140
 beep_f4_freq:	ldi	temp4, 140
 beep_f4_fets:	RED_on
 		GRN_on
+		BLUE_on
 beep_f4_on:	CpFET_on
 		AnFET_on
 		rcall	beep
 		brne	beep_f4_on
+		BLUE_off
 		GRN_off
 		RED_off
 		ret
@@ -2131,6 +2139,10 @@ hw_error1:
 		RED_on
 		rcall	wait120ms
 		RED_off
+		.elif defined(blue_led)
+		BLUE_on
+		rcall	wait120ms
+		BLUE_off
 		.elif defined(green_led)
 		GRN_on
 		rcall	wait120ms
@@ -3294,6 +3306,7 @@ cell_blipper1:
 
 control_disarm:
 	; LEDs off while disarmed
+		BLUE_off
 		GRN_off
 		RED_off
 
@@ -3397,6 +3410,7 @@ restart_control:
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
 		GRN_on				; Green on while armed and idle or braking
 		RED_off
+		BLUE_off
 wait_for_power_on_init:
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
@@ -3473,6 +3487,7 @@ start_from_running:
 		comp_init temp1			; init comparator
 		RED_off
 		GRN_off
+		BLUE_on
 
 		ldi2	YL, YH, PWR_MIN_START	; Start with limited power to reduce the chance that we
 		movw	sys_control_l, YL	; align to a timing harmonic
