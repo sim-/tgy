@@ -187,6 +187,7 @@
 .equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
+.equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
 .if !defined(CHECK_HARDWARE)
 .equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
 .endif
@@ -351,6 +352,7 @@ tcnt1x:		.byte	1	; 3rd byte of TCNT1
 pwm_on_ptr:	.byte	1	; Next PWM ON vector
 rct_boot:	.byte	1	; Counter which increments while rc_timeout is 0 to jump to boot loader
 rct_beacon:	.byte	1	; Counter which increments while rc_timeout is 0 to disarm and beep occasionally
+idle_beacon:	.byte	1	; Counter which increments while armed and idle to beep occasionally
 last_tcnt1_l:	.byte	1	; last timer1 value
 last_tcnt1_h:	.byte	1
 last_tcnt1_x:	.byte	1
@@ -1537,6 +1539,13 @@ t1ovfl_int:	in	i_sreg, SREG
 		lds	i_temp1, tcnt1x
 		inc	i_temp1
 		sts	tcnt1x, i_temp1
+		.if BEACON_IDLE
+		brne	t1ovfl_int0
+		lds	i_temp2, idle_beacon
+		inc	i_temp2
+		sts	idle_beacon, i_temp2
+t1ovfl_int0:
+		.endif
 		andi	i_temp1, 15			; Every 16 overflows
 		brne	t1ovfl_int1
 		tst	rc_timeout
@@ -3408,6 +3417,9 @@ i_rc_puls3:
 restart_control:
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
+		.if BEACON_IDLE
+		sts	idle_beacon, ZH
+		.endif
 		GRN_on				; Green on while armed and idle or braking
 		RED_off
 		BLUE_off
@@ -3454,6 +3466,17 @@ wait_for_power_on:
 		.if BEEP_RCP_ERROR
 		sbrc	flags0, RCP_ERROR	; Check if we've seen bad PWM edges
 		rcall	rcp_error_beep
+		.endif
+		.if BEACON_IDLE
+		lds	temp1, idle_beacon
+		cpi	temp1, 240		; Beep after ~4 minutes
+		brcs	no_idle_beep
+		ldi	temp1, 238
+		sts	idle_beacon, temp1
+		rcall	switch_power_off	; Brake may have been on
+		rcall	wait30ms
+		rcall	beep_f4
+no_idle_beep:
 		.endif
 		tst	rc_timeout
 		brne	wait_for_power_on	; Tight loop unless rc_timeout is zero
