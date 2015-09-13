@@ -69,12 +69,3 @@
 .equ	DIR_PB		= (1<<CnFET)
 
 .equ	CnFET_port	= PORTB
-
-.MACRO RED_on
-.ENDMACRO
-.MACRO RED_off
-.ENDMACRO
-.MACRO GRN_on
-.ENDMACRO
-.MACRO GRN_off
-.ENDMACRO

@@ -69,12 +69,3 @@
 .equ	AnFET_port	= PORTB
 .equ	BnFET_port	= PORTB
 .equ	CnFET_port	= PORTB
-
-.MACRO RED_on
-.ENDMACRO
-.MACRO RED_off
-.ENDMACRO
-.MACRO GRN_on
-.ENDMACRO
-.MACRO GRN_off
-.ENDMACRO

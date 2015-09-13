@@ -52,28 +52,28 @@
 ;*********************
 ; PORT D definitions *
 ;*********************
-.equ	WarnLED		= 2
+.equ	red_led		= 2
 .equ	AnFET		= 3
 .equ	BnFET		= 4
 .equ	CnFET		= 5
-.equ	StatLED		= 7
+.equ	green_led	= 7
 
 .equ	INIT_PD		= 0
-.equ	DIR_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<WarnLED)+(1<<StatLED)
+.equ	DIR_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<red_led)+(1<<green_led)
 
 .equ	AnFET_port	= PORTD
 .equ	BnFET_port	= PORTD
 .equ	CnFET_port	= PORTD
 
 .MACRO RED_on
-	sbi	PORTD, WarnLED
+	sbi	PORTD, red_led
 .ENDMACRO
 .MACRO RED_off
-	cbi	PORTD, WarnLED
+	cbi	PORTD, red_led
 .ENDMACRO
 .MACRO GRN_on
-	cbi	PORTD, StatLED
+	cbi	PORTD, green_led
 .ENDMACRO
 .MACRO GRN_off
-	sbi	PORTD, StatLED
+	sbi	PORTD, green_led
 .ENDMACRO

@@ -38,10 +38,6 @@
 .MACRO RED_off
 	cbi	DDRC, red_led
 .ENDMACRO
-.MACRO GRN_on
-.ENDMACRO
-.MACRO GRN_off
-.ENDMACRO
 
 ;*********************
 ; PORT C definitions *

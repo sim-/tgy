@@ -65,12 +65,3 @@
 .equ	DIR_PB		= (1<<AnFET)
 
 .equ	AnFET_port	= PORTB
-
-.MACRO RED_on
-.ENDMACRO
-.MACRO RED_off
-.ENDMACRO
-.MACRO GRN_on
-.ENDMACRO
-.MACRO GRN_off
-.ENDMACRO

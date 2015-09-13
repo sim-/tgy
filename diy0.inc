@@ -13,7 +13,7 @@
 ; PORT D definitions *
 ;*********************
 .equ	red_led		= 7
-.equ	blue_led	= 5
+.equ	green_led	= 5
 .equ	ApFET		= 4
 .equ	io1		= 3
 .equ	io2		= 2
@@ -32,10 +32,10 @@
 	cbi	DDRD, red_led
 .ENDMACRO
 .MACRO GRN_on
-	sbi	DDRD, blue_led
+	sbi	DDRD, green_led
 .ENDMACRO
 .MACRO GRN_off
-	cbi	DDRD, blue_led
+	cbi	DDRD, green_led
 .ENDMACRO
 
 ;*********************

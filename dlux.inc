@@ -28,15 +28,6 @@
 .equ	AnFET_port	= PORTD
 .equ	ApFET_port	= PORTD
 
-.MACRO RED_on
-.ENDMACRO
-.MACRO RED_off
-.ENDMACRO
-.MACRO GRN_on
-.ENDMACRO
-.MACRO GRN_off
-.ENDMACRO
-
 ;*********************
 ; PORT C definitions *
 ;*********************

@@ -38,7 +38,7 @@
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
 .equ	ApFET		= 3	; o
-.equ	StatLED		= 2	; o
+.equ	green_led	= 2	; o
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
 
@@ -46,7 +46,7 @@
 .equ	O_GROUND	= 1
 
 .equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
-.equ	DIR_PC		= (1<<ApFET)+(1<<StatLED)
+.equ	DIR_PC		= (1<<ApFET)+(1<<green_led)
 
 .equ	ApFET_port	= PORTC
 
@@ -58,26 +58,26 @@
 .equ	CnFET		= 5
 .equ	BnFET		= 4
 .equ	AnFET		= 3
-.equ	WarnLED		= 2
+.equ	red_led		= 2
 ;.equ			= 1
 ;.equ			= 0 USART_RX
 
 .equ	INIT_PD		= 0
-.equ	DIR_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<WarnLED)
+.equ	DIR_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<red_led)
 
 .equ	AnFET_port	= PORTD
 .equ	BnFET_port	= PORTD
 .equ	CnFET_port	= PORTD
 
 .MACRO RED_on
-	sbi	PORTD, WarnLED
+	sbi	PORTD, red_led
 .ENDMACRO
 .MACRO RED_off
-	cbi	PORTD, WarnLED
+	cbi	PORTD, red_led
 .ENDMACRO
 .MACRO GRN_on
-	sbi	PORTC, StatLED
+	sbi	PORTC, green_led
 .ENDMACRO
 .MACRO GRN_off
-	cbi	PORTC, StatLED
+	cbi	PORTC, green_led
 .ENDMACRO

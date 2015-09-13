@@ -71,12 +71,3 @@
 .equ	CnFET_port	= PORTD
 .equ	CpFET_port	= PORTD
 .equ	BnFET_port	= PORTD
-
-.MACRO RED_on
-.ENDMACRO
-.MACRO RED_off
-.ENDMACRO
-.MACRO GRN_on
-.ENDMACRO
-.MACRO GRN_off
-.ENDMACRO
