@@ -198,7 +198,12 @@
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
 
-.equ	I2C_ADDR	= 0x50	; MK-style I2C address
+; I2C How-To: Send bytes directly to the I2C Addr, no control registers are used.
+; Will timeout unless something is sent every ~100ms/10Hz or so
+; Arm motors first by sending 10 * 0x00 bytes
+; Then control motor speed by sending a byte from 0x01 to 0xF7
+
+.equ	I2C_ADDR	= 0x28	; MK-style I2C address
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
 
 .equ	RCP_TOT		= 2	; Number of 65536us periods before considering rc pulse lost
@@ -3193,7 +3198,7 @@ boot_loader_jump:
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
 i2c_init:
-		ldi	temp1, I2C_ADDR + (MOTOR_ID << 1)
+		ldi	temp1, (I2C_ADDR + MOTOR_ID) << 1
 		.if defined(MK_ADDRESS_PADS)
 		sbis	PINB, adr1		; Offset MOTOR_ID by address pads
 		subi	temp1, -1
