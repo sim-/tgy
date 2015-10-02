@@ -1,8 +1,9 @@
-;********************************************
-;* Red Brick 70A with all FETs on PORTD     *
-;* Also Red Brick 200A black (RB200A-BTO)   *
-;* Original fuses are lfuse:0x3f hfuse:0xc1 *
-;********************************************
+;*****************************************************
+;* Red Brick 70A with all FETs on PORTD              *
+;* Also Red Brick 200A black (RB200A-BTO)            *
+;* Original fuses are lfuse:0x3f hfuse:0xc1          *
+;* If your pcb is blue, you probably need rb70a2.inc *
+;*****************************************************
 
 .equ	F_CPU		= 16000000
 .equ	USE_INT0	= 1
