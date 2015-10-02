@@ -3506,14 +3506,14 @@ wait_for_power_on_init:
 
 		cpi	temp3, 1		; Neutral brake
 		brne	set_brake1
-		ldi	YL, 1 << BRAKE_SPEED
+		ldi	YL, 1 << low(BRAKE_SPEED)
 		sts	brake_sub, YL
 		ldi2	YL, YH, BRAKE_POWER
 		rjmp	set_brake_duty
 
 set_brake1:	cpi	temp3, 2		; Thumb brake
 		brne	wait_for_power_on
-		ldi	YL, 1 << LOW_BRAKE_SPEED
+		ldi	YL, 1 << low(LOW_BRAKE_SPEED)
 		sts	brake_sub, YL
 		ldi2	YL, YH, LOW_BRAKE_POWER
 
