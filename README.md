@@ -1,5 +1,7 @@
 https://github.com/sim-/tgy
 
+**Binary Downloads**: http://0x.ca/tgy/downloads/
+
 This tree contains Atmel AVR assembly code for ATmega-based 3-phase
 sensor-less motor electronic speed control (ESC) boards, originally for
 Turnigy and similar models. This work is based on Bernhard Konze's
