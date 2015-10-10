@@ -130,6 +130,8 @@
 #include "rb50a.inc"		; Red Brick 50A with all nFETs (INT0 PWM)
 #elif defined(rb70a_esc)
 #include "rb70a.inc"		; Red Brick 70A with all nFETs (INT0 PWM)
+#elif defined(rb70a2_esc)
+#include "rb70a2.inc"		; Newer Red Brick 70A with blue pcb and all nFETs (INT0 PWM)
 #elif defined(rct50a_esc)
 #include "rct50a.inc"		; RCTimer 50A (MLF version) with all nFETs (INT0 PWM)
 #elif defined(tbs_esc)
