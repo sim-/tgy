@@ -164,6 +164,18 @@
 .equ	BOOT_JUMP	= 1	; Jump to any boot loader when PWM input stays high
 .equ	BOOT_START	= THIRDBOOTSTART
 
+.if !defined(USE_SLEEP)
+.equ	USE_SLEEP	= 0
+.endif
+.if USE_SLEEP
+	.if defined(HK_PROGRAM_CARD) || USE_UART
+	.error "can not use a deep sleep mode with UART activity"
+	.endif
+.equ	SLEEP_FLAG	= (1<<SE)
+.else
+.equ	SLEEP_FLAG	= 0
+.endif
+
 .if !defined(COMP_PWM)
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
 .endif
@@ -397,6 +409,10 @@ motor_count:	.byte	1	; Motor number for serial control
 brake_sub:	.byte	1	; Brake speed subtrahend (power of two)
 brake_want:	.byte	1	; Type of brake desired
 brake_active:	.byte	1	; Type of brake active
+.if USE_SLEEP > 1
+adc_4096us:	.byte	1	; the simulator of 4096us timer interrupt while idle...
+.equ adc_4096us_top = CPU_MHZ*4096/25/128
+.endif
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -463,7 +479,11 @@ eeprom_end:	.byte	1
 		rjmp urxc_int	; urxc
 		reti		; udre
 		reti		; utxc
+.if USE_SLEEP > 1
+		rjmp adc_int	; adc_int
+.else
 		reti		; adc_int
+.endif
 		reti		; eep_int
 		reti		; aci_int
 		rjmp i2c_int	; twi_int
@@ -1228,20 +1248,28 @@ eeprom_defaults_w:
 .endmacro
 .if USE_INT0 == 1
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01)+(1<<ISC00)
+		in	@0, MCUCR
+		andi	@0, ~((1<<ISC01)|(1<<ISC00))
+		ori	@0, (1<<ISC01)+(1<<ISC00)+SLEEP_FLAG
 		out	MCUCR, @0	; set next int0 to rising edge
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01)
+		in	@0, MCUCR
+		andi	@0, ~((1<<ISC01)|(1<<ISC00))
+		ori	@0, (1<<ISC01)+SLEEP_FLAG
 		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
 .elif USE_INT0 == 2
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01)
+		in	@0, MCUCR
+		andi	@0, ~((1<<ISC01)|(1<<ISC00))
+		ori	@0, (1<<ISC01)+SLEEP_FLAG
 		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01)+(1<<ISC00)
+		in	@0, MCUCR
+		andi	@0, ~((1<<ISC01)|(1<<ISC00))
+		ori	@0, (1<<ISC01)+(1<<ISC00)+SLEEP_FLAG
 		out	MCUCR, @0	; set next int0 to rising edge
 .endmacro
 .endif
@@ -1539,6 +1567,7 @@ t1oca_int1:	sts	ocr1ax, i_temp1
 ;-----bko-----------------------------------------------------------------
 ; timer1 overflow interrupt (happens every 4096µs)
 t1ovfl_int:	in	i_sreg, SREG
+t1ovfl_int_nosreg:
 		lds	i_temp1, tcnt1x
 		inc	i_temp1
 		sts	tcnt1x, i_temp1
@@ -3220,6 +3249,128 @@ rcp_error_beep_more:
 		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
 		rjmp	beep_f4_freq
 .endif
+
+;-----bko-----------------------------------------------------------------
+.if USE_SLEEP > 1
+; adc interrupt is only used with sleep mode
+.macro adc_restart_long
+		out	ADCSRA, Zh
+		ldi	@0, (1<<ADEN) | (1<<ADSC) | (1<<ADIF) | (1<<ADIE) | (7<<ADPS0)
+		out	ADCSRA, @0
+.endmacro
+
+adc_int:
+		in	i_sreg, SREG
+	; restart ADC with a long transfer
+		adc_restart_long i_temp1
+	; simulate 4096us counter from timer1
+		lds	i_temp1, adc_4096us
+		dec	i_temp1
+		brne	adc_int_ret
+	; reset loop counter
+		ldi	i_temp1, adc_4096us_top
+		sts	adc_4096us, i_temp1
+	; call the T1 overflow routine (but without the sreg portion)
+		rjmp	t1ovfl_int_nosreg
+adc_int_ret:
+		sts	adc_4096us, i_temp1
+		out	SREG, i_sreg
+		reti
+
+; set the low power mode including Sleep mode ADC
+; note that we do not need to disable timers themselves
+; at least on the ATMega8 it does not make a difference
+; the settings changed are the experimental minimum
+; (that was measured on a board using tgy.inc)
+; some boards may also benefit by rearranging the FET in
+; a low current consumption setup - to be investigated
+set_low_power:
+		cli
+
+	; disable Analog Comparator and MUX (reference)
+		sbi     ACSR, ACD
+		out	ADMUX, Zh
+
+	; set sleep mode adc disabling INTX (if set)
+                ldi     temp1, (1<<SE) | (1<<SM0)
+                out     MCUCR,  temp1
+
+	; disable interrupts
+		rcp_int_disable temp1
+		in	temp1, TIFR
+		out	TIFR, temp1
+		in	temp1, GIFR
+		out	GIFR, temp1
+
+	;  enable adc as replacement for TIMER2
+		adc_restart_long i_temp1
+
+		reti
+.endif
+.if USE_SLEEP
+
+; set the normal power mode including Sleep mode idle
+set_normal_power:
+		cli
+
+	; disable ADC
+		out	ADCSRA, Zh
+	; enable AC
+		cbi     ACSR, ACD
+
+	; set sleep mode as idle only
+                ldi     temp1, (1<<SE)
+                out     MCUCR,  temp1
+
+	; enable idle sleep mode with corresponding INT edges for rising
+		rcp_int_rising_edge temp1
+		rcp_int_enable temp1
+
+		reti
+
+sleep_loop:
+		cli
+		wdr
+	; return early sleep if EVAL_RC is set already (I2C)
+		sbrc    flags1, EVAL_RC
+		reti
+.if USE_SLEEP > 1
+	; get the sleep mode
+		in	temp1, MCUCR
+		andi	temp1, (7<<SM0)
+	; if we are a deeper sleep mode, then erase the INT flags
+		breq	sleep_loop_idle
+
+sleep_loop_deep:
+	; clear the INT0/1 bits and set the sleep mode
+		ori	temp1, (1<<SE)
+		out	MCUCR, temp1
+
+	; do the real sleep
+		sei
+		sleep
+		wdr
+
+	; now check if we need to change to idle sleep
+		.if USE_INT0 == 1
+                sbic    PIND, 2
+		.elseif USE_INT0 == 2
+                sbis    PIND, 2
+		.elsif USE_ICP
+		sbic	PINB, 0
+		.endif
+		rcall	set_normal_power
+
+		ret
+.endif
+sleep_loop_idle:
+		sei
+		sleep
+		wdr
+		ret
+
+.endif
+
 ;-----bko-----------------------------------------------------------------
 main:
 		clr	r0
@@ -3431,12 +3582,27 @@ control_disarm:
 		.endif
 
 	; Wait for one of the input sources to give arming input
+	; with te distinct sleep options
+
+i_rc_puls1_sleep_deep:
+.if USE_SLEEP > 1
+	rcall	set_low_power
+	rjmp	i_rc_puls1
+.endif
+
+i_rc_puls1_sleep_light:
+.if USE_SLEEP > 1
+	rcall	set_normal_power
+.endif
 
 i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
 i_rc_puls2:	wdr
+		.if USE_SLEEP
+		rcall	sleep_loop
+		.endif
 		.if defined(HK_PROGRAM_CARD)
 		.endif
 		sbrc	flags1, EVAL_RC
@@ -3444,20 +3610,23 @@ i_rc_puls2:	wdr
 		.if BOOT_JUMP
 		rcall	boot_loader_test
 		.endif
-		.if BEACON
+	; fall back to deeper sleeps and beep if necessary after a short period
+		.if BEACON || (USE_SLEEP > 1)
 		lds	temp1, rct_beacon
 		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
 		brne	i_rc_puls2
 		ldi	temp1, 60
 		sts	rct_beacon, temp1	; Double rate after the first beep
+		.if BEACON
 		rcall	beep_f3			; Beacon
 		.endif
-		rjmp	i_rc_puls2
+		.endif
+		rjmp	i_rc_puls1_sleep_deep
 i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
-		brne	i_rc_puls1
+		brne	i_rc_puls1_sleep_light
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
 		brlo	i_rc_puls2
