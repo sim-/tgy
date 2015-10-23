@@ -3328,28 +3328,26 @@ set_normal_power:
 
 		reti
 
-sleep_loop:
+	; the sleep implementation used when unarmed
+deep_sleep:
+.if USE_SLEEP > 1
 		cli
 		wdr
 	; return early sleep if EVAL_RC is set already (I2C)
 		sbrc    flags1, EVAL_RC
 		reti
-.if USE_SLEEP > 1
 	; get the sleep mode
 		in	temp1, MCUCR
 		andi	temp1, (7<<SM0)
-	; if we are a deeper sleep mode, then erase the INT flags
-		breq	sleep_loop_idle
+	; if in idle mode then do the simple thing
+		breq	do_sleep
 
-sleep_loop_deep:
 	; clear the INT0/1 bits and set the sleep mode
 		ori	temp1, (1<<SE)
 		out	MCUCR, temp1
 
-	; do the real sleep
-		sei
-		sleep
-		wdr
+	; do the real sleep - just calling the idle case, but with a deeper sleep mode
+		rcall	do_sleep
 
 	; now check if we need to change to idle sleep
 		.if USE_INT0 == 1
@@ -3363,12 +3361,16 @@ sleep_loop_deep:
 
 		ret
 .endif
-sleep_loop_idle:
+	; the sleep implementation used when armed (or when USE_SLEEP = 1)
+idle_sleep:
+		cli
+		sbrc	flags1, EVAL_RC
+		reti
+do_sleep:
 		sei
 		sleep
 		wdr
 		ret
-
 .endif
 
 ;-----bko-----------------------------------------------------------------
@@ -3601,7 +3603,7 @@ i_rc_puls1:	clr	rc_timeout
 		sts	rct_beacon, ZH
 i_rc_puls2:	wdr
 		.if USE_SLEEP
-		rcall	sleep_loop
+		rcall	deep_sleep
 		.endif
 		.if defined(HK_PROGRAM_CARD)
 		.endif
@@ -3699,6 +3701,9 @@ set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 		.endif
 
 wait_for_power_on:
+		.if USE_SLEEP
+		rcall	idle_sleep
+		.endif
 		wdr
 		sbrc	flags1, EVAL_RC
 		rjmp	wait_for_power_rx
