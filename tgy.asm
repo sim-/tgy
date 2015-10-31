@@ -188,8 +188,12 @@
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
 .equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
+.if !defined(BEACON)
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
+.endif
+.if !defined(BEACON_IDLE)
 .equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
+.endif
 .if !defined(CHECK_HARDWARE)
 .equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
 .endif
@@ -199,6 +203,16 @@
 .equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
+
+; power saving when the motor is not running
+.if !defined(USE_SLEEP)
+.equ USE_SLEEP		= 0	; Sleep level to support (0 = none, 1 = idle)
+.endif
+.if USE_SLEEP
+.equ SLEEP_FLAGS	= (1<<SE) ; bitmask to set when setting MCUCR
+.else
+.equ SLEEP_FLAGS	= 0	; bitmask to set when setting MCUCR
+.endif
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
@@ -1228,20 +1242,20 @@ eeprom_defaults_w:
 .endmacro
 .if USE_INT0 == 1
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01)+(1<<ISC00)
+		ldi	@0, (1<<ISC01) + (1<<ISC00) + SLEEP_FLAGS
 		out	MCUCR, @0	; set next int0 to rising edge
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01)
+		ldi	@0, (1<<ISC01) + SLEEP_FLAGS
 		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
 .elif USE_INT0 == 2
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01)
+		ldi	@0, (1<<ISC01) + SLEEP_FLAGS
 		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01)+(1<<ISC00)
+		ldi	@0, (1<<ISC01) + (1<<ISC00) + SLEEP_FLAGS
 		out	MCUCR, @0	; set next int0 to rising edge
 .endmacro
 .endif
@@ -3221,6 +3235,35 @@ rcp_error_beep_more:
 		rjmp	beep_f4_freq
 .endif
 ;-----bko-----------------------------------------------------------------
+.if USE_SLEEP
+
+.macro sleep_enable
+		in	@0, MCUCR
+		cbr	@0, (1<<SM2) | (1<<SM1) | (1<<SM0)
+		sbr     @0, (1<<SE) | (@1<<SM0)
+		out     MCUCR,  temp1
+.endmacro
+
+sleep_set_idle:
+	; enable sleep mode
+		sleep_enable temp1, 0
+
+		ret
+
+sleep_idle:
+	; atomically check if we should sleep
+		cli
+		sbrc	flags1, EVAL_RC
+		reti
+	; no condition, so let us sleep
+		sei
+		sleep
+	; and reset wdt
+		wdr
+
+		ret
+.endif
+;-----bko-----------------------------------------------------------------
 main:
 		clr	r0
 		out	SREG, r0		; Clear interrupts and flags
@@ -3430,13 +3473,21 @@ control_disarm:
 		rcp_int_enable temp1
 		.endif
 
-	; Wait for one of the input sources to give arming input
 
+	; set up idle sleep mode
+.if USE_SLEEP
+		rcall	sleep_set_idle
+.endif
+
+	; Wait for one of the input sources to give arming input
 i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
 i_rc_puls2:	wdr
+		.if USE_SLEEP
+		rcall	sleep_idle
+		.endif
 		.if defined(HK_PROGRAM_CARD)
 		.endif
 		sbrc	flags1, EVAL_RC
@@ -3531,6 +3582,9 @@ set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 
 wait_for_power_on:
 		wdr
+		.if USE_SLEEP
+		rcall	sleep_idle
+		.endif
 		sbrc	flags1, EVAL_RC
 		rjmp	wait_for_power_rx
 		.if BEEP_RCP_ERROR
