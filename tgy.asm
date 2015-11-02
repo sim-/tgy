@@ -1213,6 +1213,18 @@ eeprom_defaults_w:
 
 ;-- RC pulse setup and edge handling macros ------------------------------
 
+.macro int0_set_rising_edge
+               in      @0, MCUCR
+               sbr     @0, (1<<ISC01) + (1<<ISC00) + SLEEP_FLAGS
+               out     MCUCR, @0
+.endmacro
+.macro int0_set_falling_edge
+               in      @0, MCUCR
+               cbr     @0, (1<<ISC00)
+               sbr     @0, (1<<ISC01) + SLEEP_FLAGS
+               out     MCUCR, @0
+.endmacro
+
 .if USE_ICP
 .macro rcp_int_enable
 		in	@0, TIMSK
@@ -1242,21 +1254,17 @@ eeprom_defaults_w:
 .endmacro
 .if USE_INT0 == 1
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01) + (1<<ISC00) + SLEEP_FLAGS
-		out	MCUCR, @0	; set next int0 to rising edge
+		int0_set_rising_edge @0
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01) + SLEEP_FLAGS
-		out	MCUCR, @0	; set next int0 to falling edge
+		int0_set_falling_edge @0
 .endmacro
 .elif USE_INT0 == 2
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01) + SLEEP_FLAGS
-		out	MCUCR, @0	; set next int0 to falling edge
+		int0_set_falling_edge @0
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01) + (1<<ISC00) + SLEEP_FLAGS
-		out	MCUCR, @0	; set next int0 to rising edge
+		int0_set_rising_edge @0
 .endmacro
 .endif
 .endif
