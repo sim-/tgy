@@ -204,6 +204,10 @@
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
 
+.if !defined(USE_LED_PWM)
+.equ USE_LED_PWM	= 0	; set to 1/2/3 to set PWM fequency and brightness - 3 flashes already!
+.endif
+
 ; power saving when the motor is not running
 .if !defined(USE_SLEEP)
 .equ USE_SLEEP		= 0	; Sleep level to support (0 = none, 1 = idle, 2=adc)
@@ -3757,6 +3761,17 @@ set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 
 wait_for_power_on:
 		wdr
+	; GREEN-led PWM based on T1 overflow to save some power
+		.if USE_LED_PWM && defined(green_led)
+		lds	temp3, tcnt1x
+		andi	temp3, (1<<USE_LED_PWM)-1
+		brne	wait_for_power_blink_green_skip_on
+		GRN_on
+		rjmp	wait_for_power_blink_green_skip_off
+wait_for_power_blink_green_skip_on:
+		GRN_off
+wait_for_power_blink_green_skip_off:
+		.endif
 		.if USE_SLEEP
 		rcall	sleep_idle
 		.endif
