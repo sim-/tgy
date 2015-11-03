@@ -206,12 +206,34 @@
 
 ; power saving when the motor is not running
 .if !defined(USE_SLEEP)
-.equ USE_SLEEP		= 0	; Sleep level to support (0 = none, 1 = idle)
+.equ USE_SLEEP		= 0	; Sleep level to support (0 = none, 1 = idle, 2=adc)
 .endif
-.if USE_SLEEP
-.equ SLEEP_FLAGS	= (1<<SE) ; bitmask to set when setting MCUCR
-.else
-.equ SLEEP_FLAGS	= 0	; bitmask to set when setting MCUCR
+
+.if (USE_SLEEP > 1)
+  .if defined(HK_PROGRAM_CARD) || USE_UART
+.warning "There are some restrictions when using deeper sleep and UART"
+; note: the implementation for wakeup from sleep requires that
+;	the UART-RX line goes low for at least 0.2ms
+;	this comes "out of the box" as the UART-protocol needs to send:
+;		0xf5 0x00 (n times - depending on motor count)
+;	more than 10 times for the system to move into "armed" mode
+;	and sending 0x00 at 38400Baud takes the line down for 0.23ms
+; set sampling to 1ms effectively for long conversions
+; this is a bit more expensive power wise due to twice/four times
+; the number of	interrupts compared to full idle
+    .if F_CPU >= 16
+.equ	ADC_IDLE_CLOCK_DIV	= 64
+.equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS1)
+    .else
+.equ	ADC_IDLE_CLOCK_DIV	= 32
+.equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS0)
+    .endif
+  .else
+; slowest sensible clock to minimize wakeups from sleep
+.equ	ADC_IDLE_CLOCK_DIV	= 128
+.equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0)
+  .endif
+.equ	ADC_SLEEP_COUNTER_TOP	= CPU_MHZ * 4096 / 25 / ADC_IDLE_CLOCK_DIV
 .endif
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
@@ -406,6 +428,9 @@ low_brake_h:	.byte	1
 i2c_max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
 i2c_rx_state:	.byte	1
 i2c_blc_offset:	.byte	1
+.endif
+.if USE_SLEEP > 1
+adc_timer_counter:	.byte	1 ; counter
 .endif
 motor_count:	.byte	1	; Motor number for serial control
 brake_sub:	.byte	1	; Brake speed subtrahend (power of two)
@@ -1215,13 +1240,13 @@ eeprom_defaults_w:
 
 .macro int0_set_rising_edge
                in      @0, MCUCR
-               sbr     @0, (1<<ISC01) + (1<<ISC00) + SLEEP_FLAGS
+               sbr     @0, (1<<ISC01) + (1<<ISC00)
                out     MCUCR, @0
 .endmacro
 .macro int0_set_falling_edge
                in      @0, MCUCR
                cbr     @0, (1<<ISC00)
-               sbr     @0, (1<<ISC01) + SLEEP_FLAGS
+               sbr     @0, (1<<ISC01)
                out     MCUCR, @0
 .endmacro
 
@@ -3242,6 +3267,50 @@ rcp_error_beep_more:
 		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
 		rjmp	beep_f4_freq
 .endif
+
+;-----bko-----------------------------------------------------------------
+.if USE_SLEEP > 1
+.macro adc_disable
+	out	ADCSRA, Zh
+.endmacro
+
+.macro adc_enable_slow_irq
+	outi	ADCSRA, (1<<ADEN) | (1<<ADIE) | ADC_IDLE_CLOCK_BIT, @0
+.endmacro
+
+adc_process:
+	; if adc is running there is nothing to do
+		sbic	ADCSRA, ADSC
+		ret
+	; if T1OVF ADCIE is enabled, skipthe T1 4.096ms simulation via adc
+		in	temp1, TIMSK
+		sbrc	temp1, TOIE1
+		ret
+	; disable/enable the ADC temporarily, so that we run longer conversion
+	; resulting in less interrupts/s (IRQ/s reduction ratio: 13/25)
+	; resulting in longer sleeps, which saves power
+		cbi	ADCSRA, ADEN
+		sbi	ADCSRA, ADEN
+	; decrement t1 overflow simulator counter
+		lds	temp1, adc_timer_counter
+		dec	temp1
+	; if we reach 0 then we have a simulated overflow so about 4ms
+		brne	adc_process_no_ovfl_sim
+	; call the t1ovfl_int (this will reenable irq)
+		rcall	t1ovfl_int
+	; reset the timer counter to top (assuming extended conversions)
+		ldi	temp1, ADC_SLEEP_COUNTER_TOP
+adc_process_no_ovfl_sim:
+	; store the counter
+		sts	adc_timer_counter, temp1
+adc_process_skip_t1ovf_sim:
+
+	; restart adc
+		sbi	ADCSRA, ADSC
+
+		ret
+.endif
+
 ;-----bko-----------------------------------------------------------------
 .if USE_SLEEP
 
@@ -3252,23 +3321,104 @@ rcp_error_beep_more:
 		out     MCUCR,  temp1
 .endmacro
 
-sleep_set_idle:
-	; enable sleep mode
-		sleep_enable temp1, 0
+sleep_set_adc:
+.if USE_SLEEP > 1
+
+	; disable rcp_int
+		rcp_int_disable temp1
+
+	;  enable sleep mode ADC
+		sleep_enable temp1, 1
+
+	; enable ADC with irq and slow clock
+		adc_enable_slow_irq temp1
+
+	; disable timer1 overflow interrupt
+		in	temp1, TIMSK
+		cbr	temp1, (1<<TOIE1)
+		out	TIMSK, temp1
+
+	; disable UART_RX
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+		cbi	UCSRB, RXEN
+		.endif
+
+	; set up the timer counter to TOP
+		ldi	temp1, ADC_SLEEP_COUNTER_TOP
+		sts	adc_timer_counter, temp1
 
 		ret
+.endif
+
+sleep_set_idle:
+	; enable sleep mode IDLE
+		sleep_enable temp1, 0
+.if USE_SLEEP > 1
+	; disable ADC
+		adc_disable temp1
+	; enable timer1 overflow
+		in	temp1, TIMSK
+		sbr	temp1, (1<<TOIE1)
+		out	TIMSK, temp1
+	; enable UART_RX
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+		sbi	UCSRB, RXEN
+		.endif
+	; restore edges
+               rcp_int_rising_edge temp1
+               rcp_int_enable temp1
+.endif
+		ret
+
+sleep_adc:
+.if USE_SLEEP > 1
+	; only consider to sleep in deep sleep if adc is running
+		sbis	ADCSRA, ADSC
+		ret
+.endif
 
 sleep_idle:
 	; atomically check if we should sleep
 		cli
 		sbrc	flags1, EVAL_RC
 		reti
+	; read state of RXD pin before and after sleep
+		.if USE_SLEEP > 1
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+		in	temp2, PIND
+		andi	temp2, (1<<rxd)
+		.endif
+		.endif
+
 	; no condition, so let us sleep
 		sei
 		sleep
 	; and reset wdt
 		wdr
 
+.if USE_SLEEP > 1
+	; if adc_int is disabled then return
+		sbis	ADCSRA, ADIE
+		ret
+	; if there is a pulse level on the RC pins then return to idle sleep
+		.if USE_INT0 = 1
+		sbic	PIND, rcp_in
+		rjmp	sleep_set_idle
+		.elseif USE_INT0 = 2
+		sbis	PIND, rcp_in
+		rjmp	sleep_set_idle
+		.elseif USE_ICP
+		sbic	PINB, rcp_in
+		rjmp	sleep_set_idle
+		.endif
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+	; need to check if there was a uart pin-change since before the sleep
+		in	temp1, PIND
+		andi	temp1, (1<<rxd)
+		cpse	temp1, temp2 		; did it change?
+		rjmp	sleep_set_idle		; yes
+		.endif
+.endif
 		ret
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -3482,7 +3632,13 @@ control_disarm:
 		.endif
 
 
-	; set up idle sleep mode
+	; set up adc sleep mode
+.if USE_SLEEP > 1
+		rcall	sleep_set_adc
+		rjmp	i_rc_puls1
+.endif
+
+i_rc_puls1_sleep_idle:
 .if USE_SLEEP
 		rcall	sleep_set_idle
 .endif
@@ -3493,8 +3649,11 @@ i_rc_puls1:	clr	rc_timeout
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
 i_rc_puls2:	wdr
+		.if USE_SLEEP > 1
+		rcall	adc_process
+		.endif
 		.if USE_SLEEP
-		rcall	sleep_idle
+		rcall	sleep_adc
 		.endif
 		.if defined(HK_PROGRAM_CARD)
 		.endif
@@ -3503,20 +3662,25 @@ i_rc_puls2:	wdr
 		.if BOOT_JUMP
 		rcall	boot_loader_test
 		.endif
-		.if BEACON
+		.if BEACON || (USE_SLEEP > 1)
 		lds	temp1, rct_beacon
 		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
 		brne	i_rc_puls2
 		ldi	temp1, 60
 		sts	rct_beacon, temp1	; Double rate after the first beep
+		.endif
+		.if BEACON
 		rcall	beep_f3			; Beacon
+		.endif
+		.if USE_SLEEP > 1
+		rcall	sleep_set_adc 		; fall back to adc sleep mode
 		.endif
 		rjmp	i_rc_puls2
 i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
-		brne	i_rc_puls1
+		brne	i_rc_puls1_sleep_idle
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
 		brlo	i_rc_puls2
@@ -3544,6 +3708,9 @@ i_rc_puls3:
 	; Fall through to restart_control
 ;-----bko-----------------------------------------------------------------
 restart_control:
+.if USE_SLEEP
+		rcall	sleep_set_idle
+.endif
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
 		.if BEACON_IDLE
