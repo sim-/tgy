@@ -1816,11 +1816,48 @@ urxc_exit:	out	SREG, i_sreg
 		reti
 	.endif
 ;-----bko-----------------------------------------------------------------
+; macros to embed low power FET settings into code mit minimal overhead
+.macro FET_LOW_POWER_RESTORE
+		.if defined(USE_FET_RESET_LOW_POWER)
+		.if USE_FET_RESET_LOW_POWER
+		rcall	_fet_low_power_reset
+		.endif
+		.endif
+.endmacro
+.macro FET_LOW_POWER_SET
+		.if defined(USE_FET_SET_LOW_POWER)
+		.if USE_FET_SET_LOW_POWER
+		rcall	_fet_low_power_set
+		.endif
+		.endif
+.endmacro
+
+.if defined(USE_FET_RESET_LOW_POWER)
+.if USE_FET_RESET_LOW_POWER
+_fet_low_power_reset:
+	; put system in a low power mode from a FET perspective
+		FET_RESET_LOW_POWER
+
+		ret
+.endif
+.endif
+.if defined(USE_FET_SET_LOW_POWER)
+.if USE_FET_SET_LOW_POWER
+_fet_low_power_set:
+	; put system in a normal power mode from a FET perspective
+		FET_SET_LOW_POWER
+
+		ret
+.endif
+.endif
+
+;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp2, 80
 		ldi	temp4, 200
 		RED_on
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f1_on:	BpFET_on
 		AnFET_on
 		rcall	beep
@@ -1833,6 +1870,7 @@ beep_f2:	ldi	temp2, 100
 		ldi	temp4, 180
 		GRN_on
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f2_on:	CpFET_on
 		BnFET_on
 		rcall	beep
@@ -1844,6 +1882,7 @@ beep_f2_on:	CpFET_on
 beep_f3:	ldi	temp2, 120
 		ldi	temp4, 160
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f3_on:	ApFET_on
 		CnFET_on
 		rcall	beep
@@ -1856,6 +1895,7 @@ beep_f4_freq:	ldi	temp4, 140
 beep_f4_fets:	RED_on
 		GRN_on
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f4_on:	CpFET_on
 		AnFET_on
 		rcall	beep
@@ -3652,6 +3692,8 @@ i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
+i_rc_puls2_low_power:
+		FET_LOW_POWER_SET		; put system in a low power mode from a FET perspective
 i_rc_puls2:	wdr
 		.if USE_SLEEP > 1
 		rcall	adc_process
@@ -3679,7 +3721,7 @@ i_rc_puls2:	wdr
 		.if USE_SLEEP > 1
 		rcall	sleep_set_adc 		; fall back to adc sleep mode
 		.endif
-		rjmp	i_rc_puls2
+		rjmp	i_rc_puls2_low_power
 i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
@@ -3731,7 +3773,7 @@ wait_for_power_on_init:
 		lds	temp3, brake_want
 		lds	temp4, brake_active
 		cp	temp3, temp4
-		breq	wait_for_power_on
+		breq	wait_for_power_on_low_power
 
 		rcall	switch_power_off	; Disable any active brake
 		sts	brake_active, temp3	; Set new brake_active to brake_want
@@ -3744,7 +3786,7 @@ wait_for_power_on_init:
 		rjmp	set_brake_duty
 
 set_brake1:	cpi	temp3, 2		; Thumb brake
-		brne	wait_for_power_on
+		brne	wait_for_power_on_low_power
 		ldi	YL, 1 << low(LOW_BRAKE_SPEED)
 		sts	brake_sub, YL
 		ldi2	YL, YH, LOW_BRAKE_POWER
@@ -3758,7 +3800,8 @@ set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 		clr	sys_control_l		; Abused as duty update divisor
 		outi	TCCR2, T2CLK, temp1	; Enable PWM, cleared later by switch_power_off
 		.endif
-
+wait_for_power_on_low_power:
+		FET_LOW_POWER_SET
 wait_for_power_on:
 		wdr
 	; GREEN-led PWM based on T1 overflow to save some power
@@ -3820,6 +3863,7 @@ wait_for_power_rx:
 		breq	wait_for_power_on_init	; while resetting boot/beacon timers
 
 start_from_running:
+		FET_LOW_POWER_RESTORE		; put system in a normal power mode
 		rcall	switch_power_off
 		comp_init temp1			; init comparator
 		RED_off
