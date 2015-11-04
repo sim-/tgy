@@ -202,7 +202,9 @@
 .equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
 .equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
+.if !defined(MOTOR_DEBUG)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
+.endif
 
 .if !defined(USE_LED_PWM)
 .equ USE_LED_PWM	= 0	; set to 1/2/3 to set PWM fequency and brightness - 3 flashes already!
@@ -213,7 +215,38 @@
 .equ USE_SLEEP		= 0	; Sleep level to support (0 = none, 1 = idle, 2=adc)
 .endif
 
-.if (USE_SLEEP > 1)
+;  enable adc reading if USE_ADC or USE_ADC_MASK is defined
+.if !defined(USE_ADC)
+.equ USE_ADC		= defined(USE_ADC_MASK)
+.endif
+
+; calculate the USE_ADC_MASK from some well-known MUX
+.if !defined(USE_ADC_MASK)
+.set USE_ADC_MASK	= 0	; the ADC bitmap is set to 0 by default
+.if USE_ADC
+.if defined(mux_voltage)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_voltage)
+.endif
+.if defined(mux_current)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_current)
+.endif
+.if defined(mux_temperature)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_temperature)
+.endif
+.if defined(mux_gnd)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_voltage_gnd)
+.endif
+.if defined(mux_voltage_bg)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_voltage_bg)
+.endif
+.endif
+.endif
+
+.if !defined(USE_ADC_REF)
+.equ   USE_ADC_REF    = (1<<REFS0) ; which ref should we use with the ADC
+.endif
+
+.if (USE_SLEEP > 1) || USE_ADC_MASK
   .if defined(HK_PROGRAM_CARD) || USE_UART
 .warning "There are some restrictions when using deeper sleep and UART"
 ; note: the implementation for wakeup from sleep requires that
@@ -225,12 +258,20 @@
 ; set sampling to 1ms effectively for long conversions
 ; this is a bit more expensive power wise due to twice/four times
 ; the number of	interrupts compared to full idle
-    .if F_CPU >= 16
+    .if F_CPU >= 12
+; when idle use 250kHz ADC clock @16MHz (187kHz@12MHz - 312kHz@20MHz)
 .equ	ADC_IDLE_CLOCK_DIV	= 64
 .equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS1)
+; when running use 1000kHz ADC clock @16MHz (750kHz@12MHz - 1250kHz@20MHz)
+.equ	ADC_RUN_CLOCK_DIV	= 16
+.equ	ADC_RUN_CLOCK_BIT	= (1<<ADPS2)
     .else
+; when idle use 250kHz ADC clock @8MHz (312kHz@10MHz)
 .equ	ADC_IDLE_CLOCK_DIV	= 32
 .equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS0)
+; when running use 1000kHz ADC clock @8MHz (1250kHz@10MHz)
+.equ	ADC_RUN_CLOCK_DIV	= 8
+.equ	ADC_RUN_CLOCK_BIT	= (1<<ADPS1)|(1<<ADPS0)
     .endif
   .else
 ; slowest sensible clock to minimize wakeups from sleep
@@ -440,6 +481,133 @@ motor_count:	.byte	1	; Motor number for serial control
 brake_sub:	.byte	1	; Brake speed subtrahend (power of two)
 brake_want:	.byte	1	; Type of brake desired
 brake_active:	.byte	1	; Type of brake active
+
+.if USE_ADC_MASK
+adc_temp_l:	.byte   1	; the accumulating adc low
+adc_temp_h:	.byte   1	; the accumulating adc high
+adc_temp_x:	.byte   1	; the accumulating adc extended
+adc_temp_mux:	.byte	1	; the mux to read now
+adc_temp_count:	.byte   1	; number of samples accumulated so far (counting down)
+
+.macro adc_mux_define
+	.if USE_ADC_MASK & (1<<@0)
+	; define the real values in sram
+adc_mux_l:	.byte   1	; value low
+adc_mux_h:	.byte   1	; value high
+	;  define aliases for this address if one of the following muxes is set
+		.equ adc_mux_@0 = adc_mux_l
+		.equ adc_mux_@0_l = adc_mux_l
+		.equ adc_mux_@0_h = adc_mux_h
+		.if defined(mux_a)
+			.if (@0 == mux_a)
+				.equ adc_mux_a_l = adc_mux_l
+				.equ adc_mux_a_h = adc_mux_h
+				.if defined(mux_a_mul)
+				.equ adc_mux_@0_mul = mux_a_mul
+				.endif
+				.if defined(mux_a_off)
+				.equ adc_mux_@0_off = mux_a_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_b)
+			.if (@0 == mux_b)
+				.equ adc_mux_b_l = adc_mux_l
+				.equ adc_mux_b_h = adc_mux_h
+				.if defined(mux_b_mul)
+				.equ adc_mux_@0_mul = mux_b_mul
+				.endif
+				.if defined(mux_b_off)
+				.equ adc_mux_@0_off = mux_b_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_c)
+			.if (@0 == mux_c)
+				.equ adc_mux_c_l = adc_mux_l
+				.equ adc_mux_c_h = adc_mux_h
+				.if defined(mux_c_mul)
+				.equ adc_mux_@0_mul = mux_c_mul
+				.endif
+				.if defined(mux_c_off)
+				.equ adc_mux_@0_off = mux_c_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_common)
+			.if (@0 == mux_common)
+				.equ adc_mux_common_l = adc_mux_l
+				.equ adc_mux_common_h = adc_mux_h
+				.if defined(mux_common_mul)
+				.equ adc_mux_@0_mul = mux_common_mul
+				.endif
+				.if defined(mux_common_off)
+				.equ adc_mux_@0_off = mux_common_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_voltage)
+			.if (@0 == mux_voltage)
+				.equ adc_mux_voltage_l = adc_mux_l
+				.equ adc_mux_voltage_h = adc_mux_h
+				.if defined(mux_voltage_mul)
+				.equ adc_mux_@0_mul = mux_voltage_mul
+				.endif
+				.if defined(mux_voltage_off)
+				.equ adc_mux_@0_off = mux_voltage_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_current)
+			.if (@0 == mux_current)
+				.equ adc_mux_current_l = adc_mux_l
+				.equ adc_mux_current_h = adc_mux_h
+				.if defined(mux_current_mul)
+				.equ adc_mux_@0_mul = mux_current_mul
+				.endif
+				.if defined(mux_current_off)
+				.equ adc_mux_@0_off = mux_current_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_temperature)
+			.if (@0 == mux_temperature)
+				.equ adc_mux_temperature_l = adc_mux_l
+				.equ adc_mux_temperature_h = adc_mux_h
+				.if defined(mux_temperature_mul)
+				.equ adc_mux_@0_mul = mux_temperature_mul
+				.endif
+				.if defined(mux_voltage_off)
+				.equ adc_mux_@0_off = mux_temperature_off
+				.endif
+
+			.endif
+		.endif
+		.if (@0 == 14)
+				.equ adc_mux_voltage_bg_l = adc_mux_l
+				.equ adc_mux_voltage_bg_h = adc_mux_h
+		.endif
+		.if (@0 == 15)
+				.equ adc_mux_voltage_gnd_l = adc_mux_l
+				.equ adc_mux_voltage_gnd_h = adc_mux_h
+		.endif
+	.endif
+.endmacro
+adc_mux_start: 			; the mux low and high as well as the next mux
+adc_mux_define 0
+adc_mux_define 1
+adc_mux_define 2
+adc_mux_define 3
+adc_mux_define 4
+adc_mux_define 5
+adc_mux_define 6
+adc_mux_define 7
+.if USE_ADC_MASK & ((1<<8) | (1<<9) | (1<<10) | (1<<11) | (1<<12) | (1<<13))
+.error "Unsupported ADC MUX mask - some MUX between 8 and 13 enabled"
+.endif
+adc_mux_define 14
+adc_mux_define 15
+.endif
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -3313,23 +3481,32 @@ rcp_error_beep_more:
 .endif
 
 ;-----bko-----------------------------------------------------------------
-.if USE_SLEEP > 1
+.if (USE_SLEEP > 1) || USE_ADC_MASK
 .macro adc_disable
 	out	ADCSRA, Zh
 .endmacro
 
 .macro adc_enable_slow_irq
-	outi	ADCSRA, (1<<ADEN) | (1<<ADIE) | ADC_IDLE_CLOCK_BIT, @0
+	outi	ADCSRA, (1<<ADEN) | (1<<ADIF) | (1<<ADIE) | ADC_IDLE_CLOCK_BIT, @0
+.endmacro
+
+.macro adc_enable_fast
+	outi	ADCSRA, (1<<ADEN) | (1<<ADIF) | ADC_RUN_CLOCK_BIT, @0
 .endmacro
 
 adc_process:
 	; if adc is running there is nothing to do
 		sbic	ADCSRA, ADSC
 		ret
+
 	; if T1OVF ADCIE is enabled, skipthe T1 4.096ms simulation via adc
 		in	temp1, TIMSK
 		sbrc	temp1, TOIE1
+.if USE_ADC_MASK
+		rjmp	adc_process_skip_t1ovf_sim
+.else
 		ret
+.endif
 	; disable/enable the ADC temporarily, so that we run longer conversion
 	; resulting in less interrupts/s (IRQ/s reduction ratio: 13/25)
 	; resulting in longer sleeps, which saves power
@@ -3349,10 +3526,150 @@ adc_process_no_ovfl_sim:
 		sts	adc_timer_counter, temp1
 adc_process_skip_t1ovf_sim:
 
+.if USE_ADC_MASK
+adc_process_values:
+	;  only run if the set mux match the requested
+		lds	temp2, adc_temp_mux
+		in	temp1, ADMUX
+		andi	temp1, 15
+		cp	temp1, temp2
+		brne	adc_start_set_mux
+	; read 10bit ADCL/H and add to 24-bit adc_temp_l/h/x
+	; with 256 samples this allows an effecive range of 18 bit
+	; note that ADC values are left aligned, so bits 15-6 are used
+	; so we decimate by 2 LSB by just using temp_h/x and dropping
+	; temp_l resulting in a 16-bit ADC value in the range [0:65472]
+	; note that the order of accumulated values [l,h,x] is temp7, 5, 6
+		lds	temp7, adc_temp_l
+		in	temp1, ADCL
+		add	temp7, temp1
+		lds	temp5, adc_temp_h
+		in	temp1, ADCH
+		adc	temp5, temp1
+		lds	temp6, adc_temp_x
+		adc	temp6, ZH
+	; check if we overflow adc_temp_count
+		lds	temp1, adc_temp_count
+		dec	temp1
+		sts	adc_temp_count, temp1
+		breq	adc_process_store_aggregated
+	; store the temp value
+		sts	adc_temp_l, temp7
+		sts	adc_temp_h, temp5
+		sts	adc_temp_x, temp6
+adc_start_set_mux:
+	; set up MUX with the correct ADC_REF set as well as left aligned
+		ori	temp2, (1<<ADLAR) | USE_ADC_REF
+		out	ADMUX, temp2
+.endif
 	; restart adc
 		sbi	ADCSRA, ADSC
 
 		ret
+.endif
+
+.if USE_ADC_MASK
+; helper macro to store the current averaged value and select next mux
+; temp3 contains current mux
+; temp4 contains next mux (on exit)
+; XL/Xh  contain adc_base
+.macro adc_check_mux
+.if USE_ADC_MASK & (1<<@0)
+	; define the first ADC if not set
+		.if !defined(USE_ADC_FIRST)
+		.equ    USE_ADC_FIRST = @0
+		.endif
+	; to finish up the last iteration of adc_check_mux
+	; load the next mux (= this iteration)
+		ldi     temp4, @0
+	; compare current with mux
+		cpi     temp3, @0
+	; if we are not equal then jump to the end plus 1,
+	; so that we get past the load for temp2
+		.if USE_ADC_MASK & (65534 << @0)
+		brne    adc_check_mux_skip + 1
+		.else
+		brne    adc_check_mux_skip
+		.endif
+	; load the destination register in X by adding the offset
+	; so we are limited to 32 muxes, which is ok
+	; with 10/16 mux available in HW
+		adiw    Xl, (adc_mux_@0_l - adc_temp_l)
+	; add scaling and offsets if set
+		.if defined(adc_mux_@0_mul)
+		.if adc_mux_@0_mul
+		ldi2 temp1, temp2, adc_mux_@0_mul
+		.endif
+		.endif
+		.if defined(adc_mux_@0_off)
+		.if adc_mux_@0_off
+		ldi2 Yl, Yh, adc_mux_@0_off
+		.endif
+		.endif
+adc_check_mux_skip:
+.endif
+.endmacro
+; scale the 24 bit value
+; store aggregated 24 bit value to final location
+; get next mux to use
+adc_process_store_aggregated:
+
+	; load current mux in temp1 for comparisson - temp2 will contain next
+		lds	temp3, adc_temp_mux
+	; load X with adc_temp_l
+		ldi2	Xl, Xh, adc_temp_l
+
+	; set up default multiplier and offsets
+		ldi2	temp1, temp2, 0	; multiplier
+		movw	Yl, temp1
+
+	; now the real mux-checks
+	; this will take 1+COUNT_BITS(USE_ADC_MASK)*3+1/2 cycles
+	; so in the worsted case (0-7 and 14, 15) 32/33 cycles
+	; but there are typically 3 MUX that we could be
+	; interrested, which leaves us at 10 cycles, which is not so bad
+		adc_check_mux 0
+		adc_check_mux 1
+		adc_check_mux 2
+		adc_check_mux 3
+		adc_check_mux 4
+		adc_check_mux 5
+		adc_check_mux 6
+		adc_check_mux 7
+		adc_check_mux 14
+		adc_check_mux 15
+	; if there was no match above - i.e an unexpected MUX,
+	; then we got the correct defaults already set up
+	; and we copy from adc_temp to adc_temp, which is ok
+	; also next_mux (in temp2) is set to FIRST,
+	; so nothing we need to do
+
+	; store the next mux to use
+		sts	adc_temp_mux, temp4
+
+	; clear temp
+		sts	adc_temp_l, Zh
+		sts	adc_temp_h, Zh
+		sts	adc_temp_x, Zh
+
+	; check if we got a multiplier in temp1/3
+		adiw	temp1, 0
+		breq	adc_process_store_aggregated_no_scale
+	; prepare multiply 12, 34 and aggregate into Y
+		movw	temp3, temp5
+		rcall	mul_y_12x34
+	; and store
+		rjmp	adc_process_store_aggregated_store
+adc_process_store_aggregated_no_scale:
+	; add value to Y (possibly 0)
+		add	Yl, temp5
+		adc	Yh, temp6
+	; now store the result
+adc_process_store_aggregated_store:
+		st	X+, Yl
+		st	X+, Yh
+	; and set mux
+		rjmp	adc_start_set_mux
 .endif
 
 ;-----bko-----------------------------------------------------------------
@@ -3695,7 +4012,7 @@ i_rc_puls1:	clr	rc_timeout
 i_rc_puls2_low_power:
 		FET_LOW_POWER_SET		; put system in a low power mode from a FET perspective
 i_rc_puls2:	wdr
-		.if USE_SLEEP > 1
+		.if USE_SLEEP > 1 || USE_ADC_MASK
 		rcall	adc_process
 		.endif
 		.if USE_SLEEP
@@ -3723,9 +4040,9 @@ i_rc_puls2:	wdr
 		.endif
 		rjmp	i_rc_puls2_low_power
 i_rc_puls_rx:	rcall	evaluate_rc_init
-		lds	YL, rc_duty_l
-		lds	YH, rc_duty_h
-		adiw	YL, 0			; Test for zero
+		lds	Yl, rc_duty_l
+		lds	Yl, rc_duty_h
+		adiw	Yl, 0			; Test for zero
 		brne	i_rc_puls1_sleep_idle
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
@@ -3815,6 +4132,9 @@ wait_for_power_blink_green_skip_on:
 		GRN_off
 wait_for_power_blink_green_skip_off:
 		.endif
+		.if USE_ADC_MASK
+		rcall	adc_process
+		.endif
 		.if USE_SLEEP
 		rcall	sleep_idle
 		.endif
@@ -3865,6 +4185,9 @@ wait_for_power_rx:
 start_from_running:
 		FET_LOW_POWER_RESTORE		; put system in a normal power mode
 		rcall	switch_power_off
+		.if USE_ADC_MASK
+		adc_enable_fast temp1 		; set up adc with fast clock
+	.endif
 		comp_init temp1			; init comparator
 		RED_off
 		GRN_off
@@ -4329,6 +4652,11 @@ wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_for_edge2
 wait_for_edge3:	dec	XL			; Zero-cross has happened
 		brne	wait_for_edge2		; Check again unless temp1 is zero
+
+		; trigger ADC read while we wait for commutations...
+		.if USE_ADC_MASK
+		rcall   adc_process
+		.endif
 
 wait_commutation:
 		flag_on
