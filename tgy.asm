@@ -219,6 +219,14 @@
 .if !defined(USE_ADC)
 .equ USE_ADC		= defined(USE_ADC_MASK)
 .endif
+;  adc debugging settings tpically on PORTB5
+.if !defined(ADC_DEBUG)
+.equ ADC_DEBUG		= 0 	; if =1 : typical mask bit 1-3 set
+				; bit 1 : high when ADC Running
+				; bit 2 : high when aggregating
+				; bit 3 : high when in final processing
+				; bit 4 : toggle DEBUG when in adc_processing
+.endif
 
 ; calculate the USE_ADC_MASK from some well-known MUX
 .if !defined(USE_ADC_MASK)
@@ -3493,13 +3501,62 @@ rcp_error_beep_more:
 .macro adc_enable_fast
 	outi	ADCSRA, (1<<ADEN) | (1<<ADIF) | ADC_RUN_CLOCK_BIT, @0
 .endmacro
+; debug marker - typically long high means ADC-conversion running (>0.1ms when idle)
+; 1 short high means we have a real value that we aggregate (~1.6us)
+; 2 short high (short, then a bit longer) means we are finalizing a value (~3.5us)
+; so it looks like this:
+; _^^^^^^^^^^^^^^_^^^^^^^^^^^^^^_	- conversion, but aborted - changed mux
+; _^^^^^^^^^^^^^^_^_^^^^^^^^^^^^^^_	- conversion and aggregation of values
+; _^^^^^^^^^^^^^^_^_^^_^^^^^^^^^^^^^^_	- conversion and aggregation and
+;					  storing of final value (scaled)
+
+.macro adc_on
+	; only if B5 is available and MOTOR_DEBUG does not claim B5
+	.if ADC_DEBUG && (DIR_PB & (1<<5)) == 0
+	.if !MOTOR_DEBUG || (DIR_PB & (1<<3)) == 0
+	.if (ADC_DEBUG == 1) || ADC_DEBUG & (1<<@0)
+		sbi     PORTB, 5
+	.endif
+	.endif
+.endmacro
+
+.macro adc_off
+	; only if B5 is available and MOTOR_DEBUG does not claim B5
+	.if ADC_DEBUG && (DIR_PB & (1<<5)) == 0
+	.if !MOTOR_DEBUG || (DIR_PB & (1<<3)) == 0
+		cbi     PORTB, 5
+	.endif
+	.endif
+.endmacro
+
+.macro adc_toggle
+	; only if B5 is available and MOTOR_DEBUG does not claim B5
+	.if (ADC_DEBUG & (1<<4)) && (DIR_PB & (1<<5)) == 0
+	.if !MOTOR_DEBUG || (DIR_PB & (1<<3)) == 0
+		in	temp1,	PORTB
+		ldi	temp2,	(1<<5)
+		eor	temp1,	temp2
+		out	PORTB,	temp1
+		eor	temp1,	temp2
+		out	PORTB,	temp1
+	.endif
+	.endif
+.endmacro
 
 adc_process:
+
+	; adc debug marker - in adc_process
+		adc_toggle 4
+
 	; if adc is running there is nothing to do
 		sbic	ADCSRA, ADSC
 		ret
 
-	; if T1OVF ADCIE is enabled, skipthe T1 4.096ms simulation via adc
+	; adc debug marker - end of conversion
+		adc_off
+
+.if USE_SLEEP > 1
+	; if T1OVF ADCIE is enabled, skip the T1 4.096ms simulation via adc
 		in	temp1, TIMSK
 		sbrc	temp1, TOIE1
 .if USE_ADC_MASK
@@ -3525,6 +3582,7 @@ adc_process_no_ovfl_sim:
 	; store the counter
 		sts	adc_timer_counter, temp1
 adc_process_skip_t1ovf_sim:
+.endif
 
 .if USE_ADC_MASK
 adc_process_values:
@@ -3534,6 +3592,9 @@ adc_process_values:
 		andi	temp1, 15
 		cp	temp1, temp2
 		brne	adc_start_set_mux
+	; adc debug marker - start of aggregation
+		adc_on	2
+
 	; read 10bit ADCL/H and add to 24-bit adc_temp_l/h/x
 	; with 256 samples this allows an effecive range of 18 bit
 	; note that ADC values are left aligned, so bits 15-6 are used
@@ -3558,12 +3619,18 @@ adc_process_values:
 		sts	adc_temp_h, temp5
 		sts	adc_temp_x, temp6
 adc_start_set_mux:
+	; adc debug marker - end of aggregation final result
+		adc_off
+
 	; set up MUX with the correct ADC_REF set as well as left aligned
 		ori	temp2, (1<<ADLAR) | USE_ADC_REF
 		out	ADMUX, temp2
 .endif
 	; restart adc
 		sbi	ADCSRA, ADSC
+
+	; adc debug marker - start of conversion
+		adc_on 1
 
 		ret
 .endif
@@ -3614,6 +3681,9 @@ adc_check_mux_skip:
 ; get next mux to use
 adc_process_store_aggregated:
 
+	; adc debug marker - end of aggregation
+		adc_off
+
 	; load current mux in temp1 for comparisson - temp2 will contain next
 		lds	temp3, adc_temp_mux
 	; load X with adc_temp_l
@@ -3622,6 +3692,9 @@ adc_process_store_aggregated:
 	; set up default multiplier and offsets
 		ldi2	temp1, temp2, 0	; multiplier
 		movw	Yl, temp1
+
+	; adc debug marker - start of final result
+		adc_on	3
 
 	; now the real mux-checks
 	; this will take 1+COUNT_BITS(USE_ADC_MASK)*3+1/2 cycles
@@ -3809,7 +3882,7 @@ clear_loop1:	cp	ZL, r0
 
 	; Initialize ports
 		outi	PORTB, INIT_PB, temp1
-		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
+		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5) | (ADC_DEBUG<<5), temp1
 		outi	PORTC, INIT_PC, temp1
 		outi	DDRC, DIR_PC, temp1
 		outi	PORTD, INIT_PD, temp1
