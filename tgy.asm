@@ -270,7 +270,6 @@
 .equ USE_ADC_TEMPERATURE_NTC_TABLE = 0
 .endif
 
-
 .if (USE_SLEEP > 1) || USE_ADC_MASK
   .if defined(HK_PROGRAM_CARD) || USE_UART
 .warning "There are some restrictions when using deeper sleep and UART"
@@ -645,7 +644,7 @@ eeprom_end:	.byte	1
 ; The following entries are block-copied from FLASH
 copy_to_sram_start:
 .if USE_ADC_TEMPERATURE_NTC_TABLE
-adc_ntc_table: .byte   512     ; the NTC translation table
+adc_ntc_table:	.byte	512	; the NTC translation table
 .endif
 copy_to_sram_end:
 
