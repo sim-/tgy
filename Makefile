@@ -10,8 +10,8 @@ AUX_TARGETS = afro_pr0.hex afro_pr1.hex diy0.hex
 
 all: $(ALL_TARGETS)
 
-$(ALL_TARGETS): tgy.asm boot.inc
-$(AUX_TARGETS): tgy.asm boot.inc
+$(ALL_TARGETS): tgy.asm boot.inc ntc-table.inc
+$(AUX_TARGETS): tgy.asm boot.inc ntc-table.inc
 
 .inc.hex:
 	@test -e $*.asm || ln -s tgy.asm $*.asm
@@ -23,6 +23,9 @@ test: all
 
 clean:
 	-rm -f $(ALL_TARGETS) *.cof *.obj *.eep.hex *.eeprom
+
+ntc-table.inc: create-ntc-table.sh *.inc
+	./create-ntc-table.sh > $@
 
 binary_zip: $(ALL_TARGETS)
 	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`"; \

@@ -254,6 +254,23 @@
 .equ   USE_ADC_REF    = (1<<REFS0) ; which ref should we use with the ADC
 .endif
 
+; see if we got everything to translate temperature ADC to celsius
+.if USE_ADC && defined(mux_temperature)
+.if (USE_ADC_MASK & (1<<mux_temperature))
+.if defined(mux_temperature_rpullup) || defined(mux_temperature_rntc) || defined(mux_temperature_beta)
+.if defined(mux_temperature_rpullup) && defined(mux_temperature_rntc) && defined(mux_temperature_beta)
+.equ USE_ADC_TEMPERATURE_NTC_TABLE = 1
+.else
+.warning "not all values for NTC table are defined"
+.endif
+.endif
+.endif
+.endif
+.if !defined(USE_ADC_TEMPERATURE_NTC_TABLE)
+.equ USE_ADC_TEMPERATURE_NTC_TABLE = 0
+.endif
+
+
 .if (USE_SLEEP > 1) || USE_ADC_MASK
   .if defined(HK_PROGRAM_CARD) || USE_UART
 .warning "There are some restrictions when using deeper sleep and UART"
@@ -578,19 +595,6 @@ adc_mux_h:	.byte   1	; value high
 				.endif
 			.endif
 		.endif
-		.if defined(mux_temperature)
-			.if (@0 == mux_temperature)
-				.equ adc_mux_temperature_l = adc_mux_l
-				.equ adc_mux_temperature_h = adc_mux_h
-				.if defined(mux_temperature_mul)
-				.equ adc_mux_@0_mul = mux_temperature_mul
-				.endif
-				.if defined(mux_voltage_off)
-				.equ adc_mux_@0_off = mux_temperature_off
-				.endif
-
-			.endif
-		.endif
 		.if (@0 == 14)
 				.equ adc_mux_voltage_bg_l = adc_mux_l
 				.equ adc_mux_voltage_bg_h = adc_mux_h
@@ -637,6 +641,14 @@ blc_bitconfig:	.byte	1	; BLConfig bitconfig (1 == MOTOR_REVERSE)
 blc_checksum:	.byte	1	; BLConfig checksum (0xaa + above bytes)
 .endif
 eeprom_end:	.byte	1
+;**** **** **** **** ****
+; The following entries are block-copied from FLASH
+copy_to_sram_start:
+.if USE_ADC_TEMPERATURE_NTC_TABLE
+adc_ntc_table: .byte   512     ; the NTC translation table
+.endif
+copy_to_sram_end:
+
 ;-----bko-----------------------------------------------------------------
 ;**** **** **** **** ****
 .cseg
@@ -3518,6 +3530,7 @@ rcp_error_beep_more:
 		sbi     PORTB, 5
 	.endif
 	.endif
+	.endif
 .endmacro
 
 .macro adc_off
@@ -3855,6 +3868,45 @@ sleep_idle:
 .endif
 		ret
 .endif
+
+;-----bko-----------------------------------------------------
+; table spaces copied to sram starting at copy_to_sram_start
+.macro check_flash_sram_offset
+	.if 2*(@0_flash-copy_from_flash_start) != (@0-copy_to_sram_start)
+	.error "There are different offsets defined in flash compared to sram"
+	.endif
+.endmacro
+
+copy_from_flash_start:
+.if USE_ADC_TEMPERATURE_NTC_TABLE
+adc_ntc_table_flash:
+	check_flash_sram_offset adc_ntc_table
+.include "ntc-table.inc"
+.endif
+copy_from_flash_end:
+
+; check that sizes match
+.if (2*(copy_from_flash_end-copy_from_flash_start)) != (copy_to_sram_end-copy_to_sram_start)
+.error "mismatch between flash and sram table space sizes"
+.endif
+
+; copy data from flash into sram
+.if copy_from_flash_start != copy_from_flash_end
+copy_from_flash_to_sram:
+		ldi2    Xl, Xh, copy_to_sram_start
+		ldi2    Zl, Zh, 2 * copy_from_flash_start
+
+copy_from_flash_loop:
+		lpm     temp1, Z+
+		st      X+, temp1
+		cpiz2   Xl, Xh, copy_to_sram_end, temp2
+		brne    copy_from_flash_loop
+
+		clr     Zh
+
+		ret
+.endif
+
 ;-----bko-----------------------------------------------------------------
 main:
 		clr	r0
@@ -3929,6 +3981,11 @@ clear_loop1:	cp	ZL, r0
 	; Read EEPROM block to RAM
 		rcall	eeprom_read_block	; Also calls osccal_set
 		rcall	eeprom_check_reset
+
+	; copy flash to sram if we got something to copy
+		.if copy_from_flash_start != copy_from_flash_end
+		rcall	copy_from_flash_to_sram
+		.endif
 
 	; Early input initialization is required for i2c BL-Ctrl V2 detection
 	; This serves data from the EEPROM, so this is as early as possible.
