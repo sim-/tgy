@@ -9,6 +9,9 @@
 .equ	USE_I2C		= 1
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 1
+.equ	USE_SLEEP	= 2
+.equ	USE_LED_PWM	= 3
+.equ	USE_ADC		= 1
 
 .equ	DEAD_LOW_NS	= 300
 .equ	DEAD_HIGH_NS	= 300
@@ -37,7 +40,12 @@
 ; PORT C definitions *
 ;*********************
 .equ	mux_voltage	= 7	; ADC7 voltage input (18k from Vbat, 3.3k to gnd, 10.10V -> 1.565V at ADC7)
+.equ	mux_voltage_mul	= (5*256*(18000+3300)/3300)
+.equ	mux_voltage_off = 0
 .equ	mux_temperature	= 6	; ADC6 temperature input (3.3k from +5V, 10k NTC to gnd)
+.equ	mux_temperature_rpullup	= 3300
+.equ	mux_temperature_rntc	= 10000
+.equ	mux_temperature_beta	= 3950
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
 .equ	red_led		= 3	; o
@@ -83,3 +91,27 @@
 .equ	BnFET_port	= PORTD
 .equ	CnFET_port	= PORTD
 .equ	ApFET_port	= PORTD
+
+;*****************************************
+; ENABLE_LOW_POWER_FET_MODE during sleep *
+;*****************************************
+.equ	USE_FET_SET_LOW_POWER = 1
+.equ	USE_FET_RESET_LOW_POWER = 1
+
+.MACRO FET_SET_LOW_POWER
+cbi AnFET_port,AnFET
+cbi BnFET_port,BnFET
+cbi CnFET_port,CnFET
+cbi ApFET_port,ApFET
+cbi BpFET_port,BpFET
+cbi CpFET_port,CpFET
+.ENDMACRO
+
+.MACRO FET_RESET_LOW_POWER
+cbi AnFET_port,AnFET
+cbi BnFET_port,BnFET
+cbi CnFET_port,CnFET
+sbi ApFET_port,ApFET
+sbi BpFET_port,BpFET
+sbi CpFET_port,CpFET
+.ENDMACRO
