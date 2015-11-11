@@ -602,6 +602,12 @@ adc_mux_h:	.byte   1	; value high
 				.equ adc_mux_voltage_gnd_l = adc_mux_l
 				.equ adc_mux_voltage_gnd_h = adc_mux_h
 		.endif
+		.if !defined(adc_mux_@0_mul)
+				.equ adc_mux_@0_mul = 1
+		.endif
+		.if !defined(adc_mux_@0_off)
+				.equ adc_mux_@0_off = 0
+		.endif
 	.endif
 .endmacro
 adc_mux_start: 			; the mux low and high as well as the next mux
@@ -841,6 +847,24 @@ eeprom_defaults_w:
 		outr	@0, @2
 	.else
 		outr	@0, ZH
+	.endif
+.endmacro
+
+; load via Y offset if possible
+.macro lddy
+	.if ((@1-@2) < 64) && (@1>=@2)
+		ldd	@0, Y+(@1-@2)
+	.else
+		lds	@0, @1
+	.endif
+.endmacro
+
+; store via Y offset if possible
+.macro stdy
+	.if ((@0-@2) < 64) && (@0 >= @2)
+		std	Y+(@0-@2), @1
+	.else
+		sts	@0, @1
 	.endif
 .endmacro
 
@@ -3567,6 +3591,9 @@ adc_process:
 	; adc debug marker - end of conversion
 		adc_off
 
+	; load Y with adc_temp_l
+		ldi2	Yl, Yh, adc_temp_l
+
 .if USE_SLEEP > 1
 	; if T1OVF ADCIE is enabled, skip the T1 4.096ms simulation via adc
 		in	temp1, TIMSK
@@ -3582,7 +3609,7 @@ adc_process:
 		cbi	ADCSRA, ADEN
 		sbi	ADCSRA, ADEN
 	; decrement t1 overflow simulator counter
-		lds	temp1, adc_timer_counter
+		lddy	temp1, adc_timer_counter, adc_temp_l
 		dec	temp1
 	; if we reach 0 then we have a simulated overflow so about 4ms
 		brne	adc_process_no_ovfl_sim
@@ -3592,17 +3619,17 @@ adc_process:
 		ldi	temp1, ADC_SLEEP_COUNTER_TOP
 adc_process_no_ovfl_sim:
 	; store the counter
-		sts	adc_timer_counter, temp1
+		stdy	adc_timer_counter, temp1, adc_temp_l
 adc_process_skip_t1ovf_sim:
 .endif
 
 .if USE_ADC_MASK
 adc_process_values:
 	;  only run if the set mux match the requested
-		lds	temp2, adc_temp_mux
-		in	temp1, ADMUX
-		andi	temp1, 15
-		cp	temp1, temp2
+		lddy	temp4, adc_temp_mux, adc_temp_l
+		in	temp3, ADMUX
+		andi	temp3, 15
+		cp	temp4, temp3
 		brne	adc_start_set_mux
 	; adc debug marker - start of aggregation
 		adc_on	2
@@ -3612,31 +3639,31 @@ adc_process_values:
 	; note that ADC values are left aligned, so bits 15-6 are used
 	; so we decimate by 2 LSB by just using temp_h/x and dropping
 	; temp_l resulting in a 16-bit ADC value in the range [0:65472]
-	; note that the order of accumulated values [l,h,x] is temp7, 5, 6
-		lds	temp7, adc_temp_l
-		in	temp1, ADCL
-		add	temp7, temp1
-		lds	temp5, adc_temp_h
-		in	temp1, ADCH
-		adc	temp5, temp1
-		lds	temp6, adc_temp_x
-		adc	temp6, ZH
+	; note that the order of accumulated values [l,h,x] is temp5, 1, 2
+		lddy	temp5, adc_temp_l, adc_temp_l
+		lddy	temp1, adc_temp_h, adc_temp_l
+		lddy	temp2, adc_temp_x, adc_temp_l
+		in	temp6, ADCL
+		add	temp5, temp6
+		in	temp6, ADCH
+		adc	temp1, temp6
+		adc	temp2, ZH
 	; check if we overflow adc_temp_count
-		lds	temp1, adc_temp_count
-		dec	temp1
-		sts	adc_temp_count, temp1
+		lddy	temp6, adc_temp_count, adc_temp_l
+		dec	temp6
+		stdy	adc_temp_count, temp6, adc_temp_l
 		breq	adc_process_store_aggregated
 	; store the temp value
-		sts	adc_temp_l, temp7
-		sts	adc_temp_h, temp5
-		sts	adc_temp_x, temp6
+		stdy	adc_temp_l, temp5, adc_temp_l
+		stdy	adc_temp_h, temp1, adc_temp_l
+		stdy	adc_temp_x, temp2, adc_temp_l
 adc_start_set_mux:
 	; adc debug marker - end of aggregation final result
 		adc_off
 
 	; set up MUX with the correct ADC_REF set as well as left aligned
-		ori	temp2, (1<<ADLAR) | USE_ADC_REF
-		out	ADMUX, temp2
+		ori	temp4, (1<<ADLAR) | USE_ADC_REF
+		out	ADMUX, temp4
 .endif
 	; restart adc
 		sbi	ADCSRA, ADSC
@@ -3648,7 +3675,49 @@ adc_start_set_mux:
 .endif
 
 .if USE_ADC_MASK
+; helper macro to translate the 24-bit value in temp5,1,2
+; to the final 16 bit value in temp1, 2
+; Xl/h needs not be touched otherwise adc_temp_l needs to get loaded again
+; more for ease of readability that anything else...
+.macro adc_translate_value
+	; if we handle mux_temperature and we got a NTC info, then follow that route
+	.if USE_ADC_TEMPERATURE_NTC_TABLE && (@0 == mux_temperature)
+	; ADC table lookup for NTC temperature sensor
+	; this uses lots of SRAM for the table!
+		; calculate the address in sram based on the ADC bits 8-15
+		ldi2	Yl, Yh, adc_ntc_table, temp1
+		add	Yl, temp2
+		adc	Yh, Zh
+		add	Yl, temp2
+		adc	Yh, Zh
+		; read the values back into the result
+		ld      temp1, Y+
+		ld      temp2, Y+
+	.endif ; this allows to transform the values further...
+	; check if we have adc_mux_@0_mul != 1
+	.if adc_mux_@0_mul != 1
+	; so we multiply and (optionally add)
+		; prepare multiplication parameters
+		ldi2	temp3, temp4, adc_mux_@0_mul
+		.if byte1(adc_mux_@0_off)
+		ldi	Yl, byte1(adc_mux_@0_off)
+		.endif
+		.if byte2(adc_mux_@0_off)
+		ldi	Yh, byte2(adc_mux_@0_off)
+		.endif
+		; execute the multiplication
+		rcall	mul_y_12x34
+		; move the result in Y back to temp1
+		movw	temp1, Yl
+	.else
+	; just an optional add of the offset if > 0
+		.if adc_mux_@0_off
+		adiwx	temp1, temp2, adc_mux_@0_off
+		.endif
+	.endif
+.endmacro
 ; helper macro to store the current averaged value and select next mux
+; temp5/1/2 contain the 24 bit value
 ; temp3 contains current mux
 ; temp4 contains next mux (on exit)
 ; XL/Xh  contain adc_base
@@ -3660,59 +3729,74 @@ adc_start_set_mux:
 		.endif
 	; to finish up the last iteration of adc_check_mux
 	; load the next mux (= this iteration)
+	; this is also the default when mux does not match
 		ldi     temp4, @0
+	; and jump immediately to value store (if not the first in sequence)
+		.if USE_ADC_FIRST != @0
+		rjmp	adc_process_value_mux_store
+		.endif
 	; compare current with mux
 		cpi     temp3, @0
-	; if we are not equal then jump to the end plus 1,
-	; so that we get past the load for temp2
+	; if we are not equal then jump to the end plus 2,
+	; so that we get past the load for temp2 and the exit jump
 		.if USE_ADC_MASK & (65534 << @0)
-		brne    adc_check_mux_skip + 1
+		brne    adc_check_mux_skip + 2
 		.else
-		brne    adc_check_mux_skip
+		; or if we are the last, then just update the MUX to first...
+		; - by default temp4 contains USE_ADC_FIRST...
+		brne    adc_process_mux_store
 		.endif
-	; load the destination register in X by adding the offset
-	; so we are limited to 32 muxes, which is ok
-	; with 10/16 mux available in HW
+	; do the adc_translation
+		adc_translate_value @0
+
+	; load the destination address in X by adding the offset
+	; so we are limited to < 31 muxes, which is ok
+	; with 10/16 mux available on the Mega8/XX8
 		adiw    Xl, (adc_mux_@0_l - adc_temp_l)
-	; add scaling and offsets if set
-		.if defined(adc_mux_@0_mul)
-		.if adc_mux_@0_mul
-		ldi2 temp1, temp2, adc_mux_@0_mul
-		.endif
-		.endif
-		.if defined(adc_mux_@0_off)
-		.if adc_mux_@0_off
-		ldi2 Yl, Yh, adc_mux_@0_off
-		.endif
-		.endif
 adc_check_mux_skip:
 .endif
 .endmacro
-; scale the 24 bit value
-; store aggregated 24 bit value to final location
-; get next mux to use
-adc_process_store_aggregated:
 
+; scale the aggregted 18 bit value (temp5,1,2)
+; temp5 contains value bit0,1 in bit 6 and 7, which we will decimate
+; store aggregated 16 bit value to final sram location for the mux
+; calculate next mux to use
+adc_process_store_aggregated:
 	; adc debug marker - end of aggregation
 		adc_off
 
-	; load current mux in temp1 for comparisson - temp2 will contain next
-		lds	temp3, adc_temp_mux
-	; load X with adc_temp_l
-		ldi2	Xl, Xh, adc_temp_l
+	; clear temp using Y (which here still contains adc_temp_l)
+		stdy	adc_temp_l, Zh, adc_temp_l
+		stdy	adc_temp_h, Zh, adc_temp_l
+		stdy	adc_temp_x, Zh, adc_temp_l
 
-	; set up default multiplier and offsets
-		ldi2	temp1, temp2, 0	; multiplier
-		movw	Yl, temp1
+	; load X with adc_temp_l (is in Y)
+		movw	Xl, Yl
+
+	; clear Y
+		.if byte1(adc_temp_l)
+		clr	Yl
+		.endif
+		.if byte2(adc_temp_l)
+		clr	Yh
+		.endif
 
 	; adc debug marker - start of final result
 		adc_on	3
 
 	; now the real mux-checks
-	; this will take 1+COUNT_BITS(USE_ADC_MASK)*3+1/2 cycles
-	; so in the worsted case (0-7 and 14, 15) 32/33 cycles
-	; but there are typically 3 MUX that we could be
-	; interrested, which leaves us at 10 cycles, which is not so bad
+	; as of now there is no longer a constant execution length
+	; as we have added scaling translation into the mix directly
+	; if no scaling/translation happens we run:
+	;   + 3C * BITCOUNT(USE_ADC_MASK & ((1<<ADC) - 1)) to match an ADC
+	;   + 6C for the ADC itself when not doing any value transformation
+	; an unexpected MUX takes: 3C * BITCOUNT(USE_ADC_MASK)
+	;   which is worsted case 30C with all 10 Mux defined, but that
+	;   should not happen, or only happens on the very first time
+	;   we run a conversion
+	; on a high number of ADCs we could take a short-cut if necessary
+	;   but that is typically not necessary with 2-3 ADCs to capture
+	;   so we leave that as an exercise for when it is needed
 		adc_check_mux 0
 		adc_check_mux 1
 		adc_check_mux 2
@@ -3729,30 +3813,15 @@ adc_process_store_aggregated:
 	; also next_mux (in temp2) is set to FIRST,
 	; so nothing we need to do
 
-	; store the next mux to use
+adc_process_value_mux_store:
+	; now store the result
+		st	X+, temp1
+		st	X+, temp2
+
+adc_process_mux_store:
+	; store the next mux to use - stdy cant get used here - Y is possibly reused
 		sts	adc_temp_mux, temp4
 
-	; clear temp
-		sts	adc_temp_l, Zh
-		sts	adc_temp_h, Zh
-		sts	adc_temp_x, Zh
-
-	; check if we got a multiplier in temp1/3
-		adiw	temp1, 0
-		breq	adc_process_store_aggregated_no_scale
-	; prepare multiply 12, 34 and aggregate into Y
-		movw	temp3, temp5
-		rcall	mul_y_12x34
-	; and store
-		rjmp	adc_process_store_aggregated_store
-adc_process_store_aggregated_no_scale:
-	; add value to Y (possibly 0)
-		add	Yl, temp5
-		adc	Yh, temp6
-	; now store the result
-adc_process_store_aggregated_store:
-		st	X+, Yl
-		st	X+, Yh
 	; and set mux
 		rjmp	adc_start_set_mux
 .endif
