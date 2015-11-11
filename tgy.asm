@@ -188,8 +188,12 @@
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
 .equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
+.if !defined(BEACON)
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
+.endif
+.if !defined(BEACON_IDLE)
 .equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
+.endif
 .if !defined(CHECK_HARDWARE)
 .equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
 .endif
@@ -198,7 +202,108 @@
 .equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
 .equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
+.if !defined(MOTOR_DEBUG)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
+.endif
+
+.if !defined(USE_LED_PWM)
+.equ USE_LED_PWM	= 0	; set to 1/2/3 to set PWM fequency and brightness - 3 flashes already!
+.endif
+
+; power saving when the motor is not running
+.if !defined(USE_SLEEP)
+.equ USE_SLEEP		= 0	; Sleep level to support (0 = none, 1 = idle, 2=adc)
+.endif
+
+;  enable adc reading if USE_ADC or USE_ADC_MASK is defined
+.if !defined(USE_ADC)
+.equ USE_ADC		= defined(USE_ADC_MASK)
+.endif
+;  adc debugging settings tpically on PORTB5
+.if !defined(ADC_DEBUG)
+.equ ADC_DEBUG		= 0 	; if =1 : typical mask bit 1-3 set
+				; bit 1 : high when ADC Running
+				; bit 2 : high when aggregating
+				; bit 3 : high when in final processing
+				; bit 4 : toggle DEBUG when in adc_processing
+.endif
+
+; calculate the USE_ADC_MASK from some well-known MUX
+.if !defined(USE_ADC_MASK)
+.set USE_ADC_MASK	= 0	; the ADC bitmap is set to 0 by default
+.if USE_ADC
+.if defined(mux_voltage)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_voltage)
+.endif
+.if defined(mux_current)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_current)
+.endif
+.if defined(mux_temperature)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_temperature)
+.endif
+.if defined(mux_gnd)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_voltage_gnd)
+.endif
+.if defined(mux_voltage_bg)
+.set USE_ADC_MASK	= USE_ADC_MASK | (1<<mux_voltage_bg)
+.endif
+.endif
+.endif
+
+.if !defined(USE_ADC_REF)
+.equ   USE_ADC_REF    = (1<<REFS0) ; which ref should we use with the ADC
+.endif
+
+; see if we got everything to translate temperature ADC to celsius
+.if USE_ADC && defined(mux_temperature)
+.if (USE_ADC_MASK & (1<<mux_temperature))
+.if defined(mux_temperature_rpullup) || defined(mux_temperature_rntc) || defined(mux_temperature_beta)
+.if defined(mux_temperature_rpullup) && defined(mux_temperature_rntc) && defined(mux_temperature_beta)
+.equ USE_ADC_TEMPERATURE_NTC_TABLE = 1
+.else
+.warning "not all values for NTC table are defined"
+.endif
+.endif
+.endif
+.endif
+.if !defined(USE_ADC_TEMPERATURE_NTC_TABLE)
+.equ USE_ADC_TEMPERATURE_NTC_TABLE = 0
+.endif
+
+.if (USE_SLEEP > 1) || USE_ADC_MASK
+  .if defined(HK_PROGRAM_CARD) || USE_UART
+.warning "There are some restrictions when using deeper sleep and UART"
+; note: the implementation for wakeup from sleep requires that
+;	the UART-RX line goes low for at least 0.2ms
+;	this comes "out of the box" as the UART-protocol needs to send:
+;		0xf5 0x00 (n times - depending on motor count)
+;	more than 10 times for the system to move into "armed" mode
+;	and sending 0x00 at 38400Baud takes the line down for 0.23ms
+; set sampling to 1ms effectively for long conversions
+; this is a bit more expensive power wise due to twice/four times
+; the number of	interrupts compared to full idle
+    .if F_CPU >= 12
+; when idle use 250kHz ADC clock @16MHz (187kHz@12MHz - 312kHz@20MHz)
+.equ	ADC_IDLE_CLOCK_DIV	= 64
+.equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS1)
+; when running use 1000kHz ADC clock @16MHz (750kHz@12MHz - 1250kHz@20MHz)
+.equ	ADC_RUN_CLOCK_DIV	= 16
+.equ	ADC_RUN_CLOCK_BIT	= (1<<ADPS2)
+    .else
+; when idle use 250kHz ADC clock @8MHz (312kHz@10MHz)
+.equ	ADC_IDLE_CLOCK_DIV	= 32
+.equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS0)
+; when running use 1000kHz ADC clock @8MHz (1250kHz@10MHz)
+.equ	ADC_RUN_CLOCK_DIV	= 8
+.equ	ADC_RUN_CLOCK_BIT	= (1<<ADPS1)|(1<<ADPS0)
+    .endif
+  .else
+; slowest sensible clock to minimize wakeups from sleep
+.equ	ADC_IDLE_CLOCK_DIV	= 128
+.equ	ADC_IDLE_CLOCK_BIT	= (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0)
+  .endif
+.equ	ADC_SLEEP_COUNTER_TOP	= CPU_MHZ * 4096 / 25 / ADC_IDLE_CLOCK_DIV
+.endif
 
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
@@ -393,10 +498,133 @@ i2c_max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enabl
 i2c_rx_state:	.byte	1
 i2c_blc_offset:	.byte	1
 .endif
+.if USE_SLEEP > 1
+adc_timer_counter:	.byte	1 ; counter
+.endif
 motor_count:	.byte	1	; Motor number for serial control
 brake_sub:	.byte	1	; Brake speed subtrahend (power of two)
 brake_want:	.byte	1	; Type of brake desired
 brake_active:	.byte	1	; Type of brake active
+
+.if USE_ADC_MASK
+adc_temp_l:	.byte   1	; the accumulating adc low
+adc_temp_h:	.byte   1	; the accumulating adc high
+adc_temp_x:	.byte   1	; the accumulating adc extended
+adc_temp_mux:	.byte	1	; the mux to read now
+adc_temp_count:	.byte   1	; number of samples accumulated so far (counting down)
+
+.macro adc_mux_define
+	.if USE_ADC_MASK & (1<<@0)
+	; define the real values in sram
+adc_mux_l:	.byte   1	; value low
+adc_mux_h:	.byte   1	; value high
+	;  define aliases for this address if one of the following muxes is set
+		.equ adc_mux_@0 = adc_mux_l
+		.equ adc_mux_@0_l = adc_mux_l
+		.equ adc_mux_@0_h = adc_mux_h
+		.if defined(mux_a)
+			.if (@0 == mux_a)
+				.equ adc_mux_a_l = adc_mux_l
+				.equ adc_mux_a_h = adc_mux_h
+				.if defined(mux_a_mul)
+				.equ adc_mux_@0_mul = mux_a_mul
+				.endif
+				.if defined(mux_a_off)
+				.equ adc_mux_@0_off = mux_a_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_b)
+			.if (@0 == mux_b)
+				.equ adc_mux_b_l = adc_mux_l
+				.equ adc_mux_b_h = adc_mux_h
+				.if defined(mux_b_mul)
+				.equ adc_mux_@0_mul = mux_b_mul
+				.endif
+				.if defined(mux_b_off)
+				.equ adc_mux_@0_off = mux_b_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_c)
+			.if (@0 == mux_c)
+				.equ adc_mux_c_l = adc_mux_l
+				.equ adc_mux_c_h = adc_mux_h
+				.if defined(mux_c_mul)
+				.equ adc_mux_@0_mul = mux_c_mul
+				.endif
+				.if defined(mux_c_off)
+				.equ adc_mux_@0_off = mux_c_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_common)
+			.if (@0 == mux_common)
+				.equ adc_mux_common_l = adc_mux_l
+				.equ adc_mux_common_h = adc_mux_h
+				.if defined(mux_common_mul)
+				.equ adc_mux_@0_mul = mux_common_mul
+				.endif
+				.if defined(mux_common_off)
+				.equ adc_mux_@0_off = mux_common_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_voltage)
+			.if (@0 == mux_voltage)
+				.equ adc_mux_voltage_l = adc_mux_l
+				.equ adc_mux_voltage_h = adc_mux_h
+				.if defined(mux_voltage_mul)
+				.equ adc_mux_@0_mul = mux_voltage_mul
+				.endif
+				.if defined(mux_voltage_off)
+				.equ adc_mux_@0_off = mux_voltage_off
+				.endif
+			.endif
+		.endif
+		.if defined(mux_current)
+			.if (@0 == mux_current)
+				.equ adc_mux_current_l = adc_mux_l
+				.equ adc_mux_current_h = adc_mux_h
+				.if defined(mux_current_mul)
+				.equ adc_mux_@0_mul = mux_current_mul
+				.endif
+				.if defined(mux_current_off)
+				.equ adc_mux_@0_off = mux_current_off
+				.endif
+			.endif
+		.endif
+		.if (@0 == 14)
+				.equ adc_mux_voltage_bg_l = adc_mux_l
+				.equ adc_mux_voltage_bg_h = adc_mux_h
+		.endif
+		.if (@0 == 15)
+				.equ adc_mux_voltage_gnd_l = adc_mux_l
+				.equ adc_mux_voltage_gnd_h = adc_mux_h
+		.endif
+		.if !defined(adc_mux_@0_mul)
+				.equ adc_mux_@0_mul = 1
+		.endif
+		.if !defined(adc_mux_@0_off)
+				.equ adc_mux_@0_off = 0
+		.endif
+	.endif
+.endmacro
+adc_mux_start: 			; the mux low and high as well as the next mux
+adc_mux_define 0
+adc_mux_define 1
+adc_mux_define 2
+adc_mux_define 3
+adc_mux_define 4
+adc_mux_define 5
+adc_mux_define 6
+adc_mux_define 7
+.if USE_ADC_MASK & ((1<<8) | (1<<9) | (1<<10) | (1<<11) | (1<<12) | (1<<13))
+.error "Unsupported ADC MUX mask - some MUX between 8 and 13 enabled"
+.endif
+adc_mux_define 14
+adc_mux_define 15
+.endif
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -418,6 +646,14 @@ blc_bitconfig:	.byte	1	; BLConfig bitconfig (1 == MOTOR_REVERSE)
 blc_checksum:	.byte	1	; BLConfig checksum (0xaa + above bytes)
 .endif
 eeprom_end:	.byte	1
+;**** **** **** **** ****
+; The following entries are block-copied from FLASH
+copy_to_sram_start:
+.if USE_ADC_TEMPERATURE_NTC_TABLE
+adc_ntc_table:	.byte	512	; the NTC translation table
+.endif
+copy_to_sram_end:
+
 ;-----bko-----------------------------------------------------------------
 ;**** **** **** **** ****
 .cseg
@@ -611,6 +847,24 @@ eeprom_defaults_w:
 		outr	@0, @2
 	.else
 		outr	@0, ZH
+	.endif
+.endmacro
+
+; load via Y offset if possible
+.macro lddy
+	.if ((@1-@2) < 64) && (@1>=@2)
+		ldd	@0, Y+(@1-@2)
+	.else
+		lds	@0, @1
+	.endif
+.endmacro
+
+; store via Y offset if possible
+.macro stdy
+	.if ((@0-@2) < 64) && (@0 >= @2)
+		std	Y+(@0-@2), @1
+	.else
+		sts	@0, @1
 	.endif
 .endmacro
 
@@ -1199,6 +1453,18 @@ eeprom_defaults_w:
 
 ;-- RC pulse setup and edge handling macros ------------------------------
 
+.macro int0_set_rising_edge
+               in      @0, MCUCR
+               sbr     @0, (1<<ISC01) + (1<<ISC00)
+               out     MCUCR, @0
+.endmacro
+.macro int0_set_falling_edge
+               in      @0, MCUCR
+               cbr     @0, (1<<ISC00)
+               sbr     @0, (1<<ISC01)
+               out     MCUCR, @0
+.endmacro
+
 .if USE_ICP
 .macro rcp_int_enable
 		in	@0, TIMSK
@@ -1228,21 +1494,17 @@ eeprom_defaults_w:
 .endmacro
 .if USE_INT0 == 1
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01)+(1<<ISC00)
-		out	MCUCR, @0	; set next int0 to rising edge
+		int0_set_rising_edge @0
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01)
-		out	MCUCR, @0	; set next int0 to falling edge
+		int0_set_falling_edge @0
 .endmacro
 .elif USE_INT0 == 2
 .macro rcp_int_rising_edge
-		ldi	@0, (1<<ISC01)
-		out	MCUCR, @0	; set next int0 to falling edge
+		int0_set_falling_edge @0
 .endmacro
 .macro rcp_int_falling_edge
-		ldi	@0, (1<<ISC01)+(1<<ISC00)
-		out	MCUCR, @0	; set next int0 to rising edge
+		int0_set_rising_edge @0
 .endmacro
 .endif
 .endif
@@ -1765,11 +2027,48 @@ urxc_exit:	out	SREG, i_sreg
 		reti
 	.endif
 ;-----bko-----------------------------------------------------------------
+; macros to embed low power FET settings into code mit minimal overhead
+.macro FET_LOW_POWER_RESTORE
+		.if defined(USE_FET_RESET_LOW_POWER)
+		.if USE_FET_RESET_LOW_POWER
+		rcall	_fet_low_power_reset
+		.endif
+		.endif
+.endmacro
+.macro FET_LOW_POWER_SET
+		.if defined(USE_FET_SET_LOW_POWER)
+		.if USE_FET_SET_LOW_POWER
+		rcall	_fet_low_power_set
+		.endif
+		.endif
+.endmacro
+
+.if defined(USE_FET_RESET_LOW_POWER)
+.if USE_FET_RESET_LOW_POWER
+_fet_low_power_reset:
+	; put system in a low power mode from a FET perspective
+		FET_RESET_LOW_POWER
+
+		ret
+.endif
+.endif
+.if defined(USE_FET_SET_LOW_POWER)
+.if USE_FET_SET_LOW_POWER
+_fet_low_power_set:
+	; put system in a normal power mode from a FET perspective
+		FET_SET_LOW_POWER
+
+		ret
+.endif
+.endif
+
+;-----bko-----------------------------------------------------------------
 ; beeper: timer0 is set to 1µs/count
 beep_f1:	ldi	temp2, 80
 		ldi	temp4, 200
 		RED_on
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f1_on:	BpFET_on
 		AnFET_on
 		rcall	beep
@@ -1782,6 +2081,7 @@ beep_f2:	ldi	temp2, 100
 		ldi	temp4, 180
 		GRN_on
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f2_on:	CpFET_on
 		BnFET_on
 		rcall	beep
@@ -1793,6 +2093,7 @@ beep_f2_on:	CpFET_on
 beep_f3:	ldi	temp2, 120
 		ldi	temp4, 160
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f3_on:	ApFET_on
 		CnFET_on
 		rcall	beep
@@ -1805,6 +2106,7 @@ beep_f4_freq:	ldi	temp4, 140
 beep_f4_fets:	RED_on
 		GRN_on
 		BLUE_on
+		FET_LOW_POWER_RESTORE
 beep_f4_on:	CpFET_on
 		AnFET_on
 		rcall	beep
@@ -3220,6 +3522,459 @@ rcp_error_beep_more:
 		ldi	temp2, 18		; Short beep pulses to indicate corrupted PWM input
 		rjmp	beep_f4_freq
 .endif
+
+;-----bko-----------------------------------------------------------------
+.if (USE_SLEEP > 1) || USE_ADC_MASK
+.macro adc_disable
+	out	ADCSRA, Zh
+.endmacro
+
+.macro adc_enable_slow_irq
+	outi	ADCSRA, (1<<ADEN) | (1<<ADIF) | (1<<ADIE) | ADC_IDLE_CLOCK_BIT, @0
+.endmacro
+
+.macro adc_enable_fast
+	outi	ADCSRA, (1<<ADEN) | (1<<ADIF) | ADC_RUN_CLOCK_BIT, @0
+.endmacro
+; debug marker - typically long high means ADC-conversion running (>0.1ms when idle)
+; 1 short high means we have a real value that we aggregate (~1.6us)
+; 2 short high (short, then a bit longer) means we are finalizing a value (~3.5us)
+; so it looks like this:
+; _^^^^^^^^^^^^^^_^^^^^^^^^^^^^^_	- conversion, but aborted - changed mux
+; _^^^^^^^^^^^^^^_^_^^^^^^^^^^^^^^_	- conversion and aggregation of values
+; _^^^^^^^^^^^^^^_^_^^_^^^^^^^^^^^^^^_	- conversion and aggregation and
+;					  storing of final value (scaled)
+
+.macro adc_on
+	; only if B5 is available and MOTOR_DEBUG does not claim B5
+	.if ADC_DEBUG && (DIR_PB & (1<<5)) == 0
+	.if !MOTOR_DEBUG || (DIR_PB & (1<<3)) == 0
+	.if (ADC_DEBUG == 1) || ADC_DEBUG & (1<<@0)
+		sbi     PORTB, 5
+	.endif
+	.endif
+	.endif
+.endmacro
+
+.macro adc_off
+	; only if B5 is available and MOTOR_DEBUG does not claim B5
+	.if ADC_DEBUG && (DIR_PB & (1<<5)) == 0
+	.if !MOTOR_DEBUG || (DIR_PB & (1<<3)) == 0
+		cbi     PORTB, 5
+	.endif
+	.endif
+.endmacro
+
+.macro adc_toggle
+	; only if B5 is available and MOTOR_DEBUG does not claim B5
+	.if (ADC_DEBUG & (1<<4)) && (DIR_PB & (1<<5)) == 0
+	.if !MOTOR_DEBUG || (DIR_PB & (1<<3)) == 0
+		in	temp1,	PORTB
+		ldi	temp2,	(1<<5)
+		eor	temp1,	temp2
+		out	PORTB,	temp1
+		eor	temp1,	temp2
+		out	PORTB,	temp1
+	.endif
+	.endif
+.endmacro
+
+adc_process:
+
+	; adc debug marker - in adc_process
+		adc_toggle 4
+
+	; if adc is running there is nothing to do
+		sbic	ADCSRA, ADSC
+		ret
+
+	; adc debug marker - end of conversion
+		adc_off
+
+	; load Y with adc_temp_l
+		ldi2	Yl, Yh, adc_temp_l
+
+.if USE_SLEEP > 1
+	; if T1OVF ADCIE is enabled, skip the T1 4.096ms simulation via adc
+		in	temp1, TIMSK
+		sbrc	temp1, TOIE1
+.if USE_ADC_MASK
+		rjmp	adc_process_skip_t1ovf_sim
+.else
+		ret
+.endif
+	; disable/enable the ADC temporarily, so that we run longer conversion
+	; resulting in less interrupts/s (IRQ/s reduction ratio: 13/25)
+	; resulting in longer sleeps, which saves power
+		cbi	ADCSRA, ADEN
+		sbi	ADCSRA, ADEN
+	; decrement t1 overflow simulator counter
+		lddy	temp1, adc_timer_counter, adc_temp_l
+		dec	temp1
+	; if we reach 0 then we have a simulated overflow so about 4ms
+		brne	adc_process_no_ovfl_sim
+	; call the t1ovfl_int (this will reenable irq)
+		rcall	t1ovfl_int
+	; reset the timer counter to top (assuming extended conversions)
+		ldi	temp1, ADC_SLEEP_COUNTER_TOP
+adc_process_no_ovfl_sim:
+	; store the counter
+		stdy	adc_timer_counter, temp1, adc_temp_l
+adc_process_skip_t1ovf_sim:
+.endif
+
+.if USE_ADC_MASK
+adc_process_values:
+	;  only run if the set mux match the requested
+		lddy	temp4, adc_temp_mux, adc_temp_l
+		in	temp3, ADMUX
+		andi	temp3, 15
+		cp	temp4, temp3
+		brne	adc_start_set_mux
+	; adc debug marker - start of aggregation
+		adc_on	2
+
+	; read 10bit ADCL/H and add to 24-bit adc_temp_l/h/x
+	; with 256 samples this allows an effecive range of 18 bit
+	; note that ADC values are left aligned, so bits 15-6 are used
+	; so we decimate by 2 LSB by just using temp_h/x and dropping
+	; temp_l resulting in a 16-bit ADC value in the range [0:65472]
+	; note that the order of accumulated values [l,h,x] is temp5, 1, 2
+		lddy	temp5, adc_temp_l, adc_temp_l
+		lddy	temp1, adc_temp_h, adc_temp_l
+		lddy	temp2, adc_temp_x, adc_temp_l
+		in	temp6, ADCL
+		add	temp5, temp6
+		in	temp6, ADCH
+		adc	temp1, temp6
+		adc	temp2, ZH
+	; check if we overflow adc_temp_count
+		lddy	temp6, adc_temp_count, adc_temp_l
+		dec	temp6
+		stdy	adc_temp_count, temp6, adc_temp_l
+		breq	adc_process_store_aggregated
+	; store the temp value
+		stdy	adc_temp_l, temp5, adc_temp_l
+		stdy	adc_temp_h, temp1, adc_temp_l
+		stdy	adc_temp_x, temp2, adc_temp_l
+adc_start_set_mux:
+	; adc debug marker - end of aggregation final result
+		adc_off
+
+	; set up MUX with the correct ADC_REF set as well as left aligned
+		ori	temp4, (1<<ADLAR) | USE_ADC_REF
+		out	ADMUX, temp4
+.endif
+	; restart adc
+		sbi	ADCSRA, ADSC
+
+	; adc debug marker - start of conversion
+		adc_on 1
+
+		ret
+.endif
+
+.if USE_ADC_MASK
+; helper macro to translate the 24-bit value in temp5,1,2
+; to the final 16 bit value in temp1, 2
+; Xl/h needs not be touched otherwise adc_temp_l needs to get loaded again
+; more for ease of readability that anything else...
+.macro adc_translate_value
+	; if we handle mux_temperature and we got a NTC info, then follow that route
+	.if USE_ADC_TEMPERATURE_NTC_TABLE && (@0 == mux_temperature)
+	; ADC table lookup for NTC temperature sensor
+	; this uses lots of SRAM for the table!
+		; calculate the address in sram based on the ADC bits 8-15
+		ldi2	Yl, Yh, adc_ntc_table, temp1
+		add	Yl, temp2
+		adc	Yh, Zh
+		add	Yl, temp2
+		adc	Yh, Zh
+		; read the values back into the result
+		ld      temp1, Y+
+		ld      temp2, Y+
+	.endif ; this allows to transform the values further...
+	; check if we have adc_mux_@0_mul != 1
+	.if adc_mux_@0_mul != 1
+	; so we multiply and (optionally add)
+		; prepare multiplication parameters
+		ldi2	temp3, temp4, adc_mux_@0_mul
+		.if byte1(adc_mux_@0_off)
+		ldi	Yl, byte1(adc_mux_@0_off)
+		.endif
+		.if byte2(adc_mux_@0_off)
+		ldi	Yh, byte2(adc_mux_@0_off)
+		.endif
+		; execute the multiplication
+		rcall	mul_y_12x34
+		; move the result in Y back to temp1
+		movw	temp1, Yl
+	.else
+	; just an optional add of the offset if > 0
+		.if adc_mux_@0_off
+		adiwx	temp1, temp2, adc_mux_@0_off
+		.endif
+	.endif
+.endmacro
+; helper macro to store the current averaged value and select next mux
+; temp5/1/2 contain the 24 bit value
+; temp3 contains current mux
+; temp4 contains next mux (on exit)
+; XL/Xh  contain adc_base
+.macro adc_check_mux
+.if USE_ADC_MASK & (1<<@0)
+	; define the first ADC if not set
+		.if !defined(USE_ADC_FIRST)
+		.equ    USE_ADC_FIRST = @0
+		.endif
+	; to finish up the last iteration of adc_check_mux
+	; load the next mux (= this iteration)
+	; this is also the default when mux does not match
+		ldi     temp4, @0
+	; and jump immediately to value store (if not the first in sequence)
+		.if USE_ADC_FIRST != @0
+		rjmp	adc_process_value_mux_store
+		.endif
+	; compare current with mux
+		cpi     temp3, @0
+	; if we are not equal then jump to the end plus 2,
+	; so that we get past the load for temp2 and the exit jump
+		.if USE_ADC_MASK & (65534 << @0)
+		brne    adc_check_mux_skip + 2
+		.else
+		; or if we are the last, then just update the MUX to first...
+		; - by default temp4 contains USE_ADC_FIRST...
+		brne    adc_process_mux_store
+		.endif
+	; do the adc_translation
+		adc_translate_value @0
+
+	; load the destination address in X by adding the offset
+	; so we are limited to < 31 muxes, which is ok
+	; with 10/16 mux available on the Mega8/XX8
+		adiw    Xl, (adc_mux_@0_l - adc_temp_l)
+adc_check_mux_skip:
+.endif
+.endmacro
+
+; scale the aggregted 18 bit value (temp5,1,2)
+; temp5 contains value bit0,1 in bit 6 and 7, which we will decimate
+; store aggregated 16 bit value to final sram location for the mux
+; calculate next mux to use
+adc_process_store_aggregated:
+	; adc debug marker - end of aggregation
+		adc_off
+
+	; clear temp using Y (which here still contains adc_temp_l)
+		stdy	adc_temp_l, Zh, adc_temp_l
+		stdy	adc_temp_h, Zh, adc_temp_l
+		stdy	adc_temp_x, Zh, adc_temp_l
+
+	; load X with adc_temp_l (is in Y)
+		movw	Xl, Yl
+
+	; clear Y
+		.if byte1(adc_temp_l)
+		clr	Yl
+		.endif
+		.if byte2(adc_temp_l)
+		clr	Yh
+		.endif
+
+	; adc debug marker - start of final result
+		adc_on	3
+
+	; now the real mux-checks
+	; as of now there is no longer a constant execution length
+	; as we have added scaling translation into the mix directly
+	; if no scaling/translation happens we run:
+	;   + 3C * BITCOUNT(USE_ADC_MASK & ((1<<ADC) - 1)) to match an ADC
+	;   + 6C for the ADC itself when not doing any value transformation
+	; an unexpected MUX takes: 3C * BITCOUNT(USE_ADC_MASK)
+	;   which is worsted case 30C with all 10 Mux defined, but that
+	;   should not happen, or only happens on the very first time
+	;   we run a conversion
+	; on a high number of ADCs we could take a short-cut if necessary
+	;   but that is typically not necessary with 2-3 ADCs to capture
+	;   so we leave that as an exercise for when it is needed
+		adc_check_mux 0
+		adc_check_mux 1
+		adc_check_mux 2
+		adc_check_mux 3
+		adc_check_mux 4
+		adc_check_mux 5
+		adc_check_mux 6
+		adc_check_mux 7
+		adc_check_mux 14
+		adc_check_mux 15
+	; if there was no match above - i.e an unexpected MUX,
+	; then we got the correct defaults already set up
+	; and we copy from adc_temp to adc_temp, which is ok
+	; also next_mux (in temp2) is set to FIRST,
+	; so nothing we need to do
+
+adc_process_value_mux_store:
+	; now store the result
+		st	X+, temp1
+		st	X+, temp2
+
+adc_process_mux_store:
+	; store the next mux to use - stdy cant get used here - Y is possibly reused
+		sts	adc_temp_mux, temp4
+
+	; and set mux
+		rjmp	adc_start_set_mux
+.endif
+
+;-----bko-----------------------------------------------------------------
+.if USE_SLEEP
+
+.macro sleep_enable
+		in	@0, MCUCR
+		cbr	@0, (1<<SM2) | (1<<SM1) | (1<<SM0)
+		sbr     @0, (1<<SE) | (@1<<SM0)
+		out     MCUCR,  temp1
+.endmacro
+
+sleep_set_adc:
+.if USE_SLEEP > 1
+
+	; disable rcp_int
+		rcp_int_disable temp1
+
+	;  enable sleep mode ADC
+		sleep_enable temp1, 1
+
+	; enable ADC with irq and slow clock
+		adc_enable_slow_irq temp1
+
+	; disable timer1 overflow interrupt
+		in	temp1, TIMSK
+		cbr	temp1, (1<<TOIE1)
+		out	TIMSK, temp1
+
+	; disable UART_RX
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+		cbi	UCSRB, RXEN
+		.endif
+
+	; set up the timer counter to TOP
+		ldi	temp1, ADC_SLEEP_COUNTER_TOP
+		sts	adc_timer_counter, temp1
+
+		ret
+.endif
+
+sleep_set_idle:
+	; enable sleep mode IDLE
+		sleep_enable temp1, 0
+.if USE_SLEEP > 1
+	; disable ADC
+		adc_disable temp1
+	; enable timer1 overflow
+		in	temp1, TIMSK
+		sbr	temp1, (1<<TOIE1)
+		out	TIMSK, temp1
+	; enable UART_RX
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+		sbi	UCSRB, RXEN
+		.endif
+	; restore edges
+               rcp_int_rising_edge temp1
+               rcp_int_enable temp1
+.endif
+		ret
+
+sleep_adc:
+.if USE_SLEEP > 1
+	; only consider to sleep in deep sleep if adc is running
+		sbis	ADCSRA, ADSC
+		ret
+.endif
+
+sleep_idle:
+	; atomically check if we should sleep
+		cli
+		sbrc	flags1, EVAL_RC
+		reti
+	; read state of RXD pin before and after sleep
+		.if USE_SLEEP > 1
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+		in	temp2, PIND
+		andi	temp2, (1<<rxd)
+		.endif
+		.endif
+
+	; no condition, so let us sleep
+		sei
+		sleep
+	; and reset wdt
+		wdr
+
+.if USE_SLEEP > 1
+	; if adc_int is disabled then return
+		sbis	ADCSRA, ADIE
+		ret
+	; if there is a pulse level on the RC pins then return to idle sleep
+		.if USE_INT0 = 1
+		sbic	PIND, rcp_in
+		rjmp	sleep_set_idle
+		.elseif USE_INT0 = 2
+		sbis	PIND, rcp_in
+		rjmp	sleep_set_idle
+		.elseif USE_ICP
+		sbic	PINB, rcp_in
+		rjmp	sleep_set_idle
+		.endif
+		.if defined(HK_PROGRAM_CARD) || USE_UART
+	; need to check if there was a uart pin-change since before the sleep
+		in	temp1, PIND
+		andi	temp1, (1<<rxd)
+		cpse	temp1, temp2 		; did it change?
+		rjmp	sleep_set_idle		; yes
+		.endif
+.endif
+		ret
+.endif
+
+;-----bko-----------------------------------------------------
+; table spaces copied to sram starting at copy_to_sram_start
+.macro check_flash_sram_offset
+	.if 2*(@0_flash-copy_from_flash_start) != (@0-copy_to_sram_start)
+	.error "There are different offsets defined in flash compared to sram"
+	.endif
+.endmacro
+
+copy_from_flash_start:
+.if USE_ADC_TEMPERATURE_NTC_TABLE
+adc_ntc_table_flash:
+	check_flash_sram_offset adc_ntc_table
+.include "ntc-table.inc"
+.endif
+copy_from_flash_end:
+
+; check that sizes match
+.if (2*(copy_from_flash_end-copy_from_flash_start)) != (copy_to_sram_end-copy_to_sram_start)
+.error "mismatch between flash and sram table space sizes"
+.endif
+
+; copy data from flash into sram
+.if copy_from_flash_start != copy_from_flash_end
+copy_from_flash_to_sram:
+		ldi2    Xl, Xh, copy_to_sram_start
+		ldi2    Zl, Zh, 2 * copy_from_flash_start
+
+copy_from_flash_loop:
+		lpm     temp1, Z+
+		st      X+, temp1
+		cpiz2   Xl, Xh, copy_to_sram_end, temp2
+		brne    copy_from_flash_loop
+
+		clr     Zh
+
+		ret
+.endif
+
 ;-----bko-----------------------------------------------------------------
 main:
 		clr	r0
@@ -3247,7 +4002,7 @@ clear_loop1:	cp	ZL, r0
 
 	; Initialize ports
 		outi	PORTB, INIT_PB, temp1
-		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5), temp1
+		outi	DDRB, DIR_PB | (MOTOR_DEBUG<<3) | (MOTOR_DEBUG<<4) | (MOTOR_DEBUG<<5) | (ADC_DEBUG<<5), temp1
 		outi	PORTC, INIT_PC, temp1
 		outi	DDRC, DIR_PC, temp1
 		outi	PORTD, INIT_PD, temp1
@@ -3294,6 +4049,11 @@ clear_loop1:	cp	ZL, r0
 	; Read EEPROM block to RAM
 		rcall	eeprom_read_block	; Also calls osccal_set
 		rcall	eeprom_check_reset
+
+	; copy flash to sram if we got something to copy
+		.if copy_from_flash_start != copy_from_flash_end
+		rcall	copy_from_flash_to_sram
+		.endif
 
 	; Early input initialization is required for i2c BL-Ctrl V2 detection
 	; This serves data from the EEPROM, so this is as early as possible.
@@ -3430,13 +4190,32 @@ control_disarm:
 		rcp_int_enable temp1
 		.endif
 
-	; Wait for one of the input sources to give arming input
 
+	; set up adc sleep mode
+.if USE_SLEEP > 1
+		rcall	sleep_set_adc
+		rjmp	i_rc_puls1
+.endif
+
+i_rc_puls1_sleep_idle:
+.if USE_SLEEP
+		rcall	sleep_set_idle
+.endif
+
+	; Wait for one of the input sources to give arming input
 i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
+i_rc_puls2_low_power:
+		FET_LOW_POWER_SET		; put system in a low power mode from a FET perspective
 i_rc_puls2:	wdr
+		.if USE_SLEEP > 1 || USE_ADC_MASK
+		rcall	adc_process
+		.endif
+		.if USE_SLEEP
+		rcall	sleep_adc
+		.endif
 		.if defined(HK_PROGRAM_CARD)
 		.endif
 		sbrc	flags1, EVAL_RC
@@ -3444,20 +4223,25 @@ i_rc_puls2:	wdr
 		.if BOOT_JUMP
 		rcall	boot_loader_test
 		.endif
-		.if BEACON
+		.if BEACON || (USE_SLEEP > 1)
 		lds	temp1, rct_beacon
 		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
 		brne	i_rc_puls2
 		ldi	temp1, 60
 		sts	rct_beacon, temp1	; Double rate after the first beep
+		.endif
+		.if BEACON
 		rcall	beep_f3			; Beacon
 		.endif
-		rjmp	i_rc_puls2
+		.if USE_SLEEP > 1
+		rcall	sleep_set_adc 		; fall back to adc sleep mode
+		.endif
+		rjmp	i_rc_puls2_low_power
 i_rc_puls_rx:	rcall	evaluate_rc_init
-		lds	YL, rc_duty_l
-		lds	YH, rc_duty_h
-		adiw	YL, 0			; Test for zero
-		brne	i_rc_puls1
+		lds	Yl, rc_duty_l
+		lds	Yl, rc_duty_h
+		adiw	Yl, 0			; Test for zero
+		brne	i_rc_puls1_sleep_idle
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
 		brlo	i_rc_puls2
@@ -3485,6 +4269,9 @@ i_rc_puls3:
 	; Fall through to restart_control
 ;-----bko-----------------------------------------------------------------
 restart_control:
+.if USE_SLEEP
+		rcall	sleep_set_idle
+.endif
 		rcall	switch_power_off	; Disables PWM timer, turns off all FETs
 		cbr	flags0, (1<<SET_DUTY)	; Do not yet set duty on input
 		.if BEACON_IDLE
@@ -3501,7 +4288,7 @@ wait_for_power_on_init:
 		lds	temp3, brake_want
 		lds	temp4, brake_active
 		cp	temp3, temp4
-		breq	wait_for_power_on
+		breq	wait_for_power_on_low_power
 
 		rcall	switch_power_off	; Disable any active brake
 		sts	brake_active, temp3	; Set new brake_active to brake_want
@@ -3514,7 +4301,7 @@ wait_for_power_on_init:
 		rjmp	set_brake_duty
 
 set_brake1:	cpi	temp3, 2		; Thumb brake
-		brne	wait_for_power_on
+		brne	wait_for_power_on_low_power
 		ldi	YL, 1 << low(LOW_BRAKE_SPEED)
 		sts	brake_sub, YL
 		ldi2	YL, YH, LOW_BRAKE_POWER
@@ -3528,9 +4315,27 @@ set_brake_duty:	ldi2	temp1, temp2, MAX_POWER
 		clr	sys_control_l		; Abused as duty update divisor
 		outi	TCCR2, T2CLK, temp1	; Enable PWM, cleared later by switch_power_off
 		.endif
-
+wait_for_power_on_low_power:
+		FET_LOW_POWER_SET
 wait_for_power_on:
 		wdr
+	; GREEN-led PWM based on T1 overflow to save some power
+		.if USE_LED_PWM && defined(green_led)
+		lds	temp3, tcnt1x
+		andi	temp3, (1<<USE_LED_PWM)-1
+		brne	wait_for_power_blink_green_skip_on
+		GRN_on
+		rjmp	wait_for_power_blink_green_skip_off
+wait_for_power_blink_green_skip_on:
+		GRN_off
+wait_for_power_blink_green_skip_off:
+		.endif
+		.if USE_ADC_MASK
+		rcall	adc_process
+		.endif
+		.if USE_SLEEP
+		rcall	sleep_idle
+		.endif
 		sbrc	flags1, EVAL_RC
 		rjmp	wait_for_power_rx
 		.if BEEP_RCP_ERROR
@@ -3576,7 +4381,11 @@ wait_for_power_rx:
 		breq	wait_for_power_on_init	; while resetting boot/beacon timers
 
 start_from_running:
+		FET_LOW_POWER_RESTORE		; put system in a normal power mode
 		rcall	switch_power_off
+		.if USE_ADC_MASK
+		adc_enable_fast temp1 		; set up adc with fast clock
+	.endif
 		comp_init temp1			; init comparator
 		RED_off
 		GRN_off
@@ -4041,6 +4850,11 @@ wait_for_edge2:	sbrs	flags0, OCT1_PENDING
 		rjmp	wait_for_edge2
 wait_for_edge3:	dec	XL			; Zero-cross has happened
 		brne	wait_for_edge2		; Check again unless temp1 is zero
+
+		; trigger ADC read while we wait for commutations...
+		.if USE_ADC_MASK
+		rcall   adc_process
+		.endif
 
 wait_commutation:
 		flag_on
