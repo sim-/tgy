@@ -186,7 +186,8 @@
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .endif
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
-.equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
+;.equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
+.equ	RC_CALIBRATION	= 0	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
 .equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
@@ -648,22 +649,26 @@ eeprom_defaults_w:
 .if defined(AnFET)
 ; Traditional direct high and low side drive, inverted if INIT_Px is set.
 ; Dead-time insertion is supported for COMP_PWM.
+; RSB NOTE: INIT_PD IS set for dlu40a for the nFETs
 
 	.equ CPWM_SOFT = COMP_PWM
 
+	; Magic macro that handles the inversion necessary when dealing with active low FETs
+	; If the pin was initialized as a 1, we assume it must be active low, so we invert the
+	; sense of the drive (set to 0 to turn on, set to 1 to turn off)
 	.macro FET_on
 		.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
-		cbi	@0, @1
+		cbi	@0, @1		; output sense is inverted so clear the bit to turn on the FET
 		.else
-		sbi	@0, @1
+		sbi	@0, @1		; set the bit
 		.endif
 	.endmacro
 
 	.macro FET_off
 		.if (INIT_PB & ((@0 == PORTB) << @1)) | (INIT_PC & ((@0 == PORTC) << @1)) | (INIT_PD & ((@0 == PORTD) << @1))
-		sbi	@0, @1
+		sbi	@0, @1		; output sense is inverted so set the bit to turn off the FET
 		.else
-		cbi	@0, @1
+		cbi	@0, @1		; clear the bit
 		.endif
 	.endmacro
 
@@ -704,6 +709,7 @@ eeprom_defaults_w:
 		FET_off	CpFET_port, CpFET
 	.endmacro
 
+	; PWM_FOCUS macros are empty if COMP_PWM is 0 (which it is by default)
 	.macro PWM_FOCUS_A_on
 		.if COMP_PWM
 		cpse	temp3, temp4
@@ -746,6 +752,7 @@ eeprom_defaults_w:
 
 	; For PWM state mirroring in commutation routines
 	.if HIGH_SIDE_PWM
+		; High-side is driven PWM, low-side constant
 		.equ	PWM_A_PORT_in = ApFET_port
 		.equ	PWM_B_PORT_in = BpFET_port
 		.equ	PWM_C_PORT_in = CpFET_port
@@ -753,6 +760,7 @@ eeprom_defaults_w:
 		.equ	PWM_COMP_B_PORT_in = BnFET_port
 		.equ	PWM_COMP_C_PORT_in = CnFET_port
 	.else
+		; Low-side is driven PWM, high-side constant (default ESC drive type)
 		.equ	PWM_A_PORT_in = AnFET_port
 		.equ	PWM_B_PORT_in = BnFET_port
 		.equ	PWM_C_PORT_in = CnFET_port
@@ -770,39 +778,60 @@ eeprom_defaults_w:
 	.endmacro
 
 	.macro all_pFETs_off
-	.if ApFET_port != BpFET_port || ApFET_port != CpFET_port
+	.if ApFET_port != BpFET_port || ApFET_port != CpFET_port	; test if ports for phases A, B and C are the same
+		; pFETs for Phases A, B, and C are not all on the same port, so turn off individually
+		; NOTE: This is NON-ATOMIC
 		ApFET_off
 		BpFET_off
 		CpFET_off
 	.else
-		in	@0, ApFET_port
+		; pFETs for Phases A, B, and C ARE on the same port, so turn off atomically
+
+		in	@0, ApFET_port		; read in current state of the port
+
+		; Check to see if the pFETs are inverted sense (use ApFET as the model; phases B and C should be the same)
 		.if (INIT_PB & ((ApFET_port == PORTB) << ApFET)) | (INIT_PC & ((ApFET_port == PORTC) << ApFET)) | (INIT_PD & ((ApFET_port == PORTD) << ApFET))
-		sbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+		sbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET) ; pFETs are inverted sense, so set register bits to turn FETs off
 		.else
-		cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+		cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET) ; pFETs are normal sense, so clear register bits to turn FETs off
 		.endif
-		out	ApFET_port, @0
+		; FIXME --> should mask off input signals that don't need pull-up because otherwise
+		; an input that is high at the time it is read could erroneously enable its pull-up.
+		out	ApFET_port, @0		; write out the new value to the port with all pFETs off!  Atomic ops FTW!
 	.endif
 	.endmacro
 
+
 	.macro all_nFETs_off
-	.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
+	.if AnFET_port != BnFET_port || AnFET_port != CnFET_port	; test if ports for phases A, B and C are the same
+		; nFETs for Phases A, B, and C are not all on the same port, so turn off individually
+		; NOTE: This is NON-ATOMIC
 		AnFET_off
 		BnFET_off
 		CnFET_off
 	.else
-		in	@0, AnFET_port
+		; nFETs for Phases A, B, and C ARE on the same port, so turn off atomically
+
+		in	@0, AnFET_port		; read in current state of the port
+		
+		; Check to see if the nFETs are inverted sense (use AnFET as the model; phases B and C should be the same)
 		.if (INIT_PB & ((AnFET_port == PORTB) << AnFET)) | (INIT_PC & ((AnFET_port == PORTC) << AnFET)) | (INIT_PD & ((AnFET_port == PORTD) << AnFET))
-		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET) ; nFETs are inverted sense, so set register bits to turn FETs off
 		.else
-		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
+		cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET) ; nFETs are normal sense, so clear register bits to turn FETs off
 		.endif
-		out	AnFET_port, @0
+		; FIXME --> should mask off input signals that don't need pull-up because otherwise
+		; an input that is high at the time it is read could erroneously enable its pull-up.
+		out	AnFET_port, @0		; write out the new value to the port with all nFETs off!  Atomic ops FTW!
 	.endif
 	.endmacro
 
+
+	; NOTE - logic pattern follows that of all_pFETs_off and all_nFETs_off; see above
 	.macro nFET_brake
-	.if AnFET_port != BnFET_port || AnFET_port != CnFET_port
+	.if AnFET_port != BnFET_port || AnFET_port != CnFET_port	; test if ports for phases A, B and C are the same
+		; nFETs for Phases A, B, and C are not all on the same port, so turn on individually
+		; NOTE: This is NON-ATOMIC
 		AnFET_on
 		BnFET_on
 		CnFET_on
@@ -813,11 +842,14 @@ eeprom_defaults_w:
 		.else
 		sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 		.endif
-		out	AnFET_port, @0
+		; FIXME --> should mask off input signals that don't need pull-up because otherwise
+		; an input that is high at the time it is read could erroneously enable its pull-up.
+		out	AnFET_port, @0		; write out the new value to the port with all nFETs on!  Atomic ops FTW!
 	.endif
 	.endmacro
 
 .elif defined(ENABLE_ALL)
+; NOTE: This is for the AFRO style ESCs
 ; Three logic level PWM/ENABLE-style driver, with diode emulation mode or
 ; off state at the middle level on the PWM pin. This is accomplished by
 ; setting a pull-up rather than drive high. With this method, every FET
@@ -1002,7 +1034,7 @@ eeprom_defaults_w:
 	.macro COMMUTATE_C_off
 		CnFET_off
 	.endmacro
-.else
+.else					; Low-side PWM is the default for most ESCs
 	.macro COMMUTATE_A_on
 		ApFET_on
 	.endmacro
@@ -3740,6 +3772,9 @@ run1:		.if MOTOR_REVERSE
 		.endif
 		rjmp	run_reverse
 
+; Do the actual work of running the motor here!
+; Communates through each of the states
+; 1->2->3->4->5->6->1
 run_forward:
 		rcall	wait_for_high
 		com1com2
@@ -3757,6 +3792,8 @@ run_forward:
 		com6com1
 		rjmp	run6
 
+; we're going backwards, so run the states backwards
+; 1->6->5->4->3->2->1
 run_reverse:
 		rcall	wait_for_low
 		com1com6

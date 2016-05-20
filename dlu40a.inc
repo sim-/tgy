@@ -25,7 +25,12 @@
 .equ	CpFET		= 1	;o
 .equ	CnFET		= 0	;o
 
-.equ	INIT_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<rcp_in)
+; All bits set in this are active low signals -enable pullups?
+; This is the initial value written to PORTD.  All nFET outputs are driven high
+; initially (to turn off those FETs), and rcp_in has its PU resistor enabled
+; since it is configured as an input.
+.equ	INIT_PD		= (1<<AnFET)+(1<<BnFET)+(1<<CnFET)+(1<<rcp_in)	; 8'b00110101
+; Set the direction of PORTD - all FET drivers are outputs (1), c_comp and rcp_in are inputs (0)
 .equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)+(1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 
 .equ	ApFET_port	= PORTD
