@@ -1339,6 +1339,11 @@ eeprom_defaults_w:
 		cbi	PORTB, 4
 	.endif
 .endmacro
+
+; sync_on() and sync_off() are only used if MOTOR_DEBUG is set AND pin on PortB
+;   is set as an output (bit 3 or bit 5)
+; NOTE: when enabled, this will end up generating a square wave with the same
+;   frequency as the commutation cycle.
 .macro sync_on
 	.if MOTOR_DEBUG && (DIR_PB & (1<<3)) == 0
 		sbi	PORTB, 3
@@ -3777,14 +3782,14 @@ run1:		.if MOTOR_REVERSE
 run_forward:
 		rcall	wait_for_high
 		com1com2
-		sync_off
+		sync_off		; for Debug square wave output on an extra pin
 		rcall	wait_for_low
 		com2com3
 		rcall	wait_for_high
 		com3com4
 		rcall	wait_for_low
 		com4com5
-		sync_on
+		sync_on			; for Debug square wave output on an extra pin
 		rcall	wait_for_high
 		com5com6
 		rcall	wait_for_low
