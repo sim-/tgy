@@ -4013,12 +4013,12 @@ wait_pwm_running:
 		ldi	temp4, 42 * 256 / 120
 		rcall	set_timing_degrees	; Set timeout for maximum blanking period
 wait_for_demag:
-		sbrs	flags0, OCT1_PENDING
+		sbrs	flags0, OCT1_PENDING	; call demag_timeout() if OCT1_PENDING is clear (0)
 		rjmp	demag_timeout
-		sbrc	flags1, EVAL_RC
+		sbrc	flags1, EVAL_RC		; call evaluate_rc() if EVAL_RC is set
 		rcall	evaluate_rc
-		in	temp3, ACSR
-		eor	temp3, flags1
+		in	temp3, ACSR		; read in Analog Comparator Control and Status Register
+		eor	temp3, flags1		; and XOR it with flags1
 		.if HIGH_SIDE_PWM
 		sbrs	temp3, ACO		; Check for opposite level (demagnetization)
 		.else
