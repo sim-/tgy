@@ -6,7 +6,7 @@
 
 .equ	F_CPU		= 16000000
 .equ	USE_INT0	= 1
-.equ	USE_I2C		= 1
+.equ	USE_I2C		= 0
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 0
 
@@ -44,10 +44,9 @@
 ;*********************
 .equ	mux_b		= 7	; ADC7 phase input
 .equ	mux_c		= 6	; ADC6 phase input
-.equ	i2c_clk		= 5	; ADC5/SCL
-.equ	i2c_data	= 4	; ADC4/SDA
+.equ	BpFET		= 5	; ADC5/SCL
+;.equ			= 4	; ADC4/SDA
 .equ	ApFET		= 3
-;.equ			= 2
 .equ	mux_voltage	= 2	; ADC2 voltage input (470k from Vbat, 49.9k to gnd, 10.10V -> .969V at ADC2)
 .equ	mux_temperature	= 1	; ADC1 temperature input (1.5k from +5V, 10k NTC to gnd)
 .equ	mux_a		= 0	; ADC0 phase input
@@ -55,10 +54,11 @@
 .equ	O_POWER		= 470
 .equ	O_GROUND	= 47
 
-.equ	INIT_PC		= (1<<i2c_clk)+(1<<i2c_data)
-.equ	DIR_PC		= (1<<ApFET)
+.equ	INIT_PC		= 0
+.equ	DIR_PC		= (1<<BpFET)+(1<<ApFET)
 
 .equ	ApFET_port	= PORTC
+.equ	BpFET_port	= PORTC
 
 ;*********************
 ; PORT D definitions *
@@ -67,15 +67,14 @@
 ;.equ	sense_star	= 6 (comparator AN0)
 .equ	CnFET		= 5
 .equ	CpFET		= 4
-.equ	BpFET		= 3
+;.equ	BpFET		= 3
 .equ	rcp_in		= 2
 .equ	txd		= 1
 .equ	rxd		= 0
 
 .equ	INIT_PD		= (1<<txd)
-.equ	DIR_PD		= (1<<BnFET)+(1<<CnFET)+(1<<CpFET)+(1<<BpFET)+(1<<txd)
+.equ	DIR_PD		= (1<<BnFET)+(1<<CnFET)+(1<<CpFET)+(1<<txd)
 
 .equ	BnFET_port	= PORTD
 .equ	CnFET_port	= PORTD
 .equ	CpFET_port	= PORTD
-.equ	BpFET_port	= PORTD
