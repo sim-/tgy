@@ -537,6 +537,7 @@ scmd2:
 		cpi	r22, CMD_READ_EEPROM_ISP
 		breq	scmd_read_eeprom
 		adiw	YL, 7			; Skip useless write command bytes
+		clt
 		cpi	r22, CMD_PROGRAM_EEPROM_ISP
 		breq	scmd_program_eeprom
 		cpi	r22, CMD_PROGRAM_FLASH_ISP
@@ -697,7 +698,6 @@ boot_clear_fl1:	subi	ZL, low(2*PAGESIZE)	; Decrement by a page
 		ret
 
 ; Pad out the boot loader to work around avrdude verifying gaps
-		nop
 		nop
 
 		nop
