@@ -160,9 +160,15 @@
 
 .equ	CPU_MHZ		= F_CPU / 1000000
 
+.if !defined(BOOT_LOADER)
 .equ	BOOT_LOADER	= 1	; Include Turnigy USB linker STK500v2 boot loader on PWM input pin
+.endif
+.if !defined(BOOT_JUMP)
 .equ	BOOT_JUMP	= 1	; Jump to any boot loader when PWM input stays high
+.endif
+.if !defined(BOOT_START)
 .equ	BOOT_START	= THIRDBOOTSTART
+.endif
 
 .if !defined(COMP_PWM)
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
@@ -180,41 +186,86 @@
 .if !defined(TIMING_OFFSET)
 .equ	TIMING_OFFSET	= 0	; Motor timing offset in microseconds
 .endif
+.if !defined(MOTOR_BRAKE)
 .equ	MOTOR_BRAKE	= 0	; Enable brake during neutral/idle ("motor drag" brake)
+.endif
+.if !defined(LOW_BRAKE)
 .equ	LOW_BRAKE	= 0	; Enable brake on very short RC pulse ("thumb" brake like on Airtronics XL2P)
+.endif
 .if !defined(MOTOR_REVERSE)
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .endif
+.if !defined(RC_PULS_REVERSE)
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
+.endif
+.if !defined(RC_CALIBRATION)
 .equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
+.endif
+.if !defined(SLOW_THROTTLE)
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
+.endif
+.if !defined(BEACON)
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
+.endif
+.if !defined(BEACON_IDLE)
 .equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
+.endif
 .if !defined(CHECK_HARDWARE)
 .equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
 .endif
+.if !defined(CELL_MAX_DV)
 .equ	CELL_MAX_DV	= 43	; Maximum battery cell deciV
+.endif
+.if !defined(CELL_MIN_DV)
 .equ	CELL_MIN_DV	= 35	; Minimum battery cell deciV
+.endif
+.if !defined(CELL_COUNT)
 .equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
+.endif
+.if !defined(BLIP_CELL_COUNT)
 .equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
+.endif
+.if !defined(DEBUG_ADC_DUMP)
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
+.endif
+.if !defined(MOTOR_DEBUG)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
+.endif
 
+.if !defined(I2C_ADDR)
 .equ	I2C_ADDR	= 0x50	; MK-style I2C address
+.endif
+.if !defined(MOTOR_ID)
 .equ	MOTOR_ID	= 1	; MK-style I2C motor ID, or UART motor number
+.endif
 
+.if !defined(RCP_TOT)
 .equ	RCP_TOT		= 2	; Number of 65536us periods before considering rc pulse lost
-
+.endif
 ; These are now defaults which can be adjusted via throttle calibration
 ; (stick high, stick low, (stick neutral) at start).
 ; These might be a bit wide for most radios, but lines up with POWER_RANGE.
+.if !defined(STOP_RC_PULS)
 .equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
+.endif
+.if !defined(FULL_RC_PULS)
 .equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
+.endif
+.if !defined(MAX_RC_PULS)
 .equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
+.endif
+.if !defined(MIN_RC_PULS)
 .equ	MIN_RC_PULS	= 768	; Throw away any pulses shorter than this
+.endif
+.if !defined(MID_RC_PULS)
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
+.endif
+.if !defined(RCP_ALIAS_SHIFT)
 .equ	RCP_ALIAS_SHIFT	= 3	; Enable 1/8th PWM input alias ("oneshot125")
+.endif
+.if !defined(BEEP_RCP_ERROR)
 .equ	BEEP_RCP_ERROR	= 0	; Beep at stop if invalid PWM pulses were received
+.endif
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
@@ -281,8 +332,12 @@
 .equ	EEPROM_OFFSET	= 0x80		; Offset into 512-byte space (why not)
 
 ; Conditional code inclusion
+.if !defined(DEBUG_TX)
 .set	DEBUG_TX	= 0		; Output debugging on UART TX pin
+.endif
+.if !defined(ADC_READ_NEEDED)
 .set	ADC_READ_NEEDED	= 0		; Reading from ADCs
+.endif
 
 ;**** **** **** **** ****
 ; Register Definitions
