@@ -5,25 +5,39 @@ SHELL = /bin/bash
 
 .SUFFIXES: .inc .hex
 
-ALL_TARGETS = afro.hex afro2.hex afro_hv.hex afro_nfet.hex arctictiger.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex dys_nfet.hex hk200a.hex hm135a.hex hxt200a.hex kda.hex kda_8khz.hex kda_nfet.hex kda_nfet_ni.hex mkblctrl1.hex rb50a.hex rb70a.hex rb70a2.hex rct50a.hex tbs.hex tbs_hv.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy_8mhz.hex tgy.hex
-AUX_TARGETS = afro_pr0.hex afro_pr1.hex diy0.hex
+AUX_TARGETS = $(patsubst %.inc,%.hex,$(wildcard *_pr[0-9]*.inc diy*.inc))
+CPU_INC = $(wildcard m*def.inc)
+ALL_INC = $(sort $(wildcard *.inc))
+FILTER_TARGETS = boot.inc $(AUX_TARGETS) $(CPU_INC) $(pathsubst %.hex,%.inc,$(AUX_TARGETS))
+ALL_TARGETS = $(patsubst %.inc,%.hex,$(filter-out $(FILTER_TARGETS),$(ALL_INC)))
 
-all: $(ALL_TARGETS)
+.PHONY: all report_all
+all: report_all $(ALL_TARGETS)
+report_all::
+	@echo "Building: $(ALL_TARGETS)"
+
+.PHONY: aux report_aux
+aux: report_aux $(AUX_TARGETS)
+report_aux::
+	@echo "Building: $(AUX_TARGETS)"
 
 $(ALL_TARGETS): tgy.asm boot.inc
 $(AUX_TARGETS): tgy.asm boot.inc
 
 .inc.hex:
-	@test -e $*.asm || ln -s tgy.asm $*.asm
+	@if test ! -e $*.asm ; then (grep -q "^.include \"m.*def.inc\"" $*.inc || echo ".include \"m8def.inc\"" ; echo ".include \"$*.inc\"";echo ".include \"tgy.asm\"") > $*.asm ; touch $*.asm.created; fi
 	@echo "$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm"
 	@set -o pipefail; $(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm 2>&1 | sed '/PRAGMA directives currently ignored/d'
-	@test -L $*.asm && rm -f $*.asm || true
+	@test -e $*.asm.created && rm -f $*.asm $*.asm.created || true
 
+.PHONY: test
 test: all
 
+.PHONY: clean
 clean:
-	-rm -f $(ALL_TARGETS) *.cof *.obj *.eep.hex *.eeprom
+	-rm -f $(ALL_TARGETS) $(AUX_TARGETS) *.cof *.obj *.eep.hex *.eeprom
 
+.PHONY: binary_zip
 binary_zip: $(ALL_TARGETS)
 	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`"; \
 	mkdir "$$TARGET" && \
