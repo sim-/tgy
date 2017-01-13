@@ -3572,8 +3572,9 @@ wait_for_power_rx:
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
 		tst	rc_timeout		; If not a valid signal, loop
 		breq	wait_for_power_on	; while increasing boot/beacon timers
-		adiw	YL, 0			; If no power requested yet, loop
-		breq	wait_for_power_on_init	; while resetting boot/beacon timers
+		adiw	YL, 0
+		brne	start_from_running	; If power requested, start; otherwise,
+		rjmp	wait_for_power_on_init	; loop while resetting boot/beacon timers
 
 start_from_running:
 		rcall	switch_power_off
