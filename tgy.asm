@@ -167,6 +167,9 @@
 .if !defined(COMP_PWM)
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
 .endif
+.if !defined(ONESHOT125)
+.equ	ONESHOT125	= 0	; Oneshot125 detection is default OFF
+.endif
 .if !defined(DEAD_LOW_NS)
 .equ	DEAD_LOW_NS	= 300	; Low-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max 2437ns)
 .equ	DEAD_HIGH_NS	= 300	; High-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max roughly PWM period)
@@ -215,6 +218,11 @@
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 .equ	RCP_ALIAS_SHIFT	= 3	; Enable 1/8th PWM input alias ("oneshot125")
 .equ	BEEP_RCP_ERROR	= 0	; Beep at stop if invalid PWM pulses were received
+
+.if ONESHOT125
+.equ	MAX_OS125_PULS	= 255	; Rc puls maximum for Oneshot125 detection
+.equ	MIN_OS125_PULS	= 110	; Rc puls minimum for Oneshot125 detection
+.endif
 
 .if	RC_PULS_REVERSE
 .equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
@@ -1616,6 +1624,30 @@ falling_edge:
 		sbi2	i_temp1, i_temp2, MAX_RC_PULS * CPU_MHZ	; Put back to start time
 		sub	rx_l, i_temp1		; Subtract start time from current time
 		sbc	rx_h, i_temp2
+.if ONESHOT125
+		; Oneshot125 is basically 1/8 PWM duration of the standaard values
+		; So the range is 125..250 uSec instead of 1000..2000 uSec
+		; When the incoming rc puls is within this Oneshot125 range, it is simply multplied by 8
+		; The rest of the system is not aware which range is actually used
+		; 
+		; Check: if (rc puls <= MAX_OS125_PULS)
+		ldi2	i_temp1, i_temp2, MAX_OS125_PULS * CPU_MHZ
+		cp	rx_l, i_temp1
+		cpc	rx_h, i_temp2
+		brcc	rcpint_os_exit		; carry clear if (rc puls > MAX_OS125_PULS)
+		; Check: if (rc puls >= MIN_OS125_PULS)
+		ldi2	i_temp1, i_temp2, MIN_OS125_PULS * CPU_MHZ
+		cp	rx_l, i_temp1
+		cpc	rx_h, i_temp2
+		brcs	rcpint_os_exit		; carry set if (rc puls < MIN_OS125_PULS)
+		lsl	rx_l 			; Multiply rc puls by 8
+		rol	rx_h
+		lsl	rx_l
+		rol	rx_h
+		lsl	rx_l
+		rol	rx_h
+rcpint_os_exit:
+.endif
 .if MAX_RC_PULS * CPU_MHZ > 0xffff
 .error "MAX_RC_PULS * CPU_MHZ too big to fit in two bytes -- adjust it or the rcp_int code"
 .endif

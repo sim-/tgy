@@ -11,6 +11,8 @@
 .equ	USE_I2C		= 0	; We could, but FETs are on the I2C ports
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
+.equ	COMP_PWM	= 1
+.equ	ONESHOT125	= 1
 
 .equ	DEAD_LOW_NS	= 300
 .equ	DEAD_HIGH_NS	= 300
