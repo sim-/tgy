@@ -154,6 +154,10 @@
 #include "tgy_8mhz.inc"		; TowerPro/Turnigy Basic/Plush "type 2" w/8MHz oscillator (INT0 PWM)
 #elif defined(tgy_esc)
 #include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PWM)
+#elif defined(rct30nfs_esc)
+#include "rct30nfs.inc"		; RCTimer NFS 30A (INT0 PWM)
+#elif defined(rct45nfs_esc)
+#include "rct45nfs.inc"
 #else
 #error "Unrecognized board type."
 #endif
