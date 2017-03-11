@@ -154,13 +154,17 @@
 #include "tgy_8mhz.inc"		; TowerPro/Turnigy Basic/Plush "type 2" w/8MHz oscillator (INT0 PWM)
 #elif defined(tgy_esc)
 #include "tgy.inc"		; TowerPro/Turnigy Basic/Plush "type 2" (INT0 PWM)
+#elif defined(rct30nfs_esc)
+#include "rct30nfs.inc"		; RCTimer NFS 30A (INT0 PWM)
+#elif defined(rct45nfs_esc)
+#include "rct45nfs.inc"
 #else
 #error "Unrecognized board type."
 #endif
 
 .equ	CPU_MHZ		= F_CPU / 1000000
 
-.equ	BOOT_LOADER	= 1	; Include Turnigy USB linker STK500v2 boot loader on PWM input pin
+.equ	BOOT_LOADER	= 0	; Include Turnigy USB linker STK500v2 boot loader on PWM input pin
 .equ	BOOT_JUMP	= 1	; Jump to any boot loader when PWM input stays high
 .equ	BOOT_START	= THIRDBOOTSTART
 
@@ -168,8 +172,8 @@
 .equ	COMP_PWM	= 0	; During PWM off, switch high side on (unsafe on some boards!)
 .endif
 .if !defined(DEAD_LOW_NS)
-.equ	DEAD_LOW_NS	= 300	; Low-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max 2437ns)
-.equ	DEAD_HIGH_NS	= 300	; High-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max roughly PWM period)
+.equ	DEAD_LOW_NS	= 100	; Low-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max 2437ns)
+.equ	DEAD_HIGH_NS	= 100	; High-side dead time w/COMP_PWM (62.5ns steps @ 16MHz, max roughly PWM period)
 .endif
 .equ	DEAD_TIME_LOW	= DEAD_LOW_NS * CPU_MHZ / 1000
 .equ	DEAD_TIME_HIGH	= DEAD_HIGH_NS * CPU_MHZ / 1000
@@ -180,13 +184,13 @@
 .if !defined(TIMING_OFFSET)
 .equ	TIMING_OFFSET	= 0	; Motor timing offset in microseconds
 .endif
-.equ	MOTOR_BRAKE	= 0	; Enable brake during neutral/idle ("motor drag" brake)
+.equ	MOTOR_BRAKE	= 1	; Enable brake during neutral/idle ("motor drag" brake)
 .equ	LOW_BRAKE	= 0	; Enable brake on very short RC pulse ("thumb" brake like on Airtronics XL2P)
 .if !defined(MOTOR_REVERSE)
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .endif
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
-.equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
+.equ	RC_CALIBRATION	= 0	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
 .equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
@@ -194,7 +198,7 @@
 .equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
 .endif
 .equ	CELL_MAX_DV	= 43	; Maximum battery cell deciV
-.equ	CELL_MIN_DV	= 35	; Minimum battery cell deciV
+.equ	CELL_MIN_DV	= 0	; Minimum battery cell deciV
 .equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
 .equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
@@ -208,10 +212,10 @@
 ; These are now defaults which can be adjusted via throttle calibration
 ; (stick high, stick low, (stick neutral) at start).
 ; These might be a bit wide for most radios, but lines up with POWER_RANGE.
-.equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
-.equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
-.equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
-.equ	MIN_RC_PULS	= 768	; Throw away any pulses shorter than this
+.equ	STOP_RC_PULS	= 1000	; Stop motor at or below this pulse length
+.equ	FULL_RC_PULS	= 2000	; Full speed at or above this pulse length
+.equ	MAX_RC_PULS	= 2060	; Throw away any pulses longer than this
+.equ	MIN_RC_PULS	= 940	; Throw away any pulses shorter than this
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 .equ	RCP_ALIAS_SHIFT	= 3	; Enable 1/8th PWM input alias ("oneshot125")
 .equ	BEEP_RCP_ERROR	= 0	; Beep at stop if invalid PWM pulses were received
@@ -237,18 +241,18 @@
 
 ; Number of PWM steps (too high and PWM frequency drops into audible range)
 .if !defined(POWER_RANGE)
-.equ	POWER_RANGE	= 800 * CPU_MHZ / 16 + MIN_DUTY
+.equ	POWER_RANGE	= 1000 * CPU_MHZ / 16 + MIN_DUTY
 .endif
 
 .equ	MAX_POWER	= (POWER_RANGE-1)
 .equ	PWR_COOL_START	= (POWER_RANGE/24) ; Power limit while starting to reduce heating
-.equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit while starting (to start)
-.equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit while starting (if still not running)
+.equ	PWR_MIN_START	= (POWER_RANGE/3) ; Power limit while starting (to start)
+.equ	PWR_MAX_START	= (POWER_RANGE/2) ; Power limit while starting (if still not running)
 .equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
 .equ	BRAKE_POWER	= MAX_POWER*2/3	; Brake force is exponential, so start fairly high
-.equ	BRAKE_SPEED	= 3		; Speed to reach MAX_POWER, 0 (slowest) - 8 (fastest)
+.equ	BRAKE_SPEED	= 6		; Speed to reach MAX_POWER, 0 (slowest) - 8 (fastest)
 .equ	LOW_BRAKE_POWER	= MAX_POWER*2/3
 .equ	LOW_BRAKE_SPEED	= 5
 
@@ -262,8 +266,8 @@
 .if !defined(START_DELAY_US)
 .equ	START_DELAY_US	= 0	; Initial post-commutation wait during starting
 .endif
-.equ	START_DSTEP_US	= 8	; Microseconds per start delay step
-.equ	START_DELAY_INC	= 15	; Wait step count increase (wraps in a byte)
+.equ	START_DSTEP_US	= 6	; Microseconds per start delay step
+.equ	START_DELAY_INC	= 12	; Wait step count increase (wraps in a byte)
 .equ	START_MOD_INC	= 4	; Start power modulation step count increase (wraps in a byte)
 .equ	START_MOD_LIMIT	= 48	; Value at which power is reduced to avoid overheating
 .equ	START_FAIL_INC	= 16	; start_tries step count increase (wraps in a byte, upon which we disarm)
