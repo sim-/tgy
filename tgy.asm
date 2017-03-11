@@ -212,10 +212,10 @@
 ; These are now defaults which can be adjusted via throttle calibration
 ; (stick high, stick low, (stick neutral) at start).
 ; These might be a bit wide for most radios, but lines up with POWER_RANGE.
-.equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
-.equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
-.equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
-.equ	MIN_RC_PULS	= 768	; Throw away any pulses shorter than this
+.equ	STOP_RC_PULS	= 1000	; Stop motor at or below this pulse length
+.equ	FULL_RC_PULS	= 2000	; Full speed at or above this pulse length
+.equ	MAX_RC_PULS	= 2060	; Throw away any pulses longer than this
+.equ	MIN_RC_PULS	= 940	; Throw away any pulses shorter than this
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 .equ	RCP_ALIAS_SHIFT	= 3	; Enable 1/8th PWM input alias ("oneshot125")
 .equ	BEEP_RCP_ERROR	= 0	; Beep at stop if invalid PWM pulses were received
@@ -241,7 +241,7 @@
 
 ; Number of PWM steps (too high and PWM frequency drops into audible range)
 .if !defined(POWER_RANGE)
-.equ	POWER_RANGE	= 1200 * CPU_MHZ / 16 + MIN_DUTY
+.equ	POWER_RANGE	= 1000 * CPU_MHZ / 16 + MIN_DUTY
 .endif
 
 .equ	MAX_POWER	= (POWER_RANGE-1)
@@ -252,7 +252,7 @@
 .equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
 
 .equ	BRAKE_POWER	= MAX_POWER*2/3	; Brake force is exponential, so start fairly high
-.equ	BRAKE_SPEED	= 5		; Speed to reach MAX_POWER, 0 (slowest) - 8 (fastest)
+.equ	BRAKE_SPEED	= 6		; Speed to reach MAX_POWER, 0 (slowest) - 8 (fastest)
 .equ	LOW_BRAKE_POWER	= MAX_POWER*2/3
 .equ	LOW_BRAKE_SPEED	= 5
 
