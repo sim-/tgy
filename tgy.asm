@@ -104,6 +104,8 @@
 #include "bs_nfet.inc"		; HobbyKing BlueSeries / Mystery with all nFETs (INT0 PWM)
 #elif defined(bs40a_esc)
 #include "bs40a.inc"		; HobbyKing BlueSeries / Mystery 40A (INT0 PWM)
+#elif defined(bs40a_5106b_esc)
+#include "bs40a_5106b.inc"	; HobbyKing BlueSeries 40A with NCP5106B FET driver (INT0 PWM)
 #elif defined(dlu40a_esc)
 #include "dlu40a.inc"		; Pulso Advance Plus 40A DLU40A inverted-PWM-opto (INT0 PWM)
 #elif defined(dlux_esc)
