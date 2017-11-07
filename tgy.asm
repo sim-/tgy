@@ -180,13 +180,13 @@
 .if !defined(TIMING_OFFSET)
 .equ	TIMING_OFFSET	= 0	; Motor timing offset in microseconds
 .endif
-.equ	MOTOR_BRAKE	= 0	; Enable brake during neutral/idle ("motor drag" brake)
+.equ	MOTOR_BRAKE	= 1	; Enable brake during neutral/idle ("motor drag" brake)
 .equ	LOW_BRAKE	= 0	; Enable brake on very short RC pulse ("thumb" brake like on Airtronics XL2P)
 .if !defined(MOTOR_REVERSE)
 .equ	MOTOR_REVERSE	= 0	; Reverse normal commutation direction
 .endif
 .equ	RC_PULS_REVERSE	= 0	; Enable RC-car style forward/reverse throttle
-.equ	RC_CALIBRATION	= 1	; Support run-time calibration of min/max pulse lengths
+.equ	RC_CALIBRATION	= 0	; Support run-time calibration of min/max pulse lengths
 .equ	SLOW_THROTTLE	= 0	; Limit maximum throttle jump to try to prevent overcurrent
 .equ	BEACON		= 1	; Beep periodically when RC signal is lost
 .equ	BEACON_IDLE	= 0	; Beep periodically if idle for a long period
@@ -194,7 +194,6 @@
 .equ	CHECK_HARDWARE	= 0	; Check for correct pin configuration, sense inputs, and functioning MOSFETs
 .endif
 .equ	CELL_MAX_DV	= 43	; Maximum battery cell deciV
-.equ	CELL_MIN_DV	= 35	; Minimum battery cell deciV
 .equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
 .equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
@@ -208,8 +207,8 @@
 ; These are now defaults which can be adjusted via throttle calibration
 ; (stick high, stick low, (stick neutral) at start).
 ; These might be a bit wide for most radios, but lines up with POWER_RANGE.
-.equ	STOP_RC_PULS	= 1060	; Stop motor at or below this pulse length
-.equ	FULL_RC_PULS	= 1860	; Full speed at or above this pulse length
+.equ	STOP_RC_PULS	= 1100	; Stop motor at or below this pulse length
+.equ	FULL_RC_PULS	= 1900	; Full speed at or above this pulse length
 .equ	MAX_RC_PULS	= 2400	; Throw away any pulses longer than this
 .equ	MIN_RC_PULS	= 768	; Throw away any pulses shorter than this
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
@@ -217,11 +216,11 @@
 .equ	BEEP_RCP_ERROR	= 0	; Beep at stop if invalid PWM pulses were received
 
 .if	RC_PULS_REVERSE
-.equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
-.equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS * 3) / 4	; Normally 1660
+.equ	RCP_DEADBAND	= 25	; Do not start until this much above or below neutral
+.equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS * 3) / 4	; Normally 1700
 .else
 .equ	RCP_DEADBAND	= 0
-.equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Normally 1460
+.equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Normally 1500
 .endif
 
 .if	LOW_BRAKE
@@ -239,13 +238,11 @@
 .if !defined(POWER_RANGE)
 .equ	POWER_RANGE	= 800 * CPU_MHZ / 16 + MIN_DUTY
 .endif
-
 .equ	MAX_POWER	= (POWER_RANGE-1)
 .equ	PWR_COOL_START	= (POWER_RANGE/24) ; Power limit while starting to reduce heating
 .equ	PWR_MIN_START	= (POWER_RANGE/6) ; Power limit while starting (to start)
 .equ	PWR_MAX_START	= (POWER_RANGE/4) ; Power limit while starting (if still not running)
-.equ	PWR_MAX_RPM1	= (POWER_RANGE/4) ; Power limit when running slower than TIMING_RANGE1
-.equ	PWR_MAX_RPM2	= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE2
+.equ	PWR_MAX_RPM		= (POWER_RANGE/2) ; Power limit when running slower than TIMING_RANGE1
 
 .equ	BRAKE_POWER	= MAX_POWER*2/3	; Brake force is exponential, so start fairly high
 .equ	BRAKE_SPEED	= 3		; Speed to reach MAX_POWER, 0 (slowest) - 8 (fastest)
@@ -253,9 +250,7 @@
 .equ	LOW_BRAKE_SPEED	= 5
 
 .equ	TIMING_MIN	= 0x8000 ; 8192us per commutation
-.equ	TIMING_RANGE1	= 0x4000 ; 4096us per commutation
-.equ	TIMING_RANGE2	= 0x2000 ; 2048us per commutation
-.equ	TIMING_RANGE3	= 0x1000 ; 1024us per commutation
+.equ	TIMING_RANGE	= 0x1000 ; 1024us per commutation
 .equ	TIMING_MAX	= 0x0080 ; 32us per commutation (312,500eRPM)
 
 .equ	TIMEOUT_START	= 48000	; Timeout per commutation for ZC during starting
@@ -2812,19 +2807,19 @@ update_timing1:
 	; The actual current peak will depend on motor KV and voltage,
 	; so this is just an approximation. This is calculated smoothly
 	; with a (very slow) software divide only if timing permits.
-		cpi2	temp2, temp3, (TIMING_RANGE3 * CPU_MHZ / 2) >> 8, temp4
+		cpi2	temp2, temp3, (TIMING_RANGE * CPU_MHZ / 2) >> 8, temp4
 		ldi2	XL, XH, MAX_POWER
 		brcs	update_timing4	; Fast timing: no duty limit.
 
 		; 24.8-bit fixed-point unsigned divide, inlined with available registers:
-		; duty (XL:XH) = MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / period (temp1:temp2:temp3)
+		; duty (XL:XH) = MAX_POWER * (TIMING_RANGE * CPU_MHZ / 2) / period (temp1:temp2:temp3)
 		; This takes about one microsecond per loop, but we only take this path
 		; when the motor is spinning slowly.
 
-		ldi	XL, byte3(MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / 0x100)
+		ldi	XL, byte3(MAX_POWER * (TIMING_RANGE * CPU_MHZ / 2) / 0x100)
 		ldi	XH, 33		; Iteration counter
 		movw	timing_duty_l, XL
-		ldi2	XL, XH, MAX_POWER * (TIMING_RANGE3 * CPU_MHZ / 2) / 0x100
+		ldi2	XL, XH, MAX_POWER * (TIMING_RANGE * CPU_MHZ / 2) / 0x100
 
 		mul	ZH, ZH		; Zero temp5, temp6
 		sub	temp4, temp4	; Zero temp4, clear carry
@@ -2849,9 +2844,9 @@ fudiv24_ep:
 		com	XL
 		com	XH
 
-		cpi2	XL, XH, PWR_MAX_RPM1, temp4
+		cpi2	XL, XH, PWR_MAX_RPM, temp4
 		brcc	update_timing4
-		ldi2	XL, XH, PWR_MAX_RPM1
+		ldi2	XL, XH, PWR_MAX_RPM
 update_timing4:	movw	timing_duty_l, XL
 
 		sts	timing_l, temp1		; Store timing (120 degrees)
