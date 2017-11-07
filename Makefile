@@ -42,6 +42,9 @@ program_usbasp_%: %.hex
 program_avrisp2_%: %.hex
 	avrdude -c avrisp2 -p m8 -U flash:w:$<:i
 
+program_jtag3isp_%: %.hex
+	avrdude -c jtag3isp -p m8 -U flash:w:$<:i
+
 program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
 
@@ -64,6 +67,9 @@ read_usbasp:
 
 read_avrisp2:
 	avrdude -c avrisp2 -p m8 -P usb -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
+
+read_jtag3isp:
+	avrdude -c jtag3isp -p m8 -P usb -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i
 
 read_dragon:
 	avrdude -c dragon_isp -p m8 -P usb -v -U flash:r:flash.hex:i -U eeprom:r:eeprom.hex:i

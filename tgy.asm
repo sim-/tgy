@@ -3503,14 +3503,14 @@ wait_for_power_on_init:
 
 		cpi	temp3, 1		; Neutral brake
 		brne	set_brake1
-		ldi	YL, 1 << low(BRAKE_SPEED)
+		ldi	YL, low(1 << BRAKE_SPEED)
 		sts	brake_sub, YL
 		ldi2	YL, YH, BRAKE_POWER
 		rjmp	set_brake_duty
 
 set_brake1:	cpi	temp3, 2		; Thumb brake
 		brne	wait_for_power_on
-		ldi	YL, 1 << low(LOW_BRAKE_SPEED)
+		ldi	YL, low(1 << LOW_BRAKE_SPEED)
 		sts	brake_sub, YL
 		ldi2	YL, YH, LOW_BRAKE_POWER
 
@@ -3567,8 +3567,9 @@ wait_for_power_rx:
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
 		tst	rc_timeout		; If not a valid signal, loop
 		breq	wait_for_power_on	; while increasing boot/beacon timers
-		adiw	YL, 0			; If no power requested yet, loop
-		breq	wait_for_power_on_init	; while resetting boot/beacon timers
+		adiw	YL, 0
+		brne	start_from_running	; If power requested, start; otherwise,
+		rjmp	wait_for_power_on_init	; loop while resetting boot/beacon timers
 
 start_from_running:
 		rcall	switch_power_off
