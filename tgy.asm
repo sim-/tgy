@@ -2,19 +2,19 @@
 ;
 ;Die Benutzung der Software ist mit folgenden Bedingungen verbunden:
 ;
-;1. Da ich alles kostenlos zur Verfügung stelle, gebe ich keinerlei Garantie
-;   und übernehme auch keinerlei Haftung für die Folgen der Benutzung.
+;1. Da ich alles kostenlos zur VerfÃ¼gung stelle, gebe ich keinerlei Garantie
+;   und Ã¼bernehme auch keinerlei Haftung fÃ¼r die Folgen der Benutzung.
 ;
-;2. Die Software ist ausschließlich zur privaten Nutzung bestimmt. Ich
-;   habe nicht geprüft, ob bei gewerblicher Nutzung irgendwelche Patentrechte
-;   verletzt werden oder sonstige rechtliche Einschränkungen vorliegen.
+;2. Die Software ist ausschlieÃŸlich zur privaten Nutzung bestimmt. Ich
+;   habe nicht geprÃ¼ft, ob bei gewerblicher Nutzung irgendwelche Patentrechte
+;   verletzt werden oder sonstige rechtliche EinschrÃ¤nkungen vorliegen.
 ;
-;3. Jeder darf Änderungen vornehmen, z.B. um die Funktion seinen Bedürfnissen
-;   anzupassen oder zu erweitern. Ich würde mich freuen, wenn ich weiterhin als
+;3. Jeder darf Ã„nderungen vornehmen, z.B. um die Funktion seinen BedÃ¼rfnissen
+;   anzupassen oder zu erweitern. Ich wÃ¼rde mich freuen, wenn ich weiterhin als
 ;   Co-Autor in den Unterlagen erscheine und mir ein Link zur entprechenden Seite
 ;   (falls vorhanden) mitgeteilt wird.
 ;
-;4. Auch nach den Änderungen sollen die Software weiterhin frei sein, d.h. kostenlos bleiben.
+;4. Auch nach den Ã„nderungen sollen die Software weiterhin frei sein, d.h. kostenlos bleiben.
 ;
 ;!! Wer mit den Nutzungbedingungen nicht einverstanden ist, darf die Software nicht nutzen !!
 ;
@@ -1266,7 +1266,7 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 .macro comp_adc_enable
-		sbi	ADCSRA, ADEN	; Eisable ADC to effectively disable ACME
+		sbi	ADCSRA, ADEN	; Disable ADC to effectively disable ACME
 .endmacro
 .macro set_comp_phase_a
 	.if defined(mux_a)
@@ -1537,7 +1537,7 @@ t1oca_int1:	sts	ocr1ax, i_temp1
 		out	SREG, i_sreg
 		reti
 ;-----bko-----------------------------------------------------------------
-; timer1 overflow interrupt (happens every 4096µs)
+; timer1 overflow interrupt (happens every 4096Âµs)
 t1ovfl_int:	in	i_sreg, SREG
 		lds	i_temp1, tcnt1x
 		inc	i_temp1
@@ -1765,7 +1765,7 @@ urxc_exit:	out	SREG, i_sreg
 		reti
 	.endif
 ;-----bko-----------------------------------------------------------------
-; beeper: timer0 is set to 1µs/count
+; beeper: timer0 is set to 1Âµs/count
 beep_f1:	ldi	temp2, 80
 		ldi	temp4, 200
 		RED_on
@@ -1820,7 +1820,7 @@ beep_f4_on:	CpFET_on
 ; must be muted first
 beep:		out	TCNT0, ZH
 beep1:		in	temp1, TCNT0
-		cpi	temp1, 2*CPU_MHZ	; 32µs on
+		cpi	temp1, 2*CPU_MHZ	; 32Âµs on
 		brlo	beep1
 		all_pFETs_off temp3
 		all_nFETs_off temp3
