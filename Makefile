@@ -5,7 +5,7 @@ SHELL = /bin/bash
 
 .SUFFIXES: .inc .hex
 
-ALL_TARGETS = afro.hex afro2.hex afro_hv.hex afro_nfet.hex arctictiger.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex dys_nfet.hex hk200a.hex hm135a.hex hxt200a.hex kda.hex kda_8khz.hex kda_nfet.hex kda_nfet_ni.hex mkblctrl1.hex rb50a.hex rb70a.hex rb70a2.hex rct50a.hex tbs.hex tbs_hv.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy_8mhz.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex afro_hv.hex afro_nfet.hex arctictiger.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex dys_nfet.hex hk200a.hex hm135a.hex hw30a.hex hxt200a.hex kda.hex kda_8khz.hex kda_nfet.hex kda_nfet_ni.hex mkblctrl1.hex rb50a.hex rb70a.hex rb70a2.hex rct50a.hex tbs.hex tbs_hv.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy_8mhz.hex tgy.hex
 AUX_TARGETS = afro_pr0.hex afro_pr1.hex diy0.hex
 
 all: $(ALL_TARGETS)
